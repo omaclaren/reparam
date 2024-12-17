@@ -1,4 +1,4 @@
-module SloppihoodTools
+module ReparamTools
 
 using Distributions
 using LinearAlgebra
@@ -11,6 +11,7 @@ using LaTeXStrings
 include("core.jl")
 include("parameterizations.jl")
 include("visualization.jl")
+include("workflows.jl")
 
 # Export commonly used functions
 export construct_lnlike_xy, construct_lnlike_XY
