@@ -1,1 +1,1 @@
-# Numerical Rank Reparameterisation
+# Invariant Image Reparameterisation
