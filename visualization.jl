@@ -2,7 +2,7 @@
 # 1D Profile Visualization
 # --------------------------------------------------------
 function plot_1D_profile(model_name, ψ_values, lnlike_ψ_values, varname;
-    varname_save="", ψ_true=[], save_dir="./",
+    varname_save="", ψ_true=[], save_dir="./figures/",
     file_extension=".svg", l_level=95)
     """
     Plot 1D profile likelihood.
@@ -56,7 +56,7 @@ function plot_1D_profile_comparison(model_name1, model_name2,
               lnlike_ψ_values1, lnlike_ψ_values2, 
               varname;
               varname_save="", ψ_true=[], 
-              save_dir="./", file_extension=".svg",
+              save_dir="./figures/", file_extension=".svg",
               l_level=95)
     """
     Plot comparison of 1D profile likelihoods from two models/approximations.
@@ -110,7 +110,7 @@ end
 # 2D Profile Visualization
 # --------------------------------------------------------
 function plot_2D_contour(model_name, ψ_values, lnlike_ψ_values, varnames;
-    ψ_true=[], save_dir="./", file_extension=".svg",
+    ψ_true=[], save_dir="./figures/", file_extension=".svg",
     l_level=95, nshade_levels=20)
     """
     Plot 2D profile likelihood contours.
@@ -170,7 +170,7 @@ function plot_2D_contour_comparison(model_name1, model_name2,
               ψ_values1, ψ_values2,
               lnlike_ψ_values1, lnlike_ψ_values2, 
               varnames;
-              ψ_true=[], save_dir="./", file_extension=".svg",
+              ψ_true=[], save_dir="./figures/", file_extension=".svg",
               nshade_levels=20, l_level=95, 
               add_model2_MLE=false)
     """
@@ -252,7 +252,7 @@ end
 function plot_profile_wise_CI_for_mean(indep_var, lower, upper, mle, 
                  model_name, indep_varname, indep_varname_save;
                  data=nothing, true_mean=nothing, target="",
-                 save_dir="./", file_extension=".svg")
+                 save_dir="./figures/", file_extension=".svg")
     """
     Plot confidence intervals for mean function based on profile likelihood.
 
@@ -289,6 +289,6 @@ function plot_profile_wise_CI_for_mean(indep_var, lower, upper, mle,
     end
     
     display(plt)
-    savefig(plt, save_dir*model_name*"_mean_vs_"*indep_varname_save*"_profile"*file_extension)
+    savefig(plt, save_dir*model_name*"_mean_vs_"*indep_varname_save*"_"*target*"_profile"*file_extension)
 
 end
