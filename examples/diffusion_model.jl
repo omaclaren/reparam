@@ -3,6 +3,10 @@ using .ReparamTools
 using Plots
 using Distributions
 using LinearAlgebra
+using Random
+
+# Set random seed for reproducibility
+Random.seed!(12)
 
 # --------------------------------------------------------
 # Model Definition
@@ -26,8 +30,6 @@ end
 # --------------------------------------------------------
 # Setup and Data Generation
 # --------------------------------------------------------
-# Set random seed for reproducibility
-Random.seed!(1234)
 
 # Grid setup
 L = 100
@@ -216,7 +218,7 @@ for (i,j) in param_pairs
         x_data, lower_ψ1ψ2, upper_ψ1ψ2, pred_mean_MLE,
         model_name, "x", "x",
         data=data, true_mean=true_mean,
-        target=current_varnames["ψ1"]*","*current_varnames["ψ2"])
+        target=current_varnames["ψ1"]*"_"*current_varnames["ψ2"])
 end
 
 # --------------------------------------------------------
@@ -380,7 +382,7 @@ for (i,j) in param_pairs
         x_data, lower_ψ1ψ2, upper_ψ1ψ2, pred_mean_MLE_log,
         model_name, "x", "x",
         data=data, true_mean=true_mean_log,
-        target=current_varnames["ψ1"]*","*current_varnames["ψ2"])
+        target=current_varnames["ψ1"]*"_"*current_varnames["ψ2"])
 end
 
 # --------------------------------------------------------
@@ -547,5 +549,5 @@ for (i,j) in param_pairs
         x_data, lower_ψ1ψ2, upper_ψ1ψ2, pred_mean_MLE_sip,
         model_name, "x", "x",
         data=data, true_mean=true_mean_sip,
-        target=current_varnames["ψ1"]*","*current_varnames["ψ2"])
+        target=current_varnames["ψ1"]*"_"*current_varnames["ψ2"])
 end
