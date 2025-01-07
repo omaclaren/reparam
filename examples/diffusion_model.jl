@@ -110,9 +110,12 @@ for i in 1:dim_all
     print("Variable: ", varnames["ψ"*string(i)], "\n")
 
     # Profile full likelihood
-    ψω_values, lnlike_ψ_values = profile_target(lnlike_xy, target_index,
-        xy_lower_bounds, xy_upper_bounds,
-        nuisance_guess; grid_steps=grid_steps)
+    ψω_values, lnlike_ψ_values = profile_target(lnlike_xy, 
+        target_index,
+        xy_lower_bounds, 
+        xy_upper_bounds,
+        nuisance_guess; 
+        grid_steps=grid_steps)
 
     # Profile quadratic approximation
     ψω_ellipse_values, lnlike_ψ_ellipse_values = profile_target(lnlike_θ_ellipse,

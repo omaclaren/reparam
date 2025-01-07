@@ -36,14 +36,18 @@ function construct_lnlike_to_max(lnlike)
     - grad: Gradient vector to be filled
     - grad_type: :auto for automatic differentiation (default), otherwise finite differences
     """
+    # closure to pass gradient to optimizer
     function lnlike_to_max(θ, grad; grad_type=:auto)
-        if grad_type === :auto
-            grad = ForwardDiff.gradient(lnlike,θ)
-        else
-            grad = finite_diff_gradient(lnlike,θ)
+        if length(grad) > 0  # Only compute gradient if vector provided
+            if grad_type === :auto
+                grad[:] = ForwardDiff.gradient(lnlike, θ)
+            else 
+                grad[:] = finite_diff_gradient(lnlike, θ)
+            end
         end
-            return lnlike(θ)
+        return lnlike(θ)
     end
+
     return lnlike_to_max
 end
 
@@ -80,8 +84,9 @@ function construct_ellipse_lnlike_approx(lnlike, θ_est; h_type=:auto, return_h=
 end
 
 function profile_target(lnlike_θ, ψ_indices, θ_bounds_lower, θ_bounds_upper, ω_initial;
-    grid_steps=100, use_last_as_guess=true,
-    method=:LN_BOBYQA, xtol_rel=1e-9, ftol_rel=1e-9, optmaxtime=120)
+    grid_steps=100, ω_initial_extras::Union{Nothing, Vector{Vector{Float64}}}=nothing,
+    method=:LD_TNEWTON_PRECOND_RESTART, local_method=:LN_BOBYQA, xtol_rel=1e-9, ftol_rel=1e-9, 
+    optmaxtime=120, popsize=50)
     """
     Construct profile likelihood by maximizing over nuisance parameters.
 
@@ -95,11 +100,14 @@ function profile_target(lnlike_θ, ψ_indices, θ_bounds_lower, θ_bounds_upper,
     - θ_bounds_upper: Upper bounds for all parameters
     - ω_initial: Initial guess for nuisance parameters
     - grid_steps: Number of grid points for interest parameters (default: 100)
-    - use_last_as_guess: Use previous nuisance optimum as next guess (default: true)
-    - method: Optimization method for nuisance parameters (default: :LN_BOBYQA)
+    - ω_initial_extras: : Vector of additional initial guesses for nuisance parameters, 
+        where each guess is a vector of the same dimension as ω_initial (default: nothing)
+    - method: Overall optimization method for nuisance parameters (default: :LD_LBFGS)
+    - local_method: Local optimization method if using a global method which requires it (default: :LD_LBFGS)
     - xtol_rel: Relative tolerance in parameter values (default: 1e-9)
     - ftol_rel: Relative tolerance in function value (default: 1e-9)
-    - optmaxtime: Maximum optimization time in seconds (default: 100)
+    - optmaxtime: Maximum optimization time in seconds (default: 120)
+    - popsize: Population size for global optimization methods (default: 10)
 
     Returns:
     - θ_values: Array of parameter vectors in original ordering
@@ -111,18 +119,67 @@ function profile_target(lnlike_θ, ψ_indices, θ_bounds_lower, θ_bounds_upper,
     dim_ψ = length(ψ_indices)
     dim_ω = length(ω_indices)
 
-    # Check for point estimation case (no interest parameters)
-    if dim_ψ == 0
-        opt = Opt(method, dim_all)
+    # Extract bounds for nuisance parameters
+    ω_bounds_lower = θ_bounds_lower[ω_indices]
+    ω_bounds_upper = θ_bounds_upper[ω_indices]
+
+    # Optimizer setup for nuisance parameters
+    if dim_ω > 0 
+        opt = if method in [:G_MLSL_LDS, :G_MLSL]
+            # Global optimization with local refinement
+            opt = Opt(method, dim_ω)
+            local_opt = Opt(local_method, dim_ω)
+            local_opt.maxtime = optmaxtime
+            local_opt.lower_bounds = ω_bounds_lower
+            local_opt.upper_bounds = ω_bounds_upper
+            local_opt.xtol_rel = xtol_rel
+            local_opt.ftol_rel = ftol_rel
+            local_optimizer!(opt, local_opt)
+            opt.population = popsize
+            opt
+        else
+            # Direct optimization methods
+            opt = Opt(method, dim_ω)
+            if method in (:GN_DIRECT, :GN_DIRECT_L, :GN_DIRECT_L_RAND)
+                opt.population = popsize
+            end
+            opt
+        end
+
+        # Set common optimizer options
         opt.maxtime = optmaxtime
-        opt.lower_bounds = θ_bounds_lower
-        opt.upper_bounds = θ_bounds_upper
+        opt.lower_bounds = ω_bounds_lower
+        opt.upper_bounds = ω_bounds_upper
         opt.xtol_rel = xtol_rel
         opt.ftol_rel = ftol_rel
-        opt.max_objective = construct_lnlike_to_max(lnlike_θ)
+    end
 
-        (lnlike_opt, θ_opt, ret) = optimize(opt, ω_initial)
-        return θ_opt, lnlike_opt .- maximum(lnlike_opt)
+    # Check for point estimation case (no interest parameters)
+    if dim_ψ == 0
+        if dim_ω == 0
+            return Float64[], lnlike_θ([])
+        end
+        
+        # Try multiple starting points if provided
+        best_lnlike = -Inf
+        best_ω = similar(ω_initial)
+
+        starting_points = [ω_initial]
+        if !isnothing(ω_initial_extras)
+            append!(starting_points, ω_initial_extras)
+        end
+
+        for ω₀ in starting_points
+            opt.max_objective = construct_lnlike_to_max(lnlike_θ)
+            (lnlike_opt, ω_opt) = optimize(opt, ω₀)
+            if lnlike_opt > best_lnlike
+                best_lnlike = lnlike_opt
+                best_ω = ω_opt
+            end
+        end
+
+        return best_ω, best_lnlike
+
     end
 
     # Set up grids for parameters of interest
@@ -137,19 +194,8 @@ function profile_target(lnlike_θ, ψ_indices, θ_bounds_lower, θ_bounds_upper,
         end
     end
 
-    # Set up optimization for nuisance parameters if needed
-    if dim_ω > 0
-        opt = Opt(method, dim_ω)
-        opt.maxtime = optmaxtime
-        opt.lower_bounds = θ_bounds_lower[ω_indices]
-        opt.upper_bounds = θ_bounds_upper[ω_indices]
-        opt.xtol_rel = xtol_rel
-        opt.ftol_rel = ftol_rel
-    end
-
     # Get Cartesian product of interest parameter grid
     ψ_combinations = Base.product(ψ_grids...)
-    ω₀ = ω_initial
 
     # Setup storage for results
     θ_values = Vector{Vector{Float64}}(undef, length(ψ_combinations))
@@ -161,26 +207,43 @@ function profile_target(lnlike_θ, ψ_indices, θ_bounds_lower, θ_bounds_upper,
     # Profile over grid
     for (i, ψᵢ) in enumerate(ψ_combinations)
         ψω_to_θ = ψω -> ψω[ψω_to_θ_indices]
-
         if dim_ω > 0
             # Optimize nuisance parameters
-            opt.max_objective = construct_lnlike_to_max(ω -> lnlike_θ(ψω_to_θ([ψᵢ..., ω...])))
-            (lnlike_opt, ωᵢ_opt, ret) = optimize(opt, ω₀)
+            best_lnlike = -Inf
+            best_ω = similar(ω_initial)
+
+            starting_points = [ω_initial]
+            if !isnothing(ω_initial_extras)
+                append!(starting_points, ω_initial_extras)
+            end
+
+            for ω₀ in starting_points
+                # Construct log-likelihood function for fixed current interest parameter value
+                opt.max_objective = construct_lnlike_to_max(ω -> lnlike_θ(ψω_to_θ([ψᵢ..., ω...])))
+                (lnlike_opt, ωᵢ_opt) = optimize(opt, ω₀)
+                if lnlike_opt > best_lnlike
+                    best_lnlike = lnlike_opt
+                    best_ω = ωᵢ_opt
+                end
+            end
+
+            θ_values[i] = ψω_to_θ([ψᵢ..., best_ω...])
+            lnlike_ψ_values[i] = best_lnlike
+
+            # Update initial guess for next iteration
+            ω_initial = best_ω
+
         else
             # Pure gridding case
-            lnlike_opt = lnlike_θ(ψω_to_θ([ψᵢ...]))
-            ωᵢ_opt = Float64[]
-        end
-
-        θ_values[i] = ψω_to_θ([ψᵢ..., ωᵢ_opt...])
-        lnlike_ψ_values[i] = lnlike_opt
-
-        if use_last_as_guess
-            ω₀ = ωᵢ_opt
+            θ_values[i] = ψω_to_θ([ψᵢ...])
+            lnlike_ψ_values[i] = lnlike_θ(θ_values[i])
         end
     end
 
-    return θ_values, lnlike_ψ_values .- maximum(lnlike_ψ_values)
+    # Normalize likelihood values
+    lnlike_ψ_values = lnlike_ψ_values .- maximum(lnlike_ψ_values)
+
+    return θ_values, lnlike_ψ_values
 end
 
 function construct_upper_lower_profile_wise_CIs_for_mean(
@@ -202,6 +265,8 @@ function construct_upper_lower_profile_wise_CIs_for_mean(
     - pred_matrix: Matrix of predictions at each parameter value
     """
     if isnothing(df)
+        print("df")
+        print(length(ψω_values))
         df = length(ψω_values)
     end
     threshold = -quantile(Chisq(df), l_level/100)/2
