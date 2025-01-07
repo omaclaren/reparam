@@ -81,7 +81,7 @@ end
 
 function profile_target(lnlike_θ, ψ_indices, θ_bounds_lower, θ_bounds_upper, ω_initial;
     grid_steps=100, use_last_as_guess=true,
-    method=:LN_BOBYQA, xtol_rel=1e-9, ftol_rel=1e-9, optmaxtime=100)
+    method=:LN_BOBYQA, xtol_rel=1e-9, ftol_rel=1e-9, optmaxtime=120)
     """
     Construct profile likelihood by maximizing over nuisance parameters.
 

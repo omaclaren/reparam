@@ -103,7 +103,8 @@ true_mean = mean(distrib_xy(xy_true))
 for i in 1:dim_all
     target_index = i
     nuisance_indices = setdiff(indices_all, target_index)
-    nuisance_guess = xy_initial[nuisance_indices]
+    nuisance_guess = θ_MLE[nuisance_indices]
+    # nuisance_guess = xy_initial[nuisance_indices] # can use xy_initial as well
 
     # Print variable name
     print("Variable: ", varnames["ψ"*string(i)], "\n")
@@ -153,10 +154,11 @@ end
 param_pairs = [(i,j) for i in 1:dim_all for j in (i+1):dim_all]
 
 for (i,j) in param_pairs
-    target_indices = [i,j]
-    nuisance_indices = setdiff(indices_all, target_indices)
-    nuisance_guess = xy_initial[nuisance_indices]
-    ψ_true_pair = xy_true[target_indices]
+    target_indices_ij = [i,j]
+    nuisance_indices = setdiff(indices_all, target_indices_ij)
+    nuisance_guess = θ_MLE[nuisance_indices]
+    # nuisance_guess = xy_initial[nuisance_indices] # can use xy_initial as well
+    ψ_true_pair = xy_true[target_indices_ij]
 
     # Print variable names for this pair
     print("Pair: ", varnames["ψ"*string(i)], ", ", varnames["ψ"*string(j)], "\n")
@@ -171,21 +173,21 @@ for (i,j) in param_pairs
     current_varnames["ψ2_save"] = varnames["ψ"*string(j)*"_save"]
 
     # Profile full likelihood
-    ψω_values, lnlike_ψ_values = profile_target(lnlike_xy, target_indices,
+    ψω_values, lnlike_ψ_values = profile_target(lnlike_xy, target_indices_ij,
         xy_lower_bounds, xy_upper_bounds,
         nuisance_guess; grid_steps=grid_steps)
 
     # Profile quadratic approximation
     ψω_ellipse_values, lnlike_ψ_ellipse_values = profile_target(lnlike_θ_ellipse,
-        target_indices,
+        target_indices_ij,
         xy_lower_bounds,
         xy_upper_bounds,
         nuisance_guess;
         grid_steps=grid_steps)
 
     # Extract profiled parameter values
-    ψ_values = [ψω[target_indices] for ψω in ψω_values]
-    ψ_ellipse_values = [ψω[target_indices] for ψω in ψω_ellipse_values]
+    ψ_values = [ψω[target_indices_ij] for ψω in ψω_values]
+    ψ_ellipse_values = [ψω[target_indices_ij] for ψω in ψω_ellipse_values]
 
     # Plot contours
     plot_2D_contour(model_name, ψ_values, lnlike_ψ_values,
@@ -202,12 +204,12 @@ for (i,j) in param_pairs
 
     plot_1D_profile(model_name, ψ1_values, log.(like_ψ1_values),
         current_varnames["ψ1"];
-        varname_save=current_varnames["ψ1_save"],
+        varname_save=current_varnames["ψ1_save"]*"_from_2D",
         ψ_true=ψ_true_pair[1])
 
     plot_1D_profile(model_name, ψ2_values, log.(like_ψ2_values),
         current_varnames["ψ2"];
-        varname_save=current_varnames["ψ2_save"],
+        varname_save=current_varnames["ψ2_save"]*"_from_2D",
         ψ_true=ψ_true_pair[2])
 
     # 2D prediction CIs
@@ -273,7 +275,8 @@ true_mean_log = mean(distrib_XY_log(XY_log_true))
 for i in 1:dim_all
     target_index = i
     nuisance_indices = setdiff(indices_all, target_index)
-    nuisance_guess = XY_log_initial[nuisance_indices]
+    nuisance_guess = θ_log_MLE[nuisance_indices]
+    # nuisance_guess = XY_log_initial[nuisance_indices] # can use XY_log_initial as well
 
     # Profile full likelihood
     ψω_values, lnlike_ψ_values = profile_target(lnlike_XY_log, target_index,
@@ -320,10 +323,11 @@ end
 param_pairs = [(i,j) for i in 1:dim_all for j in (i+1):dim_all]
 
 for (i,j) in param_pairs
-    target_indices = [i,j]
-    nuisance_indices = setdiff(indices_all, target_indices)
-    nuisance_guess = XY_log_initial[nuisance_indices]
-    ψ_true_pair = XY_log_true[target_indices]
+    target_indices_ij = [i,j]
+    nuisance_indices = setdiff(indices_all, target_indices_ij)
+    nuisance_guess = θ_log_MLE[nuisance_indices]
+    # nuisance_guess = XY_log_initial[nuisance_indices] # can use XY_log_initial as well
+    ψ_true_pair = XY_log_true[target_indices_ij]
 
     # Create a copy of varnames for this iteration
     current_varnames = deepcopy(varnames)
@@ -335,21 +339,21 @@ for (i,j) in param_pairs
     current_varnames["ψ2_save"] = varnames["ψ"*string(j)*"_save"]
 
     # Profile full likelihood
-    ψω_values, lnlike_ψ_values = profile_target(lnlike_XY_log, target_indices,
+    ψω_values, lnlike_ψ_values = profile_target(lnlike_XY_log, target_indices_ij,
         XY_log_lower_bounds, XY_log_upper_bounds,
         nuisance_guess; grid_steps=grid_steps)
 
     # Profile quadratic approximation
     ψω_ellipse_values, lnlike_ψ_ellipse_values = profile_target(lnlike_θ_log_ellipse,
-        target_indices,
+        target_indices_ij,
         XY_log_lower_bounds,
         XY_log_upper_bounds,
         nuisance_guess;
         grid_steps=grid_steps)
 
     # Extract profiled parameter values
-    ψ_values = [ψω[target_indices] for ψω in ψω_values]
-    ψ_ellipse_values = [ψω[target_indices] for ψω in ψω_ellipse_values]
+    ψ_values = [ψω[target_indices_ij] for ψω in ψω_values]
+    ψ_ellipse_values = [ψω[target_indices_ij] for ψω in ψω_ellipse_values]
 
     # Plot contours
     plot_2D_contour(model_name, ψ_values, lnlike_ψ_values,
@@ -366,12 +370,12 @@ for (i,j) in param_pairs
 
     plot_1D_profile(model_name, ψ1_values, log.(like_ψ1_values),
         current_varnames["ψ1"];
-        varname_save=current_varnames["ψ1_save"],
+        varname_save=current_varnames["ψ1_save"]*"_from_2D",
         ψ_true=ψ_true_pair[1])
 
     plot_1D_profile(model_name, ψ2_values, log.(like_ψ2_values),
         current_varnames["ψ2"];
-        varname_save=current_varnames["ψ2_save"],
+        varname_save=current_varnames["ψ2_save"]*"_from_2D",
         ψ_true=ψ_true_pair[2])
 
     # 2D prediction CIs
@@ -442,7 +446,8 @@ true_mean_sip = mean(distrib_XY_sip(XY_sip_true))
 for i in 1:dim_all
     target_index = i
     nuisance_indices = setdiff(indices_all, target_index)
-    nuisance_guess = XY_sip_initial[nuisance_indices]
+    nuisance_guess = θ_sip_MLE[nuisance_indices]
+    # nuisance_guess = XY_sip_initial[nuisance_indices] # can use XY_sip_initial as well
 
     # Profile full likelihood
     ψω_values, lnlike_ψ_values = profile_target(lnlike_XY_sip, target_index,
@@ -487,10 +492,11 @@ end
 
 # 2D Profiles in SIP coordinates
 for (i,j) in param_pairs
-    target_indices = [i,j]
-    nuisance_indices = setdiff(indices_all, target_indices)
-    nuisance_guess = XY_sip_initial[nuisance_indices]
-    ψ_true_pair = XY_sip_true[target_indices]
+    target_indices_ij = [i,j]
+    nuisance_indices = setdiff(indices_all, target_indices_ij)
+    nuisance_guess = θ_sip_MLE[nuisance_indices]
+    # nuisance_guess = XY_sip_initial[nuisance_indices] # can use XY_sip_initial as well
+    ψ_true_pair = XY_sip_true[target_indices_ij]
 
     # Create a copy of varnames for this iteration
     current_varnames = deepcopy(varnames)
@@ -502,21 +508,21 @@ for (i,j) in param_pairs
     current_varnames["ψ2_save"] = varnames["ψ"*string(j)*"_save"]
 
     # Profile full likelihood
-    ψω_values, lnlike_ψ_values = profile_target(lnlike_XY_sip, target_indices,
+    ψω_values, lnlike_ψ_values = profile_target(lnlike_XY_sip, target_indices_ij,
         XY_sip_lower_bounds, XY_sip_upper_bounds,
         nuisance_guess; grid_steps=grid_steps)
 
     # Profile quadratic approximation
     ψω_ellipse_values, lnlike_ψ_ellipse_values = profile_target(lnlike_θ_sip_ellipse,
-        target_indices,
+        target_indices_ij,
         XY_sip_lower_bounds,
         XY_sip_upper_bounds,
         nuisance_guess;
         grid_steps=grid_steps)
 
     # Extract profiled parameter values
-    ψ_values = [ψω[target_indices] for ψω in ψω_values]
-    ψ_ellipse_values = [ψω[target_indices] for ψω in ψω_ellipse_values]
+    ψ_values = [ψω[target_indices_ij] for ψω in ψω_values]
+    ψ_ellipse_values = [ψω[target_indices_ij] for ψω in ψω_ellipse_values]
 
     # Plot contours
     plot_2D_contour(model_name, ψ_values, lnlike_ψ_values,
@@ -533,12 +539,12 @@ for (i,j) in param_pairs
 
     plot_1D_profile(model_name, ψ1_values, log.(like_ψ1_values),
         current_varnames["ψ1"];
-        varname_save=current_varnames["ψ1_save"],
+        varname_save=current_varnames["ψ1_save"]*"_from_2D",
         ψ_true=ψ_true_pair[1])
 
     plot_1D_profile(model_name, ψ2_values, log.(like_ψ2_values),
         current_varnames["ψ2"];
-        varname_save=current_varnames["ψ2_save"],
+        varname_save=current_varnames["ψ2_save"]*"_from_2D",
         ψ_true=ψ_true_pair[2])
 
     # 2D prediction CIs
