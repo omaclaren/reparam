@@ -85,7 +85,7 @@ end
 
 function profile_target(lnlike_θ, ψ_indices, θ_bounds_lower, θ_bounds_upper, ω_initial;
     grid_steps=100, ω_initial_extras::Union{Nothing, Vector{Vector{Float64}}}=nothing,
-    method=:LD_TNEWTON_PRECOND_RESTART, local_method=:LN_BOBYQA, xtol_rel=1e-9, ftol_rel=1e-9, 
+    method=:LD_TNEWTON_PRECOND, local_method=:LD_TNEWTON_PRECOND, xtol_rel=1e-9, ftol_rel=1e-9, 
     optmaxtime=120, popsize=50)
     """
     Construct profile likelihood by maximizing over nuisance parameters.
@@ -102,8 +102,8 @@ function profile_target(lnlike_θ, ψ_indices, θ_bounds_lower, θ_bounds_upper,
     - grid_steps: Number of grid points for interest parameters (default: 100)
     - ω_initial_extras: : Vector of additional initial guesses for nuisance parameters, 
         where each guess is a vector of the same dimension as ω_initial (default: nothing)
-    - method: Overall optimization method for nuisance parameters (default: :LD_LBFGS)
-    - local_method: Local optimization method if using a global method which requires it (default: :LD_LBFGS)
+    - method: Overall optimization method for nuisance parameters (default: :LD_TNEWTON_PRECOND)
+    - local_method: Local optimization method if using a global method which requires it (default: :LD_TNEWTON_PRECOND)
     - xtol_rel: Relative tolerance in parameter values (default: 1e-9)
     - ftol_rel: Relative tolerance in function value (default: 1e-9)
     - optmaxtime: Maximum optimization time in seconds (default: 120)
