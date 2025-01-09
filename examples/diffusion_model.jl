@@ -63,16 +63,13 @@ function create_ϕ_mapping(x, L)
 end
 
 # --------------------------------------------------------
-# Setup and Data Generation
+# Setup 
 # --------------------------------------------------------
 
 # Fine grid setup
 L = 100
 x = LinRange(0, L, 201)
 indices_fine = 1:length(x)
-
-# Define ϕ mapping function for fine grid
-ϕ_func = create_ϕ_mapping(x, L)
 
 # Observation grid and matrix
 indices_obs = 2:length(x)-1
@@ -82,12 +79,20 @@ obs_matrix = construct_observation_matrix(indices_obs, indices_fine)
 # Option 2. Use the observation indices directly
 x_obs = x[indices_obs]
 
+# --------------------------------------------------------
+# Original Parameterization Analysis and Data Generation
+# θ = xy = [D₁, D₂, R]
+# --------------------------------------------------------
+
+# Define ϕ mapping function for fine grid
+ϕ_func_xy = create_ϕ_mapping(x, L)
+
 # Distribution in original parameterization
 σ = 0.2
 # Option 1. Use matrix multiplication to get the observation points
-# distrib_xy = xy -> MvLogNormal(log.(abs.(obs_matrix*ϕ_func(xy))), σ^2*I(length(x_obs)))
+# distrib_xy = xy -> MvLogNormal(log.(abs.(obs_matrix*ϕ_func_xy(xy))), σ^2*I(length(x_obs)))
 # Option 2. Use the observation indices directly
-distrib_xy = xy -> MvLogNormal(log.(abs.(ϕ_func(xy)[indices_obs])), σ^2*I(length(x_obs)))
+distrib_xy = xy -> MvLogNormal(log.(abs.(ϕ_func_xy(xy)[indices_obs])), σ^2*I(length(x_obs)))
 
 # Variables and bounds
 varnames = Dict("ψ1" => "D_1", "ψ2" => "D_2", "ψ3" => "R")
@@ -117,9 +122,6 @@ data = rand(distrib_xy(xy_true), Nrep)
 # Visualize data
 scatter(x, [0; data; 0])
 
-# --------------------------------------------------------
-# Original Parameterization Analysis
-# --------------------------------------------------------
 # Construct likelihood
 lnlike_xy = construct_lnlike_xy(distrib_xy, data; dist_type=:multi)
 model_name = "diffusion_xy"
@@ -136,35 +138,37 @@ n_guesses = 3
 # Generate multiple initial guesses
 nuisance_guesses = generate_initial_guesses(xy_lower_bounds, xy_upper_bounds, n_guesses)
 
-θ_MLE, lnlike_θ_MLE = profile_target(lnlike_xy, target_indices,
+xy_MLE, lnlike_xy_MLE = profile_target(lnlike_xy, target_indices,
     xy_lower_bounds, xy_upper_bounds, 
     xy_initial; grid_steps=grid_steps, ω_initial_extras=nuisance_guesses,
     method=point_estimation_method)
 
 # Quadratic approximation at MLE
-lnlike_θ_ellipse, H_θ_ellipse = construct_ellipse_lnlike_approx(lnlike_xy, θ_MLE)
+lnlike_xy_ellipse, H_xy_ellipse = construct_ellipse_lnlike_approx(lnlike_xy, xy_MLE)
 
 # Eigenanalysis of Hessian at MLE
-evals, evecs = eigen(H_θ_ellipse; sortby = x -> -real(x))
+evals, evecs = eigen(H_xy_ellipse; sortby = x -> -real(x))
 println("Eigenvectors and eigenvalues for "*model_name)
-for (i, eveci) in enumerate(eachcol(evecs))
-    println("value: ", evals[i])
-    println("vector: ", evecs[:,i])
-end
+println("Eigenvalues: ", evals)
+println("Eigenvectors: ", evecs)
+# for (i, eveci) in enumerate(eachcol(evecs))
+#     println("value: ", evals[i])
+#     println("vector: ", evecs[:,i])
+# end
 
 # Jacobian and svd analysis of φ mapping at MLE
-# J_ϕ_xy = ForwardDiff.jacobian(ϕ_func, θ_MLE)
-J_ϕ_xy, U_xy, S_xy, Vt_xy = compute_ϕ_Jacobian(ϕ_func, θ_MLE; method_type=:auto, compute_svd=false)
+# J_ϕ_xy = ForwardDiff.jacobian(ϕ_func_xy, xy_MLE)
+J_ϕ_xy, U_xy, S_xy, Vt_xy = compute_ϕ_Jacobian(ϕ_func_xy, xy_MLE; method_type=:auto, compute_svd=true)
 # print singular values and left/right singular vectors
 println("Singular values for "*model_name)
 println(S_xy)
-println("Left singular vectors for "*model_name)
-println(U_xy)
+# println("Left singular vectors for "*model_name)
+# println(U_xy)
 println("Right singular vectors for "*model_name)
 println(Vt_xy)
 
 # Calculate prediction at MLE for reference
-pred_mean_MLE = mean(distrib_xy(θ_MLE))
+pred_mean_MLE = mean(distrib_xy(xy_MLE))
 true_mean = mean(distrib_xy(xy_true))
 
 # 1D Profiles
@@ -172,7 +176,7 @@ profile_method = :LN_BOBYQA
 for i in 1:dim_all
     target_index = i
     nuisance_indices = setdiff(indices_all, target_index)
-    nuisance_guess = θ_MLE[nuisance_indices]
+    nuisance_guess = xy_MLE[nuisance_indices]
     # nuisance_guess = xy_initial[nuisance_indices] # can use xy_initial as well
 
     # generate multiple initial guesses
@@ -193,7 +197,7 @@ for i in 1:dim_all
         method=profile_method)
 
     # Profile quadratic approximation
-    ψω_ellipse_values, lnlike_ψ_ellipse_values = profile_target(lnlike_θ_ellipse,
+    ψω_ellipse_values, lnlike_ψ_ellipse_values = profile_target(lnlike_xy_ellipse,
         target_index,
         xy_lower_bounds,
         xy_upper_bounds,
@@ -237,7 +241,7 @@ profile_method = :LN_BOBYQA
 for (i,j) in param_pairs
     target_indices_ij = [i,j]
     nuisance_indices = setdiff(indices_all, target_indices_ij)
-    nuisance_guess = θ_MLE[nuisance_indices]
+    nuisance_guess = xy_MLE[nuisance_indices]
     # nuisance_guess = xy_initial[nuisance_indices] # can use xy_initial as well
 
     # generate multiple initial guesses
@@ -270,7 +274,7 @@ for (i,j) in param_pairs
         method=profile_method)
 
     # Profile quadratic approximation
-    ψω_ellipse_values, lnlike_ψ_ellipse_values = profile_target(lnlike_θ_ellipse,
+    ψω_ellipse_values, lnlike_ψ_ellipse_values = profile_target(lnlike_xy_ellipse,
         target_indices_ij,
         xy_lower_bounds,
         xy_upper_bounds,
@@ -333,9 +337,10 @@ XY_log_upper_bounds = log.(xy_upper_bounds)
 XY_log_initial = xytoXY_log(xy_initial)
 XY_log_true = xytoXY_log(xy_true)
 
-# Transform likelihood and distribution
+# Transform likelihood, distribution and ϕ mapping
 lnlike_XY_log = construct_lnlike_XY(lnlike_xy, XYtoxy_log)
 distrib_XY_log = construct_distrib_XY(distrib_xy, XYtoxy_log)
+ϕ_func_XY_log = construct_ϕ_XY(ϕ_func_xy, XYtoxy_log)
 
 # Update variable names for log coordinates
 varnames["ψ1"] = "\\ln\\ D_1"
@@ -352,25 +357,38 @@ target_indices = []  # empty for MLE
 n_guesses = 3
 nuisance_guesses = generate_initial_guesses(XY_log_lower_bounds, XY_log_upper_bounds, n_guesses)
 
-θ_log_MLE, lnlike_θ_log_MLE = profile_target(lnlike_XY_log, target_indices,
+XY_log_MLE, lnlike_XY_log_MLE = profile_target(lnlike_XY_log, target_indices,
     XY_log_lower_bounds, XY_log_upper_bounds, 
     XY_log_initial; grid_steps=grid_steps,
     ω_initial_extras=nuisance_guesses,
     method=point_estimation_method)
 
 # Quadratic approximation at MLE
-lnlike_θ_log_ellipse, H_θ_log_ellipse = construct_ellipse_lnlike_approx(lnlike_XY_log, θ_log_MLE)
+lnlike_XY_log_ellipse, H_XY_log_ellipse = construct_ellipse_lnlike_approx(lnlike_XY_log, XY_log_MLE)
 
 # Eigenanalysis in log coordinates
-evals_log, evecs_log = eigen(H_θ_log_ellipse; sortby = x -> -real(x))
+evals_log, evecs_log = eigen(H_XY_log_ellipse; sortby = x -> -real(x))
 println("Eigenvectors and eigenvalues for "*model_name)
-for (i, eveci) in enumerate(eachcol(evecs_log))
-    println("value: ", evals_log[i])
-    println("vector: ", evecs_log[:,i])
-end
+println("Eigenvalues: ", evals_log)
+println("Eigenvectors: ", evecs_log)
+# for (i, eveci) in enumerate(eachcol(evecs_log))
+#     println("value: ", evals_log[i])
+#     println("vector: ", evecs_log[:,i])
+# end
+
+# Jacobian and svd analysis of φ mapping at MLE
+# J_ϕ_XY_log = ForwardDiff.jacobian(ϕ_func_XY_log, XY_log_MLE)
+J_ϕ_XY_log, U_XY_log, S_XY_log, Vt_XY_log = compute_ϕ_Jacobian(ϕ_func_XY_log, XY_log_MLE; method_type=:auto, compute_svd=true)
+# print singular values and left/right singular vectors
+println("Singular values for "*model_name)
+println(S_XY_log)
+# println("Left singular vectors for "*model_name)
+# println(U_XY_log)
+println("Right singular vectors for "*model_name)
+println(Vt_XY_log)
 
 # Calculate prediction at MLE for reference
-pred_mean_MLE_log = mean(distrib_XY_log(θ_log_MLE))
+pred_mean_MLE_log = mean(distrib_XY_log(XY_log_MLE))
 true_mean_log = mean(distrib_XY_log(XY_log_true))
 
 # 1D Profiles in log coordinates
@@ -378,7 +396,7 @@ profile_method = :LN_BOBYQA
 for i in 1:dim_all
     target_index = i
     nuisance_indices = setdiff(indices_all, target_index)
-    nuisance_guess = θ_log_MLE[nuisance_indices]
+    nuisance_guess = XY_log_MLE[nuisance_indices]
     # nuisance_guess = XY_log_initial[nuisance_indices] # can use XY_log_initial as well
 
     # generate multiple initial guesses
@@ -393,7 +411,7 @@ for i in 1:dim_all
         method=profile_method)
 
     # Profile quadratic approximation
-    ψω_ellipse_values, lnlike_ψ_ellipse_values = profile_target(lnlike_θ_log_ellipse,
+    ψω_ellipse_values, lnlike_ψ_ellipse_values = profile_target(lnlike_XY_log_ellipse,
         target_index,
         XY_log_lower_bounds,
         XY_log_upper_bounds,
@@ -437,7 +455,7 @@ param_pairs = [(i,j) for i in 1:dim_all for j in (i+1):dim_all]
 for (i,j) in param_pairs
     target_indices_ij = [i,j]
     nuisance_indices = setdiff(indices_all, target_indices_ij)
-    nuisance_guess = θ_log_MLE[nuisance_indices]
+    nuisance_guess = XY_log_MLE[nuisance_indices]
     # nuisance_guess = XY_log_initial[nuisance_indices] # can use XY_log_initial as well
 
     # generate multiple initial guesses
@@ -467,7 +485,7 @@ for (i,j) in param_pairs
         method=profile_method)
 
     # Profile quadratic approximation
-    ψω_ellipse_values, lnlike_ψ_ellipse_values = profile_target(lnlike_θ_log_ellipse,
+    ψω_ellipse_values, lnlike_ψ_ellipse_values = profile_target(lnlike_XY_log_ellipse,
         target_indices_ij,
         XY_log_lower_bounds,
         XY_log_upper_bounds,
@@ -521,17 +539,24 @@ model_name = "diffusion_sip"
 print(model_name*"\n")
 
 # Scale and round eigenvectors for SIP transformation
-evecs_scaled = scale_and_round(evecs_log; round_within=0.5, column_scales=[1,1,1])
+# Option 1. based on the eigenvalues and eigenvectors from the log parameterization
+# evecs_scaled = scale_and_round(evecs_log; round_within=0.5, column_scales=[1,1,1])
+# Option 2. based on the right singular vectors from the log parameterization
+evecs_scaled = scale_and_round(Vt_XY_log; round_within=0.5, column_scales=[1,1,1])
 println("Transformations:")
 display(evecs_scaled)
 display(inv(evecs_scaled))
 
+println("Original right singular vectors:")
+display(Vt_XY_log)
+
 # Construct transformation
 xytoXY_sip, XYtoxy_sip = reparam(evecs_scaled)
 
-# Transform likelihood and distribution
+# Transform likelihood, distribution and ϕ mapping
 lnlike_XY_sip = construct_lnlike_XY(lnlike_xy, XYtoxy_sip)
 distrib_XY_sip = construct_distrib_XY(distrib_xy, XYtoxy_sip)
+ϕ_func_XY_sip = construct_ϕ_XY(ϕ_func_xy, XYtoxy_sip)
 
 # Set bounds for SIP coordinates (manual due to non-monotonic transform)
 XY_sip_lower_bounds = [0.5, 0.0001, 0.00001]
@@ -553,25 +578,38 @@ n_guesses = 3
 # Generate multiple initial guesses
 nuisance_guesses = generate_initial_guesses(XY_sip_lower_bounds, XY_sip_upper_bounds, n_guesses)
 
-θ_sip_MLE, lnlike_θ_sip_MLE = profile_target(lnlike_XY_sip, target_indices,
+XY_sip_MLE, lnlike_XY_sip_MLE = profile_target(lnlike_XY_sip, target_indices,
     XY_sip_lower_bounds, XY_sip_upper_bounds, 
     XY_sip_initial; grid_steps=grid_steps,
     ω_initial_extras=nuisance_guesses,
     method=point_estimation_method)
 
 # Quadratic approximation at MLE
-lnlike_θ_sip_ellipse, H_θ_sip_ellipse = construct_ellipse_lnlike_approx(lnlike_XY_sip, θ_sip_MLE)
+lnlike_XY_sip_ellipse, H_XY_sip_ellipse = construct_ellipse_lnlike_approx(lnlike_XY_sip, XY_sip_MLE)
 
 # Eigenanalysis in SIP coordinates
-evals_sip, evecs_sip = eigen(H_θ_sip_ellipse; sortby = x -> -real(x))
+evals_sip, evecs_sip = eigen(H_XY_sip_ellipse; sortby = x -> -real(x))
 println("Eigenvectors and eigenvalues for "*model_name)
-for (i, eveci) in enumerate(eachcol(evecs_sip))
-    println("value: ", evals_sip[i])
-    println("vector: ", evecs_sip[:,i])
-end
+println("Eigenvalues: ", evals_sip)
+println("Eigenvectors: ", evecs_sip)
+# for (i, eveci) in enumerate(eachcol(evecs_sip))
+#     println("value: ", evals_sip[i])
+#     println("vector: ", evecs_sip[:,i])
+# end
+
+# Jacobian and svd analysis of φ mapping at MLE
+# J_ϕ_XY_sip = ForwardDiff.jacobian(ϕ_func_XY_sip, XY_sip_MLE)
+J_ϕ_XY_sip, U_XY_sip, S_XY_sip, Vt_XY_sip = compute_ϕ_Jacobian(ϕ_func_XY_sip, XY_sip_MLE; method_type=:auto, compute_svd=true)
+# print singular values and left/right singular vectors
+println("Singular values for "*model_name)
+println(S_XY_sip)
+# println("Left singular vectors for "*model_name)
+# println(U_XY_sip)
+println("Right singular vectors for "*model_name)
+println(Vt_XY_sip)
 
 # Calculate prediction at MLE for reference
-pred_mean_MLE_sip = mean(distrib_XY_sip(θ_sip_MLE))
+pred_mean_MLE_sip = mean(distrib_XY_sip(XY_sip_MLE))
 true_mean_sip = mean(distrib_XY_sip(XY_sip_true))
 
 # 1D Profiles in SIP coordinates
@@ -579,7 +617,7 @@ profile_method = :LN_BOBYQA
 for i in 1:dim_all
     target_index = i
     nuisance_indices = setdiff(indices_all, target_index)
-    nuisance_guess = θ_sip_MLE[nuisance_indices]
+    nuisance_guess = XY_sip_MLE[nuisance_indices]
     # nuisance_guess = XY_sip_initial[nuisance_indices] # can use XY_sip_initial as well
 
     # generate multiple initial guesses
@@ -594,7 +632,7 @@ for i in 1:dim_all
         method=profile_method)
 
     # Profile quadratic approximation
-    ψω_ellipse_values, lnlike_ψ_ellipse_values = profile_target(lnlike_θ_sip_ellipse,
+    ψω_ellipse_values, lnlike_ψ_ellipse_values = profile_target(lnlike_XY_sip_ellipse,
         target_index,
         XY_sip_lower_bounds,
         XY_sip_upper_bounds,
@@ -638,7 +676,7 @@ param_pairs = [(i,j) for i in 1:dim_all for j in (i+1):dim_all]
 for (i,j) in param_pairs
     target_indices_ij = [i,j]
     nuisance_indices = setdiff(indices_all, target_indices_ij)
-    nuisance_guess = θ_sip_MLE[nuisance_indices]
+    nuisance_guess = XY_sip_MLE[nuisance_indices]
     # nuisance_guess = XY_sip_initial[nuisance_indices] # can use XY_sip_initial as well
 
     # generate multiple initial guesses
@@ -668,7 +706,7 @@ for (i,j) in param_pairs
         method=profile_method)
 
     # Profile quadratic approximation
-    ψω_ellipse_values, lnlike_ψ_ellipse_values = profile_target(lnlike_θ_sip_ellipse,
+    ψω_ellipse_values, lnlike_ψ_ellipse_values = profile_target(lnlike_XY_sip_ellipse,
         target_indices_ij,
         XY_sip_lower_bounds,
         XY_sip_upper_bounds,

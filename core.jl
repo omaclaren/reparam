@@ -202,10 +202,6 @@ function profile_target(lnlike_θ, ψ_indices, θ_bounds_lower, θ_bounds_upper,
 
         starting_points = [ω_initial]
         if !isnothing(ω_initial_extras)
-            println("Type of starting_points: ", typeof(starting_points))
-            println("Type of ω_initial_extras: ", typeof(ω_initial_extras))
-            println("Element type of starting_points: ", eltype(starting_points))
-            println("Element type of ω_initial_extras: ", eltype(ω_initial_extras))
             append!(starting_points, ω_initial_extras)
         end
 
