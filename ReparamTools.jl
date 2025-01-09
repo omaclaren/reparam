@@ -25,6 +25,7 @@ export
     get_1D_profiles_from_2D,
     construct_ellipse_lnlike_approx,
     construct_upper_lower_profile_wise_CIs_for_mean,
+    compute_ϕ_Jacobian,
 
     # Visualization functions
     plot_1D_profile,

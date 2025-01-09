@@ -11,10 +11,11 @@ Random.seed!(12)
 # --------------------------------------------------------
 # Model Definition
 # --------------------------------------------------------
-function ϕ_mapping(θ, x, L)
+function solve_model(θ, x, L)
     """
-    Diffusion model φ mapping: maps parameters θ = [D₁, D₂, R]
-    to solution values on the spatial grid.
+    Diffusion model solution: maps parameters θ = [D₁, D₂, R]
+    to solution values on the specified spatial grid. Basis for 
+    the ϕ mapping function.
     
     Parameters:
     - θ: Vector θ = [D₁, D₂, R] of diffusion and source parameters
@@ -45,6 +46,22 @@ function ϕ_mapping(θ, x, L)
     return y
 end
 
+# Creates a ϕ_mapping function with fixed grid parameters
+function create_ϕ_mapping(x, L)
+    """
+    Creates a mapping function from parameters to solution values
+    with fixed grid parameters.
+    
+    Parameters:
+    - x: Spatial grid points
+    - L: Domain length
+    
+    Returns:
+    - Function mapping θ to solution values
+    """
+    return θ -> solve_model(θ, x, L)
+end
+
 # --------------------------------------------------------
 # Setup and Data Generation
 # --------------------------------------------------------
@@ -53,6 +70,9 @@ end
 L = 100
 x = LinRange(0, L, 201)
 indices_fine = 1:length(x)
+
+# Define ϕ mapping function for fine grid
+ϕ_func = create_ϕ_mapping(x, L)
 
 # Observation grid and matrix
 indices_obs = 2:length(x)-1
@@ -65,9 +85,9 @@ x_obs = x[indices_obs]
 # Distribution in original parameterization
 σ = 0.2
 # Option 1. Use matrix multiplication to get the observation points
-# distrib_xy = xy -> MvLogNormal(log.(abs.(obs_matrix*ϕ_mapping(xy, x, L))), σ^2*I(length(x_obs)))
+# distrib_xy = xy -> MvLogNormal(log.(abs.(obs_matrix*ϕ_func(xy))), σ^2*I(length(x_obs)))
 # Option 2. Use the observation indices directly
-distrib_xy = xy -> MvLogNormal(log.(abs.(ϕ_mapping(xy, x, L)[indices_obs])), σ^2*I(length(x_obs)))
+distrib_xy = xy -> MvLogNormal(log.(abs.(ϕ_func(xy)[indices_obs])), σ^2*I(length(x_obs)))
 
 # Variables and bounds
 varnames = Dict("ψ1" => "D_1", "ψ2" => "D_2", "ψ3" => "R")
@@ -124,13 +144,24 @@ nuisance_guesses = generate_initial_guesses(xy_lower_bounds, xy_upper_bounds, n_
 # Quadratic approximation at MLE
 lnlike_θ_ellipse, H_θ_ellipse = construct_ellipse_lnlike_approx(lnlike_xy, θ_MLE)
 
-# Eigenanalysis
+# Eigenanalysis of Hessian at MLE
 evals, evecs = eigen(H_θ_ellipse; sortby = x -> -real(x))
 println("Eigenvectors and eigenvalues for "*model_name)
 for (i, eveci) in enumerate(eachcol(evecs))
     println("value: ", evals[i])
     println("vector: ", evecs[:,i])
 end
+
+# Jacobian and svd analysis of φ mapping at MLE
+# J_ϕ_xy = ForwardDiff.jacobian(ϕ_func, θ_MLE)
+J_ϕ_xy, U_xy, S_xy, Vt_xy = compute_ϕ_Jacobian(ϕ_func, θ_MLE; method_type=:auto, compute_svd=false)
+# print singular values and left/right singular vectors
+println("Singular values for "*model_name)
+println(S_xy)
+println("Left singular vectors for "*model_name)
+println(U_xy)
+println("Right singular vectors for "*model_name)
+println(Vt_xy)
 
 # Calculate prediction at MLE for reference
 pred_mean_MLE = mean(distrib_xy(θ_MLE))

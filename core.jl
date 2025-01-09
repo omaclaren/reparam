@@ -57,11 +57,11 @@ end
 
 function compute_ϕ_Jacobian(ϕ_func, θ; method_type=:auto, compute_svd=false)
     """
-    Compute Jacobian of φ mapping at given parameters, optionally with SVD.
+    Compute Jacobian of ϕ mapping at given parameters, optionally with SVD.
     Works in any coordinate system.
     
     Parameters:
-    - φ_func: Function implementing the φ mapping
+    - ϕ_func: Function implementing the ϕ mapping. Should be function of θ only.
     - θ: Parameter vector at which to evaluate the Jacobian
     - method_type: :auto for automatic differentiation (default), otherwise finite differences
     - compute_svd: Whether to compute and return SVD (default: false)
