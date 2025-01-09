@@ -74,15 +74,23 @@ scatter(x, [0; data; 0])
 # Construct likelihood
 lnlike_xy = construct_lnlike_xy(distrib_xy, data; dist_type=:multi)
 model_name = "diffusion_xy"
+print(model_name*"\n")
+
 grid_steps = [500]
 dim_all = length(xy_initial)
 indices_all = 1:dim_all
 
 # Point estimation (MLE)
+point_estimation_method = :LN_BOBYQA
 target_indices = []  # empty for MLE
+n_guesses = 3
+# Generate multiple initial guesses
+nuisance_guesses = generate_initial_guesses(xy_lower_bounds, xy_upper_bounds, n_guesses)
+
 θ_MLE, lnlike_θ_MLE = profile_target(lnlike_xy, target_indices,
     xy_lower_bounds, xy_upper_bounds, 
-    xy_initial; grid_steps=grid_steps)
+    xy_initial; grid_steps=grid_steps, ω_initial_extras=nuisance_guesses,
+    method=point_estimation_method)
 
 # Quadratic approximation at MLE
 lnlike_θ_ellipse, H_θ_ellipse = construct_ellipse_lnlike_approx(lnlike_xy, θ_MLE)
@@ -100,11 +108,16 @@ pred_mean_MLE = mean(distrib_xy(θ_MLE))
 true_mean = mean(distrib_xy(xy_true))
 
 # 1D Profiles
+profile_method = :LN_BOBYQA
 for i in 1:dim_all
     target_index = i
     nuisance_indices = setdiff(indices_all, target_index)
     nuisance_guess = θ_MLE[nuisance_indices]
     # nuisance_guess = xy_initial[nuisance_indices] # can use xy_initial as well
+
+    # generate multiple initial guesses
+    n_guesses_profiling = 3
+    nuisance_guess_extras = generate_initial_guesses(xy_lower_bounds[nuisance_indices], xy_upper_bounds[nuisance_indices], n_guesses_profiling)
 
     # Print variable name
     print("Variable: ", varnames["ψ"*string(i)], "\n")
@@ -115,7 +128,9 @@ for i in 1:dim_all
         xy_lower_bounds, 
         xy_upper_bounds,
         nuisance_guess; 
-        grid_steps=grid_steps)
+        grid_steps=grid_steps,
+        ω_initial_extras=nuisance_guess_extras,
+        method=profile_method)
 
     # Profile quadratic approximation
     ψω_ellipse_values, lnlike_ψ_ellipse_values = profile_target(lnlike_θ_ellipse,
@@ -123,7 +138,9 @@ for i in 1:dim_all
         xy_lower_bounds,
         xy_upper_bounds,
         nuisance_guess;
-        grid_steps=grid_steps)
+        grid_steps=grid_steps,
+        ω_initial_extras=nuisance_guess_extras,
+        method=profile_method)
 
     # Extract profiled parameter values
     ψ_values = [ψω[target_index] for ψω in ψω_values]
@@ -155,12 +172,22 @@ end
 
 # 2D Profiles
 param_pairs = [(i,j) for i in 1:dim_all for j in (i+1):dim_all]
+profile_method = :LN_BOBYQA
 
 for (i,j) in param_pairs
     target_indices_ij = [i,j]
     nuisance_indices = setdiff(indices_all, target_indices_ij)
     nuisance_guess = θ_MLE[nuisance_indices]
     # nuisance_guess = xy_initial[nuisance_indices] # can use xy_initial as well
+
+    # generate multiple initial guesses
+    if length(nuisance_indices) > 0
+        n_guesses_profiling = 3
+        nuisance_guess_extras = generate_initial_guesses(xy_lower_bounds[nuisance_indices], xy_upper_bounds[nuisance_indices], n_guesses_profiling)
+    else
+        nuisance_guess_extras = nothing
+    end
+
     ψ_true_pair = xy_true[target_indices_ij]
 
     # Print variable names for this pair
@@ -178,7 +205,9 @@ for (i,j) in param_pairs
     # Profile full likelihood
     ψω_values, lnlike_ψ_values = profile_target(lnlike_xy, target_indices_ij,
         xy_lower_bounds, xy_upper_bounds,
-        nuisance_guess; grid_steps=grid_steps)
+        nuisance_guess; grid_steps=grid_steps,
+        ω_initial_extras=nuisance_guess_extras,
+        method=profile_method)
 
     # Profile quadratic approximation
     ψω_ellipse_values, lnlike_ψ_ellipse_values = profile_target(lnlike_θ_ellipse,
@@ -186,7 +215,9 @@ for (i,j) in param_pairs
         xy_lower_bounds,
         xy_upper_bounds,
         nuisance_guess;
-        grid_steps=grid_steps)
+        grid_steps=grid_steps,
+        ω_initial_extras=nuisance_guess_extras,
+        method=profile_method)
 
     # Extract profiled parameter values
     ψ_values = [ψω[target_indices_ij] for ψω in ψω_values]
@@ -230,6 +261,7 @@ end
 # Log Parameterization Analysis
 # --------------------------------------------------------
 model_name = "diffusion_log"
+print(model_name*"\n")
 
 # Coordinate transformation
 xytoXY_log(xy) = log.(xy)
@@ -254,10 +286,17 @@ varnames["ψ2_save"] = "ln_D_2"
 varnames["ψ3_save"] = "ln_R"
 
 # Point estimation in log coordinates
+point_estimation_method = :LN_BOBYQA
 target_indices = []  # empty for MLE
+# Generate multiple initial guesses
+n_guesses = 3
+nuisance_guesses = generate_initial_guesses(XY_log_lower_bounds, XY_log_upper_bounds, n_guesses)
+
 θ_log_MLE, lnlike_θ_log_MLE = profile_target(lnlike_XY_log, target_indices,
     XY_log_lower_bounds, XY_log_upper_bounds, 
-    XY_log_initial; grid_steps=grid_steps)
+    XY_log_initial; grid_steps=grid_steps,
+    ω_initial_extras=nuisance_guesses,
+    method=point_estimation_method)
 
 # Quadratic approximation at MLE
 lnlike_θ_log_ellipse, H_θ_log_ellipse = construct_ellipse_lnlike_approx(lnlike_XY_log, θ_log_MLE)
@@ -275,16 +314,23 @@ pred_mean_MLE_log = mean(distrib_XY_log(θ_log_MLE))
 true_mean_log = mean(distrib_XY_log(XY_log_true))
 
 # 1D Profiles in log coordinates
+profile_method = :LN_BOBYQA
 for i in 1:dim_all
     target_index = i
     nuisance_indices = setdiff(indices_all, target_index)
     nuisance_guess = θ_log_MLE[nuisance_indices]
     # nuisance_guess = XY_log_initial[nuisance_indices] # can use XY_log_initial as well
 
+    # generate multiple initial guesses
+    n_guesses_profiling = 3
+    nuisance_guess_extras = generate_initial_guesses(XY_log_lower_bounds[nuisance_indices], XY_log_upper_bounds[nuisance_indices], n_guesses_profiling)
+
     # Profile full likelihood
     ψω_values, lnlike_ψ_values = profile_target(lnlike_XY_log, target_index,
         XY_log_lower_bounds, XY_log_upper_bounds,
-        nuisance_guess; grid_steps=grid_steps)
+        nuisance_guess; grid_steps=grid_steps,
+        ω_initial_extras=nuisance_guess_extras,
+        method=profile_method)
 
     # Profile quadratic approximation
     ψω_ellipse_values, lnlike_ψ_ellipse_values = profile_target(lnlike_θ_log_ellipse,
@@ -292,7 +338,9 @@ for i in 1:dim_all
         XY_log_lower_bounds,
         XY_log_upper_bounds,
         nuisance_guess;
-        grid_steps=grid_steps)
+        grid_steps=grid_steps,
+        ω_initial_extras=nuisance_guess_extras,
+        method=profile_method)
 
     # Extract profiled parameter values
     ψ_values = [ψω[target_index] for ψω in ψω_values]
@@ -323,6 +371,7 @@ for i in 1:dim_all
 end
 
 # 2D Profiles in log coordinates
+profile_method = :LN_BOBYQA
 param_pairs = [(i,j) for i in 1:dim_all for j in (i+1):dim_all]
 
 for (i,j) in param_pairs
@@ -330,6 +379,15 @@ for (i,j) in param_pairs
     nuisance_indices = setdiff(indices_all, target_indices_ij)
     nuisance_guess = θ_log_MLE[nuisance_indices]
     # nuisance_guess = XY_log_initial[nuisance_indices] # can use XY_log_initial as well
+
+    # generate multiple initial guesses
+    if length(nuisance_indices) > 0
+        n_guesses_profiling = 3
+        nuisance_guess_extras = generate_initial_guesses(XY_log_lower_bounds[nuisance_indices], XY_log_upper_bounds[nuisance_indices], n_guesses_profiling)
+    else
+        nuisance_guess_extras = nothing
+    end
+
     ψ_true_pair = XY_log_true[target_indices_ij]
 
     # Create a copy of varnames for this iteration
@@ -344,7 +402,9 @@ for (i,j) in param_pairs
     # Profile full likelihood
     ψω_values, lnlike_ψ_values = profile_target(lnlike_XY_log, target_indices_ij,
         XY_log_lower_bounds, XY_log_upper_bounds,
-        nuisance_guess; grid_steps=grid_steps)
+        nuisance_guess; grid_steps=grid_steps,
+        ω_initial_extras=nuisance_guess_extras,
+        method=profile_method)
 
     # Profile quadratic approximation
     ψω_ellipse_values, lnlike_ψ_ellipse_values = profile_target(lnlike_θ_log_ellipse,
@@ -352,7 +412,9 @@ for (i,j) in param_pairs
         XY_log_lower_bounds,
         XY_log_upper_bounds,
         nuisance_guess;
-        grid_steps=grid_steps)
+        grid_steps=grid_steps,
+        ω_initial_extras=nuisance_guess_extras,
+        method=profile_method)
 
     # Extract profiled parameter values
     ψ_values = [ψω[target_indices_ij] for ψω in ψω_values]
@@ -396,6 +458,7 @@ end
 # Sloppihood-Informed Parameterization Analysis
 # --------------------------------------------------------
 model_name = "diffusion_sip"
+print(model_name*"\n")
 
 # Scale and round eigenvectors for SIP transformation
 evecs_scaled = scale_and_round(evecs_log; round_within=0.5, column_scales=[1,1,1])
@@ -413,7 +476,7 @@ distrib_XY_sip = construct_distrib_XY(distrib_xy, XYtoxy_sip)
 # Set bounds for SIP coordinates (manual due to non-monotonic transform)
 XY_sip_lower_bounds = [0.5, 0.0001, 0.00001]
 XY_sip_upper_bounds = [1.5, 10, 1000]
-XY_sip_initial = [1, 1, 10]
+XY_sip_initial = [1.0, 1.0, 10.0]
 XY_sip_true = xytoXY_sip(xy_true)
 
 # Update variable names for SIP coordinates
@@ -426,9 +489,15 @@ varnames["ψ3_save"] = "D_1_D_2_R"
 
 # Point estimation in SIP coordinates
 target_indices = []  # empty for MLE
+n_guesses = 3
+# Generate multiple initial guesses
+nuisance_guesses = generate_initial_guesses(XY_sip_lower_bounds, XY_sip_upper_bounds, n_guesses)
+
 θ_sip_MLE, lnlike_θ_sip_MLE = profile_target(lnlike_XY_sip, target_indices,
     XY_sip_lower_bounds, XY_sip_upper_bounds, 
-    XY_sip_initial; grid_steps=grid_steps)
+    XY_sip_initial; grid_steps=grid_steps,
+    ω_initial_extras=nuisance_guesses,
+    method=point_estimation_method)
 
 # Quadratic approximation at MLE
 lnlike_θ_sip_ellipse, H_θ_sip_ellipse = construct_ellipse_lnlike_approx(lnlike_XY_sip, θ_sip_MLE)
@@ -446,16 +515,23 @@ pred_mean_MLE_sip = mean(distrib_XY_sip(θ_sip_MLE))
 true_mean_sip = mean(distrib_XY_sip(XY_sip_true))
 
 # 1D Profiles in SIP coordinates
+profile_method = :LN_BOBYQA
 for i in 1:dim_all
     target_index = i
     nuisance_indices = setdiff(indices_all, target_index)
     nuisance_guess = θ_sip_MLE[nuisance_indices]
     # nuisance_guess = XY_sip_initial[nuisance_indices] # can use XY_sip_initial as well
 
+    # generate multiple initial guesses
+    n_guesses_profiling = 3
+    nuisance_guess_extras = generate_initial_guesses(XY_sip_lower_bounds[nuisance_indices], XY_sip_upper_bounds[nuisance_indices], n_guesses_profiling)
+
     # Profile full likelihood
     ψω_values, lnlike_ψ_values = profile_target(lnlike_XY_sip, target_index,
         XY_sip_lower_bounds, XY_sip_upper_bounds,
-        nuisance_guess; grid_steps=grid_steps)
+        nuisance_guess; grid_steps=grid_steps,
+        ω_initial_extras=nuisance_guess_extras,
+        method=profile_method)
 
     # Profile quadratic approximation
     ψω_ellipse_values, lnlike_ψ_ellipse_values = profile_target(lnlike_θ_sip_ellipse,
@@ -463,7 +539,9 @@ for i in 1:dim_all
         XY_sip_lower_bounds,
         XY_sip_upper_bounds,
         nuisance_guess;
-        grid_steps=grid_steps)
+        grid_steps=grid_steps,
+        ω_initial_extras=nuisance_guess_extras,
+        method=profile_method)
 
     # Extract profiled parameter values
     ψ_values = [ψω[target_index] for ψω in ψω_values]
@@ -494,11 +572,23 @@ for i in 1:dim_all
 end
 
 # 2D Profiles in SIP coordinates
+profile_method = :LN_BOBYQA
+param_pairs = [(i,j) for i in 1:dim_all for j in (i+1):dim_all]
+
 for (i,j) in param_pairs
     target_indices_ij = [i,j]
     nuisance_indices = setdiff(indices_all, target_indices_ij)
     nuisance_guess = θ_sip_MLE[nuisance_indices]
     # nuisance_guess = XY_sip_initial[nuisance_indices] # can use XY_sip_initial as well
+
+    # generate multiple initial guesses
+    if length(nuisance_indices) > 0
+        n_guesses_profiling = 3
+        nuisance_guess_extras = generate_initial_guesses(XY_sip_lower_bounds[nuisance_indices], XY_sip_upper_bounds[nuisance_indices], n_guesses_profiling)
+    else
+        nuisance_guess_extras = nothing
+    end
+
     ψ_true_pair = XY_sip_true[target_indices_ij]
 
     # Create a copy of varnames for this iteration
@@ -513,7 +603,9 @@ for (i,j) in param_pairs
     # Profile full likelihood
     ψω_values, lnlike_ψ_values = profile_target(lnlike_XY_sip, target_indices_ij,
         XY_sip_lower_bounds, XY_sip_upper_bounds,
-        nuisance_guess; grid_steps=grid_steps)
+        nuisance_guess; grid_steps=grid_steps,
+        ω_initial_extras=nuisance_guess_extras,
+        method=profile_method)
 
     # Profile quadratic approximation
     ψω_ellipse_values, lnlike_ψ_ellipse_values = profile_target(lnlike_θ_sip_ellipse,
@@ -521,7 +613,9 @@ for (i,j) in param_pairs
         XY_sip_lower_bounds,
         XY_sip_upper_bounds,
         nuisance_guess;
-        grid_steps=grid_steps)
+        grid_steps=grid_steps,
+        ω_initial_extras=nuisance_guess_extras,
+        method=profile_method)
 
     # Extract profiled parameter values
     ψ_values = [ψω[target_indices_ij] for ψω in ψω_values]

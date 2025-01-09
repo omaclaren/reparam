@@ -34,6 +34,7 @@ export
 
     # Utility functions
     scale_and_round,
-    reparam
+    reparam,
+    generate_initial_guesses
 
 end # module
