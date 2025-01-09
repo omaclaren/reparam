@@ -151,10 +151,6 @@ evals, evecs = eigen(H_xy_ellipse; sortby = x -> -real(x))
 println("Eigenvectors and eigenvalues for "*model_name)
 println("Eigenvalues: ", evals)
 println("Eigenvectors: ", evecs)
-# for (i, eveci) in enumerate(eachcol(evecs))
-#     println("value: ", evals[i])
-#     println("vector: ", evecs[:,i])
-# end
 
 # Jacobian and svd analysis of φ mapping at MLE
 # J_ϕ_xy = ForwardDiff.jacobian(ϕ_func_xy, xy_MLE)
@@ -371,10 +367,6 @@ evals_log, evecs_log = eigen(H_XY_log_ellipse; sortby = x -> -real(x))
 println("Eigenvectors and eigenvalues for "*model_name)
 println("Eigenvalues: ", evals_log)
 println("Eigenvectors: ", evecs_log)
-# for (i, eveci) in enumerate(eachcol(evecs_log))
-#     println("value: ", evals_log[i])
-#     println("vector: ", evecs_log[:,i])
-# end
 
 # Jacobian and svd analysis of φ mapping at MLE
 # J_ϕ_XY_log = ForwardDiff.jacobian(ϕ_func_XY_log, XY_log_MLE)
@@ -592,10 +584,6 @@ evals_sip, evecs_sip = eigen(H_XY_sip_ellipse; sortby = x -> -real(x))
 println("Eigenvectors and eigenvalues for "*model_name)
 println("Eigenvalues: ", evals_sip)
 println("Eigenvectors: ", evecs_sip)
-# for (i, eveci) in enumerate(eachcol(evecs_sip))
-#     println("value: ", evals_sip[i])
-#     println("vector: ", evecs_sip[:,i])
-# end
 
 # Jacobian and svd analysis of φ mapping at MLE
 # J_ϕ_XY_sip = ForwardDiff.jacobian(ϕ_func_XY_sip, XY_sip_MLE)
