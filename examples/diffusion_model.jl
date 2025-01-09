@@ -11,17 +11,35 @@ Random.seed!(12)
 # --------------------------------------------------------
 # Model Definition
 # --------------------------------------------------------
-function solve_model(x, L, xy)
-    y = Vector{eltype(xy)}(undef, length(x))
+function ϕ_mapping(θ, x, L)
+    """
+    Diffusion model φ mapping: maps parameters θ = [D₁, D₂, R]
+    to solution values on the spatial grid.
+    
+    Parameters:
+    - θ: Vector θ = [D₁, D₂, R] of diffusion and source parameters
+    - x: Spatial grid points
+    - L: Domain length
+    
+    Returns:
+    - Vector of solution values on the spatial grid
+    """
+    y = Vector{eltype(θ)}(undef, length(x))
     mid_index = Int((length(x)-1)/2)
-    β = L^2*xy[3]/8*(1/xy[2]-1/xy[1])
-    α = xy[3]*L/(2*xy[2])-β/L
-    Φ_1(x) = -xy[3]/(2*xy[1])*x^2 + α*x
-    Φ_2(x) = -xy[3]/(2*xy[2])*x^2 + α*x + β
-    for i in 1:mid_index # x=0 to x=50
+    
+    # Compute solution parameters
+    β = L^2*θ[3]/8*(1/θ[2]-1/θ[1])
+    α = θ[3]*L/(2*θ[2])-β/L
+    
+    # Solution in each region
+    Φ_1(x) = -θ[3]/(2*θ[1])*x^2 + α*x
+    Φ_2(x) = -θ[3]/(2*θ[2])*x^2 + α*x + β
+    
+    # Evaluate solution in each region
+    for i in 1:mid_index 
         y[i] = Φ_1(x[i])
     end 
-    for i in mid_index:length(x) # x=50 to x=100
+    for i in mid_index:length(x) 
         y[i] = Φ_2(x[i])
     end 
     return y
@@ -31,14 +49,25 @@ end
 # Setup and Data Generation
 # --------------------------------------------------------
 
-# Grid setup
+# Fine grid setup
 L = 100
 x = LinRange(0, L, 201)
-x_data = x[2:end-1]
+indices_fine = 1:length(x)
+
+# Observation grid and matrix
+indices_obs = 2:length(x)-1
+obs_matrix = construct_observation_matrix(indices_obs, indices_fine)
+# Option 1. Use matrix multiplication to get the observation points
+# x_obs = obs_matrix * x
+# Option 2. Use the observation indices directly
+x_obs = x[indices_obs]
 
 # Distribution in original parameterization
 σ = 0.2
-distrib_xy = xy -> MvLogNormal(log.(abs.(solve_model(x, L, xy))[2:end-1]), σ^2*I(length(x_data)))
+# Option 1. Use matrix multiplication to get the observation points
+# distrib_xy = xy -> MvLogNormal(log.(abs.(obs_matrix*ϕ_mapping(xy, x, L))), σ^2*I(length(x_obs)))
+# Option 2. Use the observation indices directly
+distrib_xy = xy -> MvLogNormal(log.(abs.(ϕ_mapping(xy, x, L)[indices_obs])), σ^2*I(length(x_obs)))
 
 # Variables and bounds
 varnames = Dict("ψ1" => "D_1", "ψ2" => "D_2", "ψ3" => "R")
@@ -164,7 +193,7 @@ for i in 1:dim_all
         distrib_xy, ψω_values, lnlike_ψ_values; l_level=95, df=1)
 
     plot_profile_wise_CI_for_mean(
-        x_data, lower_ψ, upper_ψ, pred_mean_MLE,
+        x_obs, lower_ψ, upper_ψ, pred_mean_MLE,
         model_name, "x", "x",
         data=data, true_mean=true_mean,
         target=varnames["ψ"*string(i)])
@@ -251,7 +280,7 @@ for (i,j) in param_pairs
         distrib_xy, ψω_values, lnlike_ψ_values; l_level=95, df=2)
 
     plot_profile_wise_CI_for_mean(
-        x_data, lower_ψ1ψ2, upper_ψ1ψ2, pred_mean_MLE,
+        x_obs, lower_ψ1ψ2, upper_ψ1ψ2, pred_mean_MLE,
         model_name, "x", "x",
         data=data, true_mean=true_mean,
         target=current_varnames["ψ1"]*", "*current_varnames["ψ2"])
@@ -364,7 +393,7 @@ for i in 1:dim_all
         distrib_XY_log, ψω_values, lnlike_ψ_values; l_level=95, df=1)
 
     plot_profile_wise_CI_for_mean(
-        x_data, lower_ψ, upper_ψ, pred_mean_MLE_log,
+        x_obs, lower_ψ, upper_ψ, pred_mean_MLE_log,
         model_name, "x", "x",
         data=data, true_mean=true_mean_log,
         target=varnames["ψ"*string(i)])
@@ -448,7 +477,7 @@ for (i,j) in param_pairs
         distrib_XY_log, ψω_values, lnlike_ψ_values; l_level=95, df=2)
 
     plot_profile_wise_CI_for_mean(
-        x_data, lower_ψ1ψ2, upper_ψ1ψ2, pred_mean_MLE_log,
+        x_obs, lower_ψ1ψ2, upper_ψ1ψ2, pred_mean_MLE_log,
         model_name, "x", "x",
         data=data, true_mean=true_mean_log,
         target=current_varnames["ψ1"]*", "*current_varnames["ψ2"])
@@ -565,7 +594,7 @@ for i in 1:dim_all
         distrib_XY_sip, ψω_values, lnlike_ψ_values; l_level=95, df=1)
 
     plot_profile_wise_CI_for_mean(
-        x_data, lower_ψ, upper_ψ, pred_mean_MLE_sip,
+        x_obs, lower_ψ, upper_ψ, pred_mean_MLE_sip,
         model_name, "x", "x",
         data=data, true_mean=true_mean_sip,
         target=varnames["ψ"*string(i)])
@@ -649,7 +678,7 @@ for (i,j) in param_pairs
         distrib_XY_sip, ψω_values, lnlike_ψ_values; l_level=95, df=2)
 
     plot_profile_wise_CI_for_mean(
-        x_data, lower_ψ1ψ2, upper_ψ1ψ2, pred_mean_MLE_sip,
+        x_obs, lower_ψ1ψ2, upper_ψ1ψ2, pred_mean_MLE_sip,
         model_name, "x", "x",
         data=data, true_mean=true_mean_sip,
         target=current_varnames["ψ1"]*", "*current_varnames["ψ2"])

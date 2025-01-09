@@ -52,10 +52,46 @@ function construct_lnlike_to_max(lnlike)
 end
 
 # --------------------------------------------------------
+# Parameter mapping methods (dimension independent)
+# --------------------------------------------------------
+
+function compute_ϕ_Jacobian(ϕ_func, θ; method_type=:auto, compute_svd=false)
+    """
+    Compute Jacobian of φ mapping at given parameters, optionally with SVD.
+    Works in any coordinate system.
+    
+    Parameters:
+    - φ_func: Function implementing the φ mapping
+    - θ: Parameter vector at which to evaluate the Jacobian
+    - method_type: :auto for automatic differentiation (default), otherwise finite differences
+    - compute_svd: Whether to compute and return SVD (default: false)
+    
+    Returns:
+    - If compute_svd=false: Just the Jacobian matrix
+    - If compute_svd=true: Tuple of (Jacobian, SVD factorization)
+    """
+    if method_type === :auto
+        J = ForwardDiff.jacobian(ϕ_func, θ)
+    else
+        println("warning finite difference not implemented, no Jacobian")
+        # todo finite diff with checks
+        #J = finite_diff_gradient(ϕ_func, θ)
+    end
+    
+    if compute_svd 
+        println("Computing and returning SVD of Jacobian of φ mapping")
+        U, S, Vt = svd(J)
+        return (J, U, S, Vt)
+    else
+        return J
+    end
+end
+
+# --------------------------------------------------------
 # Likelihood-based Statistical Inference Methods
 # --------------------------------------------------------
 
-function construct_ellipse_lnlike_approx(lnlike, θ_est; h_type=:auto, return_h=true)
+function construct_ellipse_lnlike_approx(lnlike, θ_est; method_type=:auto, return_h=true)
     """
     Construct quadratic approximation to log-likelihood at maximum.
     Works in any coordinate system.
@@ -63,17 +99,17 @@ function construct_ellipse_lnlike_approx(lnlike, θ_est; h_type=:auto, return_h=
     Parameters:
     - lnlike: Log-likelihood function taking parameter vector θ
     - θ_est: Parameter vector at which to make approximation
-    - h_type: :auto for automatic Hessian computation (default)
+    - method_type: :auto for automatic Hessian computation (default)
     - return_h: Whether to return Hessian matrix (default: true)
 
     Returns: 
     - If return_h=true: Tuple of (quadratic approximation function, Hessian matrix)
     - If return_h=false: Quadratic approximation function only
     """
-    if h_type === :auto
+    if method_type === :auto
         H = -ForwardDiff.hessian(lnlike, θ_est)
     else
-        println("warning no hessian")
+        println("warning finite difference not implemented, no Hessian")
         # todo finite diff 
     end
     if return_h

@@ -2,6 +2,7 @@ module ReparamTools
 
 using Distributions
 using LinearAlgebra
+using SparseArrays
 using ForwardDiff
 using NLopt
 using Plots
@@ -35,6 +36,7 @@ export
     # Utility functions
     scale_and_round,
     reparam,
-    generate_initial_guesses
+    generate_initial_guesses,
+    construct_observation_matrix
 
 end # module
