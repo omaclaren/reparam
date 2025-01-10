@@ -1,4 +1,12 @@
-include("../ReparamTools.jl")
+# Include ReparamTools.jl code if not already loaded
+if !@isdefined(ReparamTools)
+    include("../ReparamTools.jl")
+    println("✓ ReparamTools module included")
+else
+    println("✓ ReparamTools module already included")
+end
+
+# Load required packages 
 using .ReparamTools
 using Plots
 using Distributions
@@ -6,7 +14,7 @@ using LinearAlgebra
 using Random
 
 # Set random seed for reproducibility
-Random.seed!(12)
+Random.seed!(1)
 
 # --------------------------------------------------------
 # Model Definition
@@ -72,7 +80,8 @@ x = LinRange(0, L, 201)
 indices_fine = 1:length(x)
 
 # Observation grid and matrix
-indices_obs = 2:length(x)-1
+n_steps = 10
+indices_obs = 0+n_steps:n_steps:length(x)-n_steps
 obs_matrix = construct_observation_matrix(indices_obs, indices_fine)
 # Option 1. Use matrix multiplication to get the observation points
 # x_obs = obs_matrix * x
@@ -87,12 +96,15 @@ x_obs = x[indices_obs]
 # Define ϕ mapping function for fine grid
 ϕ_func_xy = create_ϕ_mapping(x, L)
 
-# Distribution in original parameterization
+# Distribution in original parameterization on observation grid
 σ = 0.2
 # Option 1. Use matrix multiplication to get the observation points
 # distrib_xy = xy -> MvLogNormal(log.(abs.(obs_matrix*ϕ_func_xy(xy))), σ^2*I(length(x_obs)))
 # Option 2. Use the observation indices directly
 distrib_xy = xy -> MvLogNormal(log.(abs.(ϕ_func_xy(xy)[indices_obs])), σ^2*I(length(x_obs)))
+
+# Distribution in original parameterization on fine grid
+distrib_fine_xy = xy -> MvLogNormal(log.(abs.(ϕ_func_xy(xy))), σ^2*I(length(x)))
 
 # Variables and bounds
 varnames = Dict("ψ1" => "D_1", "ψ2" => "D_2", "ψ3" => "R")
@@ -120,7 +132,7 @@ Nrep = 1
 data = rand(distrib_xy(xy_true), Nrep)
 
 # Visualize data
-scatter(x, [0; data; 0])
+scatter(x_obs, data)
 
 # Construct likelihood
 lnlike_xy = construct_lnlike_xy(distrib_xy, data; dist_type=:multi)
@@ -163,9 +175,9 @@ println(S_xy)
 println("Right singular vectors for "*model_name)
 println(Vt_xy)
 
-# Calculate prediction at MLE for reference
-pred_mean_MLE = mean(distrib_xy(xy_MLE))
-true_mean = mean(distrib_xy(xy_true))
+# Calculate prediction at MLE for reference distribution on fine grid
+pred_mean_MLE = mean(distrib_fine_xy(xy_MLE))
+true_mean = mean(distrib_fine_xy(xy_true))
 
 # 1D Profiles
 profile_method = :LN_BOBYQA
@@ -219,14 +231,14 @@ for i in 1:dim_all
         varname_save=varnames["ψ"*string(i)*"_save"],
         ψ_true=xy_true[i])
 
-    # Prediction CIs
+    # Prediction CIs. Use fine grid distribution for prediction
     lower_ψ, upper_ψ, _ = construct_upper_lower_profile_wise_CIs_for_mean(
-        distrib_xy, ψω_values, lnlike_ψ_values; l_level=95, df=1)
+        distrib_fine_xy, ψω_values, lnlike_ψ_values; l_level=95, df=1)
 
     plot_profile_wise_CI_for_mean(
-        x_obs, lower_ψ, upper_ψ, pred_mean_MLE,
-        model_name, "x", "x",
-        data=data, true_mean=true_mean,
+        x, lower_ψ, upper_ψ, pred_mean_MLE,
+        model_name, "x", "x", data_indep=x_obs,
+        data_dep=data, true_mean=true_mean,
         target=varnames["ψ"*string(i)])
 end
 
@@ -306,14 +318,15 @@ for (i,j) in param_pairs
         varname_save=current_varnames["ψ2_save"]*"_from_2D",
         ψ_true=ψ_true_pair[2])
 
-    # 2D prediction CIs
+    # Calculate 2D prediction CIs using distribution on fine grid
     lower_ψ1ψ2, upper_ψ1ψ2, _ = construct_upper_lower_profile_wise_CIs_for_mean(
-        distrib_xy, ψω_values, lnlike_ψ_values; l_level=95, df=2)
+        distrib_fine_xy, ψω_values, lnlike_ψ_values; l_level=95, df=2)
 
     plot_profile_wise_CI_for_mean(
-        x_obs, lower_ψ1ψ2, upper_ψ1ψ2, pred_mean_MLE,
+        x, lower_ψ1ψ2, upper_ψ1ψ2, pred_mean_MLE,
         model_name, "x", "x",
-        data=data, true_mean=true_mean,
+        data_indep=x_obs, data_dep=data,
+        true_mean=true_mean,
         target=current_varnames["ψ1"]*", "*current_varnames["ψ2"])
 end
 
@@ -333,9 +346,10 @@ XY_log_upper_bounds = log.(xy_upper_bounds)
 XY_log_initial = xytoXY_log(xy_initial)
 XY_log_true = xytoXY_log(xy_true)
 
-# Transform likelihood, distribution and ϕ mapping
+# Transform likelihood, distributions (obs and fine) and ϕ mapping
 lnlike_XY_log = construct_lnlike_XY(lnlike_xy, XYtoxy_log)
 distrib_XY_log = construct_distrib_XY(distrib_xy, XYtoxy_log)
+distrib_fine_XY_log = construct_distrib_XY(distrib_fine_xy, XYtoxy_log)
 ϕ_func_XY_log = construct_ϕ_XY(ϕ_func_xy, XYtoxy_log)
 
 # Update variable names for log coordinates
@@ -379,9 +393,9 @@ println(S_XY_log)
 println("Right singular vectors for "*model_name)
 println(Vt_XY_log)
 
-# Calculate prediction at MLE for reference
-pred_mean_MLE_log = mean(distrib_XY_log(XY_log_MLE))
-true_mean_log = mean(distrib_XY_log(XY_log_true))
+# Calculate prediction at MLE for reference using distribution on fine grid
+pred_mean_MLE_log = mean(distrib_fine_XY_log(XY_log_MLE))
+true_mean_log = mean(distrib_fine_XY_log(XY_log_true))
 
 # 1D Profiles in log coordinates
 profile_method = :LN_BOBYQA
@@ -429,14 +443,14 @@ for i in 1:dim_all
         varname_save=varnames["ψ"*string(i)*"_save"],
         ψ_true=XY_log_true[i])
 
-    # Prediction CIs
+    # Prediction CIs using distribution on fine grid
     lower_ψ, upper_ψ, _ = construct_upper_lower_profile_wise_CIs_for_mean(
-        distrib_XY_log, ψω_values, lnlike_ψ_values; l_level=95, df=1)
+        distrib_fine_XY_log, ψω_values, lnlike_ψ_values; l_level=95, df=1)
 
     plot_profile_wise_CI_for_mean(
-        x_obs, lower_ψ, upper_ψ, pred_mean_MLE_log,
-        model_name, "x", "x",
-        data=data, true_mean=true_mean_log,
+        x, lower_ψ, upper_ψ, pred_mean_MLE_log,
+        model_name, "x", "x", data_indep=x_obs,
+        data_dep=data, true_mean=true_mean_log,
         target=varnames["ψ"*string(i)])
 end
 
@@ -513,14 +527,15 @@ for (i,j) in param_pairs
         varname_save=current_varnames["ψ2_save"]*"_from_2D",
         ψ_true=ψ_true_pair[2])
 
-    # 2D prediction CIs
+    # 2D prediction CIs using distribution on fine grid
     lower_ψ1ψ2, upper_ψ1ψ2, _ = construct_upper_lower_profile_wise_CIs_for_mean(
-        distrib_XY_log, ψω_values, lnlike_ψ_values; l_level=95, df=2)
+        distrib_fine_XY_log, ψω_values, lnlike_ψ_values; l_level=95, df=2)
 
     plot_profile_wise_CI_for_mean(
-        x_obs, lower_ψ1ψ2, upper_ψ1ψ2, pred_mean_MLE_log,
+        x, lower_ψ1ψ2, upper_ψ1ψ2, pred_mean_MLE_log,
         model_name, "x", "x",
-        data=data, true_mean=true_mean_log,
+        data_indep=x_obs, data_dep=data,
+        true_mean=true_mean_log,
         target=current_varnames["ψ1"]*", "*current_varnames["ψ2"])
 end
 
@@ -532,9 +547,13 @@ print(model_name*"\n")
 
 # Scale and round eigenvectors for SIP transformation
 # Option 1. based on the eigenvalues and eigenvectors from the log parameterization
-# evecs_scaled = scale_and_round(evecs_log; round_within=0.5, column_scales=[1,1,1])
 # Option 2. based on the right singular vectors from the log parameterization
-evecs_scaled = scale_and_round(Vt_XY_log; round_within=0.5, column_scales=[1,1,1])
+use_singular_vectors = false
+if use_singular_vectors
+    evecs_scaled = scale_and_round(Vt_XY_log; round_within=0.5, column_scales=[1,1,1])
+else
+    evecs_scaled = scale_and_round(evecs_log; round_within=0.5, column_scales=[1,1,1])
+end
 println("Transformations:")
 display(evecs_scaled)
 display(inv(evecs_scaled))
@@ -545,9 +564,10 @@ display(Vt_XY_log)
 # Construct transformation
 xytoXY_sip, XYtoxy_sip = reparam(evecs_scaled)
 
-# Transform likelihood, distribution and ϕ mapping
+# Transform likelihood, distributions (obs and fine) and ϕ mapping
 lnlike_XY_sip = construct_lnlike_XY(lnlike_xy, XYtoxy_sip)
 distrib_XY_sip = construct_distrib_XY(distrib_xy, XYtoxy_sip)
+distrib_fine_XY_sip = construct_distrib_XY(distrib_fine_xy, XYtoxy_sip)
 ϕ_func_XY_sip = construct_ϕ_XY(ϕ_func_xy, XYtoxy_sip)
 
 # Set bounds for SIP coordinates (manual due to non-monotonic transform)
@@ -557,12 +577,21 @@ XY_sip_initial = [1.0, 1.0, 10.0]
 XY_sip_true = xytoXY_sip(xy_true)
 
 # Update variable names for SIP coordinates
-varnames["ψ1"] = "\\frac{D_2}{R}"
-varnames["ψ2"] = "\\frac{D_1}{\\sqrt{D_2R}}"
-varnames["ψ3"] = "D_1 D_2 R"
-varnames["ψ1_save"] = "D_2_over_R"
-varnames["ψ2_save"] = "D_1_over_sqrt_D_2_R"
-varnames["ψ3_save"] = "D_1_D_2_R"
+if use_singular_vectors
+    varnames["ψ1"] = "\\frac{D_2}{R}"
+    varnames["ψ2"] = "\\frac{D_1}{\\sqrt{D_2R}}"
+    varnames["ψ3"] = "D_1 D_2 R"
+    varnames["ψ1_save"] = "D_2_over_R"
+    varnames["ψ2_save"] = "D_1_over_sqrt_D_2_R"
+    varnames["ψ3_save"] = "D_1_D_2_R"
+else
+    varnames["ψ1"] = "\\frac{D_2}{R}"
+    varnames["ψ2"] = "\\frac{D_1}{\\sqrt{D_2R}}"
+    varnames["ψ3"] = "D_1 D_2 R"
+    varnames["ψ1_save"] = "D_2_over_R"*"_approx"
+    varnames["ψ2_save"] = "D_1_over_sqrt_D_2_R"*"_approx"
+    varnames["ψ3_save"] = "D_1_D_2_R"*"_approx"
+end
 
 # Point estimation in SIP coordinates
 target_indices = []  # empty for MLE
@@ -596,9 +625,9 @@ println(S_XY_sip)
 println("Right singular vectors for "*model_name)
 println(Vt_XY_sip)
 
-# Calculate prediction at MLE for reference
-pred_mean_MLE_sip = mean(distrib_XY_sip(XY_sip_MLE))
-true_mean_sip = mean(distrib_XY_sip(XY_sip_true))
+# Calculate prediction at MLE for reference using distribution on fine grid
+pred_mean_MLE_sip = mean(distrib_fine_XY_sip(XY_sip_MLE))
+true_mean_sip = mean(distrib_fine_XY_sip(XY_sip_true))
 
 # 1D Profiles in SIP coordinates
 profile_method = :LN_BOBYQA
@@ -646,14 +675,14 @@ for i in 1:dim_all
         varname_save=varnames["ψ"*string(i)*"_save"],
         ψ_true=XY_sip_true[i])
 
-    # Prediction CIs
+    # Prediction CIs using distribution on fine grid
     lower_ψ, upper_ψ, _ = construct_upper_lower_profile_wise_CIs_for_mean(
-        distrib_XY_sip, ψω_values, lnlike_ψ_values; l_level=95, df=1)
+        distrib_fine_XY_sip, ψω_values, lnlike_ψ_values; l_level=95, df=1)
 
     plot_profile_wise_CI_for_mean(
-        x_obs, lower_ψ, upper_ψ, pred_mean_MLE_sip,
-        model_name, "x", "x",
-        data=data, true_mean=true_mean_sip,
+        x, lower_ψ, upper_ψ, pred_mean_MLE_sip,
+        model_name, "x", "x", data_indep=x_obs,
+        data_dep=data, true_mean=true_mean_sip,
         target=varnames["ψ"*string(i)])
 end
 
@@ -730,13 +759,14 @@ for (i,j) in param_pairs
         varname_save=current_varnames["ψ2_save"]*"_from_2D",
         ψ_true=ψ_true_pair[2])
 
-    # 2D prediction CIs
+    # 2D prediction CIs using distribution on fine grid
     lower_ψ1ψ2, upper_ψ1ψ2, _ = construct_upper_lower_profile_wise_CIs_for_mean(
-        distrib_XY_sip, ψω_values, lnlike_ψ_values; l_level=95, df=2)
+        distrib_fine_XY_sip, ψω_values, lnlike_ψ_values; l_level=95, df=2)
 
     plot_profile_wise_CI_for_mean(
-        x_obs, lower_ψ1ψ2, upper_ψ1ψ2, pred_mean_MLE_sip,
+        x, lower_ψ1ψ2, upper_ψ1ψ2, pred_mean_MLE_sip,
         model_name, "x", "x",
-        data=data, true_mean=true_mean_sip,
+        data_indep=x_obs, data_dep=data,
+        true_mean=true_mean_sip,
         target=current_varnames["ψ1"]*", "*current_varnames["ψ2"])
 end

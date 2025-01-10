@@ -293,7 +293,7 @@ function construct_upper_lower_profile_wise_CIs_for_mean(
     - ψω_values: Array of parameter vectors (each combining interest and nuisance parameters)
     - lnlike_ψ_values: Log-likelihood values for each parameter combination
     - l_level: Confidence level, e.g. 95 for 95% CI (default: 95)
-    - df: Degrees of freedom (default: dimension of interest parameter ψ)
+    - df: Degrees of freedom (default: dimension of full parameter ψω)
 
     Returns: 
     - lower: Lower bounds of confidence interval
@@ -301,9 +301,9 @@ function construct_upper_lower_profile_wise_CIs_for_mean(
     - pred_matrix: Matrix of predictions at each parameter value
     """
     if isnothing(df)
-        print("df")
-        print(length(ψω_values))
-        df = length(ψω_values)
+        print("assuming df:")
+        print(length(ψω_values[1]))
+        df = length(ψω_values[1])
     end
     threshold = -quantile(Chisq(df), l_level/100)/2
     
