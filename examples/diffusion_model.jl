@@ -90,7 +90,7 @@ x_obs = x[indices_obs]
 
 # --------------------------------------------------------
 # Original Parameterization Analysis and Data Generation
-# θ = xy = [D₁, D₂, R]
+# Define xy = θ = [D₁, D₂, R]
 # --------------------------------------------------------
 
 # Define ϕ mapping function for fine grid
@@ -260,6 +260,7 @@ for (i,j) in param_pairs
         nuisance_guess_extras = nothing
     end
 
+    # extract true values for plotting
     ψ_true_pair = xy_true[target_indices_ij]
 
     # Print variable names for this pair
@@ -548,7 +549,7 @@ print(model_name*"\n")
 # Scale and round eigenvectors for SIP transformation
 # Option 1. based on the eigenvalues and eigenvectors from the log parameterization
 # Option 2. based on the right singular vectors from the log parameterization
-use_singular_vectors = false
+use_singular_vectors = true
 if use_singular_vectors
     evecs_scaled = scale_and_round(Vt_XY_log; round_within=0.5, column_scales=[1,1,1])
 else
