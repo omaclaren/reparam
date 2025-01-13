@@ -18,6 +18,7 @@ Random.seed!(12)
 
 # --------------------------------------------------------
 # Model Definition
+# Define model in xy = θ = [n, p] parameterization
 # --------------------------------------------------------
 # Parameter -> data parameter mapping 
 ϕ_xy = xy -> [xy[1]*xy[2], xy[2]]  # Maps (n,p) to (np,p)
@@ -66,25 +67,25 @@ indices_all = 1:dim_all
 
 # Point estimation (MLE)
 target_indices = []  # empty for MLE
-θ_MLE, lnlike_θ_MLE = profile_target(lnlike_xy, target_indices,
+xy_MLE, lnlike_xy_MLE = profile_target(lnlike_xy, target_indices,
     xy_lower_bounds, xy_upper_bounds, 
     xy_initial; grid_steps=grid_steps)
 
 # Quadratic approximation at MLE
-lnlike_θ_ellipse, H_θ_ellipse = construct_ellipse_lnlike_approx(lnlike_xy, θ_MLE)
+lnlike_xy_ellipse, H_xy_ellipse = construct_ellipse_lnlike_approx(lnlike_xy, xy_MLE)
 
 # Eigenanalysis of Fisher Information
-evals, evecs = eigen(H_θ_ellipse; sortby = x -> -real(x))
+evals, evecs = eigen(H_xy_ellipse; sortby = x -> -real(x))
 println("Eigenvectors and eigenvalues for "*model_name)
 println("Eigenvalues: ", evals)
 println("Eigenvectors: ", evecs)
 
 # Calculate prediction at MLE for reference
-pred_mean_MLE = mean(distrib_xy(θ_MLE))
+pred_mean_MLE = mean(distrib_xy(xy_MLE))
 true_mean = mean(distrib_xy(xy_true))
 
 # Determine svd of phi mapping in xy coordinates
-J_ϕ_xy = compute_ϕ_Jacobian(ϕ_xy, θ_MLE)
+J_ϕ_xy = compute_ϕ_Jacobian(ϕ_xy, xy_MLE)
 U_xy, S_xy, Vt_xy = svd(J_ϕ_xy)
 println("\nSVD analysis in original coordinates:")
 println("Singular values: ", S_xy)
@@ -95,7 +96,7 @@ display(Vt_xy)
 for i in 1:dim_all
     target_index = i
     nuisance_indices = setdiff(indices_all, target_index)
-    nuisance_guess = θ_MLE[nuisance_indices]
+    nuisance_guess = xy_MLE[nuisance_indices]
 
     print("Variable: ", varnames["ψ"*string(i)], "\n")
 
@@ -105,7 +106,7 @@ for i in 1:dim_all
         nuisance_guess; grid_steps=grid_steps)
 
     # Profile quadratic approximation
-    ψω_ellipse_values, lnlike_ψ_ellipse_values = profile_target(lnlike_θ_ellipse,
+    ψω_ellipse_values, lnlike_ψ_ellipse_values = profile_target(lnlike_xy_ellipse,
         target_index,
         xy_lower_bounds, xy_upper_bounds,
         nuisance_guess; grid_steps=grid_steps)
@@ -134,7 +135,7 @@ param_pairs = [(i,j) for i in 1:dim_all for j in (i+1):dim_all]
 for (i,j) in param_pairs
     target_indices_ij = [i,j]
     nuisance_indices = setdiff(indices_all, target_indices_ij)
-    nuisance_guess = θ_MLE[nuisance_indices]
+    nuisance_guess = xy_MLE[nuisance_indices]
     ψ_true_pair = xy_true[target_indices_ij]
 
     # Create a copy of varnames for this iteration
@@ -150,7 +151,7 @@ for (i,j) in param_pairs
         nuisance_guess; grid_steps=grid_steps)
 
     # Profile quadratic approximation
-    ψω_ellipse_values, lnlike_ψ_ellipse_values = profile_target(lnlike_θ_ellipse,
+    ψω_ellipse_values, lnlike_ψ_ellipse_values = profile_target(lnlike_xy_ellipse,
         target_indices_ij,
         xy_lower_bounds, xy_upper_bounds,
         nuisance_guess; grid_steps=grid_steps)
@@ -212,15 +213,15 @@ varnames["ψ2_save"] = "ln_p"
 
 # Point estimation in log coordinates
 target_indices = []  # empty for MLE
-θ_log_MLE, lnlike_θ_log_MLE = profile_target(lnlike_XY_log, target_indices,
+XY_log_MLE, lnlike_XY_log_MLE = profile_target(lnlike_XY_log, target_indices,
     XY_log_lower_bounds, XY_log_upper_bounds, 
     XY_log_initial; grid_steps=grid_steps)
 
 # Quadratic approximation at MLE
-lnlike_θ_log_ellipse, H_θ_log_ellipse = construct_ellipse_lnlike_approx(lnlike_XY_log, θ_log_MLE)
+lnlike_XY_log_ellipse, H_XY_log_ellipse = construct_ellipse_lnlike_approx(lnlike_XY_log, XY_log_MLE)
 
 # Eigenanalysis in log coordinates
-evals_log, evecs_log = eigen(H_θ_log_ellipse; sortby = x -> -real(x))
+evals_log, evecs_log = eigen(H_XY_log_ellipse; sortby = x -> -real(x))
 println("Eigenvectors and eigenvalues for "*model_name)
 for (i, eveci) in enumerate(eachcol(evecs_log))
     println("value: ", evals_log[i])
@@ -228,7 +229,7 @@ for (i, eveci) in enumerate(eachcol(evecs_log))
 end
 
 # Determine svd of phi mapping in log coordinates
-J_ϕ_XY_log, U_XY_log, S_XY_log, Vt_XY_log = compute_ϕ_Jacobian(ϕ_XY_log, θ_log_MLE, compute_svd=true)
+J_ϕ_XY_log, U_XY_log, S_XY_log, Vt_XY_log = compute_ϕ_Jacobian(ϕ_XY_log, XY_log_MLE, compute_svd=true)
 println("\nSVD analysis in log coordinates:")
 println("Singular values: ", S_XY_log)
 println("Right singular vectors (V): ")
@@ -242,7 +243,7 @@ display(Vt_XY_log)
 for i in 1:dim_all
     target_index = i
     nuisance_indices = setdiff(indices_all, target_index)
-    nuisance_guess = θ_log_MLE[nuisance_indices]
+    nuisance_guess = XY_log_MLE[nuisance_indices]
 
     print("Variable: ", varnames["ψ"*string(i)], "\n")
 
@@ -252,7 +253,7 @@ for i in 1:dim_all
         nuisance_guess; grid_steps=grid_steps)
 
     # Profile quadratic approximation
-    ψω_ellipse_values, lnlike_ψ_ellipse_values = profile_target(lnlike_θ_log_ellipse,
+    ψω_ellipse_values, lnlike_ψ_ellipse_values = profile_target(lnlike_XY_log_ellipse,
         target_index,
         XY_log_lower_bounds, XY_log_upper_bounds,
         nuisance_guess; grid_steps=grid_steps)
@@ -281,7 +282,7 @@ param_pairs = [(i,j) for i in 1:dim_all for j in (i+1):dim_all]
 for (i,j) in param_pairs
     target_indices_ij = [i,j]
     nuisance_indices = setdiff(indices_all, target_indices_ij)
-    nuisance_guess = θ_log_MLE[nuisance_indices]
+    nuisance_guess = XY_log_MLE[nuisance_indices]
     ψ_true_pair = XY_log_true[target_indices_ij]
 
     # Create a copy of varnames for this iteration
@@ -297,7 +298,7 @@ for (i,j) in param_pairs
         nuisance_guess; grid_steps=grid_steps)
 
     # Profile quadratic approximation
-    ψω_ellipse_values, lnlike_ψ_ellipse_values = profile_target(lnlike_θ_log_ellipse,
+    ψω_ellipse_values, lnlike_ψ_ellipse_values = profile_target(lnlike_XY_log_ellipse,
         target_indices_ij,
         XY_log_lower_bounds, XY_log_upper_bounds,
         nuisance_guess; grid_steps=grid_steps)
@@ -379,21 +380,21 @@ varnames["ψ2_save"] = "n_over_p"
 
 # Point estimation in SIP coordinates
 target_indices = []  # empty for MLE
-θ_sip_MLE, lnlike_θ_sip_MLE = profile_target(lnlike_XY_sip, target_indices,
+XY_sip_MLE, lnlike_XY_sip_MLE = profile_target(lnlike_XY_sip, target_indices,
     XY_sip_lower_bounds, XY_sip_upper_bounds, 
     XY_sip_initial; grid_steps=grid_steps)
 
 # Quadratic approximation at MLE
-lnlike_θ_sip_ellipse, H_θ_sip_ellipse = construct_ellipse_lnlike_approx(lnlike_XY_sip, θ_sip_MLE)
+lnlike_XY_sip_ellipse, H_XY_sip_ellipse = construct_ellipse_lnlike_approx(lnlike_XY_sip, XY_sip_MLE)
 
 # Eigenanalysis in SIP coordinates
-evals_sip, evecs_sip = eigen(H_θ_sip_ellipse; sortby = x -> -real(x))
+evals_sip, evecs_sip = eigen(H_XY_sip_ellipse; sortby = x -> -real(x))
 println("Eigenvectors and eigenvalues for "*model_name)
 println("Eigenvalues: ", evals_sip)
 println("Eigenvectors: ", evecs_sip)
 
 # Determine svd of phi mapping in SIP coordinates
-J_ϕ_XY_sip, U_XY_sip, S_XY_sip, Vt_XY_sip = compute_ϕ_Jacobian(ϕ_XY_sip, θ_sip_MLE, compute_svd=true)
+J_ϕ_XY_sip, U_XY_sip, S_XY_sip, Vt_XY_sip = compute_ϕ_Jacobian(ϕ_XY_sip, XY_sip_MLE, compute_svd=true)
 
 # Compare eigenvectors from Fisher Information with singular vectors
 println("\nComparison of eigenvectors and singular vectors:")
@@ -404,7 +405,7 @@ display(Vt_XY_sip')
 for i in 1:dim_all
     target_index = i
     nuisance_indices = setdiff(indices_all, target_index)
-    nuisance_guess = θ_sip_MLE[nuisance_indices]
+    nuisance_guess = XY_sip_MLE[nuisance_indices]
 
     print("Variable: ", varnames["ψ"*string(i)], "\n")
 
@@ -414,7 +415,7 @@ for i in 1:dim_all
         nuisance_guess; grid_steps=grid_steps)
 
     # Profile quadratic approximation
-    ψω_ellipse_values, lnlike_ψ_ellipse_values = profile_target(lnlike_θ_sip_ellipse,
+    ψω_ellipse_values, lnlike_ψ_ellipse_values = profile_target(lnlike_XY_sip_ellipse,
         target_index,
         XY_sip_lower_bounds, XY_sip_upper_bounds,
         nuisance_guess; grid_steps=grid_steps)
@@ -443,7 +444,7 @@ param_pairs = [(i,j) for i in 1:dim_all for j in (i+1):dim_all]
 for (i,j) in param_pairs
     target_indices_ij = [i,j]
     nuisance_indices = setdiff(indices_all, target_indices_ij)
-    nuisance_guess = θ_sip_MLE[nuisance_indices]
+    nuisance_guess = XY_sip_MLE[nuisance_indices]
     ψ_true_pair = XY_sip_true[target_indices_ij]
 
     # Create a copy of varnames for this iteration
@@ -459,7 +460,7 @@ for (i,j) in param_pairs
         nuisance_guess; grid_steps=grid_steps)
 
     # Profile quadratic approximation
-    ψω_ellipse_values, lnlike_ψ_ellipse_values = profile_target(lnlike_θ_sip_ellipse,
+    ψω_ellipse_values, lnlike_ψ_ellipse_values = profile_target(lnlike_XY_sip_ellipse,
         target_indices_ij,
         XY_sip_lower_bounds, XY_sip_upper_bounds,
         nuisance_guess; grid_steps=grid_steps)
