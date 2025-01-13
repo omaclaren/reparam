@@ -1,143 +1,322 @@
+# Include ReparamTools.jl code if not already loaded
+if !@isdefined(ReparamTools)
+    include("../ReparamTools.jl")
+    println("✓ ReparamTools module included")
+else
+    println("✓ ReparamTools module already included")
+end
+
+# Load required packages 
+using .ReparamTools
 using Plots
 using Distributions
-using NLopt
-using ForwardDiff
 using LinearAlgebra
+using Random
 using DifferentialEquations
 
-# ---------------------------------------------
-# ---------- Load 'Sloppihood' tools ----------
-# ---------------------------------------------
-include("SloppihoodTools.jl")
-using .SloppihoodTools
+# Set random seed for reproducibility
+Random.seed!(1)
 
-# ---------------------------------------------
-# ---- User inputs in original 'x,y' param ----
-# ---------------------------------------------
-# Define ODE model
-function DE!(dC,C,xy,t)
-    k1,k2=xy
-    dC[1]=-k1*C[1]/(k2+C[1]);
+# --------------------------------------------------------
+# Model Definition
+# --------------------------------------------------------
+
+# Define the Monod model ODE 
+function DE!(dC, C, θ, t)
+    """
+    Monod model ODE definition.
+    
+    Parameters:
+    - dC: Rate of change vector (modified in-place)
+    - C: Current state vector
+    - θ: Parameter vector 
+    - t: Current time
+    """
+    dC[1] = -θ[1]*C[1]/(θ[2] + C[1])
 end
 
-# ODE model solver
-function solve_ode(t_save,xy;solver=Rodas4())
-    tspan=(0.0,maximum(t_save));
-    prob=ODEProblem(DE!,[1.0],tspan,xy);
-    sol=solve(prob,solver,saveat=t_save,abstol=1e-12,reltol=1e-9);
-    return sol[1,:]
+# ODE model solver  
+function solve_ode(t_save, θ; solver=Rodas4())
+    """
+    Monod model solution: maps parameters θ to solution values 
+    on the specified time grid.
+    
+    Parameters:
+    - θ: Parameter vector
+    - t: Time grid points
+    - solver: ODE solver (default: Rodas4())
+    
+    Returns:
+    - Vector of solution values on the time grid
+    """
+    tspan = (0.0, maximum(t_save))
+    prob = ODEProblem(DE!, [1.0], tspan, θ)
+    sol = solve(prob, solver, saveat=t_save, abstol=1e-12, reltol=1e-9)
+    return sol[1, :]
 end
 
-# time measurements and initial condition
-#C0=10;  T=30; #This choice is NOT sloppy
-C0=0.5; T=20; #This shoice IS sloppy
-NT = 10
-t_data=LinRange(0,T,NT)
-t_model=LinRange(0,T,10*NT)
-σ = 0.01
-solver=Rodas4()
-# parameter -> data dist (forward) mapping
-distrib_xy(xy) = MultivariateNormal(solve_ode(t_data,xy;solver=solver),σ^2*I(length(t_data)))
+# Creates a ϕ mapping function with fixed grid parameters
+function create_ϕ_mapping(t)
+    """
+    Create a ϕ mapping function from model parameters to solution values
+    with fixed grid parameters.
+    
+    Parameters:
+    - t: Time grid points
+    
+    Returns:
+    - ϕ mapping function from θ to solution values
+    """
+    return θ -> solve_ode(t, θ)
+end
 
-# variables and bounds
-varnames = Dict("ψ1"=>"k_1", "ψ2"=>"k_2")
-varnames["ψ1_save"]="k_1"
-varnames["ψ2_save"]="k_2"
-# parameter bounds
-k1min=0.1; k1max=10.0
-k2min=0.1; k2max=50
-xy_lower_bounds = [k1min,k2min]
-xy_upper_bounds = [k1max,k2max]
-# initial guess for optimisation
-xy_initial =  0.5*(xy_lower_bounds + xy_upper_bounds) # [1.5, 1.5]# x (i.e. n) and y (i.e. p), starting guesses
+# --------------------------------------------------------
+# Setup and Data Generation
+# --------------------------------------------------------
 
-# true parameter
-k1_true=1.0; k2_true=5.0;
-xy_true = [k1_true,k2_true] #x,y, truth. N, p
-# generate data
+# Fine grid setup
+T = 20
+NT = 201
+t = LinRange(0, T, NT)
+indices_fine = 1:NT
+
+# Observation grid setup
+NT_obs = 11
+indices_obs = 1:Int((NT-1)/(NT_obs-1)):NT
+obs_matrix = construct_observation_matrix(indices_obs, indices_fine)
+t_obs = t[indices_obs]
+
+# Initial condition and observation parameters
+C0 = 0.5
+σ = 0.1
+
+# --------------------------------------------------------
+# --- Analysis in original parameterisation and data generation ---
+# --------------------------------------------------------
+ϕ_func_xy = create_ϕ_mapping(t)
+
+# Parameter -> data distribution (forward) mapping on fine grid
+solver = Rodas4()
+distrib_fine_xy = xy -> MvNormal(solve_ode(t, xy; solver=solver), σ^2*I(NT))
+
+# Parameter -> data distribution (forward) mapping on observation grid
+distrib_xy = xy -> MvNormal(solve_ode(t_obs, xy; solver=solver), σ^2*I(NT_obs))
+
+# Variable names
+varnames = Dict("ψ1" => "k_1", "ψ2" => "k_2")
+varnames["ψ1_save"] = "k_1"
+varnames["ψ2_save"] = "k_2"
+
+# Parameter bounds
+k1_min, k1_max = 0.1, 10.0
+k2_min, k2_max = 0.1, 50.0
+xy_lower_bounds = [k1_min, k2_min]
+xy_upper_bounds = [k1_max, k2_max]
+
+# Initial guess for optimization
+xy_initial = 0.5 * (xy_lower_bounds + xy_upper_bounds)
+
+# True parameter
+k1_true, k2_true = 1.0, 5.0
+xy_true = [k1_true, k2_true]
+
+# Generate data
 Nrep = 1
-data = rand(distrib_xy(xy_true),Nrep)
-#data = [0.983615  0.695977  0.441759  0.302958  0.193174  0.130742  0.0871124  0.04112  0.0269384  0.0331469]
-scatter(t_data,data)
+data = rand(distrib_xy(xy_true), Nrep)
 
-# ---- use above to construct log likelihood in original parameterisation given (iid) data
-lnlike_xy = SloppihoodTools.construct_lnlike_xy(distrib_xy,data;dist_type=:multi)
-# ----
+# Visualize data and true solution
+scatter(t_obs, data, label="Data")
+plot!(t, solve_ode(t, xy_true), label="True Solution", xlabel="Time", ylabel="Concentration", legend=:topleft)
 
-# ---------------------------------------------
-# --- Analysis in original parameterisation ---
-# ---------------------------------------------
-# grid sizes for profiling
+# Construct log-likelihood in original parameterization given (iid) data
+lnlike_xy = construct_lnlike_xy(distrib_xy, data; dist_type=:multi)
+model_name = "monod_model_xy"
+println(model_name)
+
+# Grid sizes for profiling
 grid_steps = [500]
-# carries out 2D analysis first, then each 1D profile, and plots
-SloppihoodTools.execute_model_analysis_workflow_2D_profile("monod_model_xy",varnames,lnlike_xy,xy_lower_bounds,xy_upper_bounds,xy_initial;grid_steps=grid_steps,ψ_true=xy_true)
+dim_all = length(xy_initial)
+indices_all = 1:dim_all
 
-# ---------------------------------------------
-# ----- Analysis in log parameterisation ------
-# ---------------------------------------------
-xytoXY_log(xy) = log.(xy)
-XYtoxy_log(XY) = exp.(XY)
-# new variable names
-varnames["ψ1"]="\\ln\\ k_1"
-varnames["ψ2"]="\\ln\\ k_2"
-varnames["ψ1_save"]="ln_k_1"
-varnames["ψ2_save"]="ln_k_2"
-# parameter bounds -- can do via xytoXY or manually
-XY_log_lower_bounds = log.(xy_lower_bounds)
-XY_log_upper_bounds = log.(xy_upper_bounds)
-# new true value
-XY_log_true = xytoXY_log(xy_true)
-# initial guess for optimisation -- can do via xytoXY but also easy to do manually or based on bounds
-XY_log_initial =  xytoXY_log(xy_initial) 
-# new likelihood
-lnlike_XY_log = SloppihoodTools.construct_lnlike_XY(lnlike_xy,XYtoxy_log)
-# carries out 2D analysis first, then each 1D profile, and plots
-θ_XY_MLE, evals, evecs = SloppihoodTools.execute_model_analysis_workflow_2D_profile("monod_model_log",varnames,lnlike_XY_log,XY_log_lower_bounds,XY_log_upper_bounds,XY_log_initial;grid_steps=grid_steps,ψ_true=XY_log_true, return_info=true)
+# Point estimation (MLE)
+point_estimation_method = :LN_BOBYQA
+target_indices = [] # Empty target indices for MLE
+n_guesses = 3
 
-# ----------------------------------------------------
-# - Analysis in sloppihood-informed parameterisation -
-# ----------------------------------------------------
-# overall scaling
-# evecs_scaled = round.(evecs/evecs[argmax(abs.(evecs))],digits=1)
-# evecs_scaled = round.(evecs/(0.25*minimum(abs.(evecs[evecs .!= 0]))))*0.25
-# # columnwise scalings, e.g. switch ratio = switch signs
-# componentwise_scaling = diagm([1,-1])
+# Generate multiple initial guesses
+nuisance_guesses = generate_initial_guesses(xy_lower_bounds, xy_upper_bounds, n_guesses)
 
-evecs_scaled = SloppihoodTools.scale_and_round(evecs,column_scales=[1,-1])
-print("transformations:")
-display(evecs_scaled)
-display(inv(evecs_scaled))
-xytoXY_sip, XYtoxy_sip = SloppihoodTools.reparam(evecs_scaled)
+xy_MLE, lnlike_xy_MLE = profile_target(lnlike_xy, target_indices,
+    xy_lower_bounds, xy_upper_bounds, 
+    xy_initial; grid_steps=grid_steps, ω_initial_extras=nuisance_guesses,
+    method=point_estimation_method)
 
-# new variable names
-varnames["ψ1"]="\\frac{k_2}{k_1}"
-varnames["ψ2"]="k_1k_2"
-varnames["ψ1_save"]="k_2_over_k_1"
-varnames["ψ2_save"]="k_1k_2"
+# Quadratic approximation at MLE
+lnlike_xy_ellipse, H_xy_ellipse = construct_ellipse_lnlike_approx(lnlike_xy, xy_MLE)
 
-# --- parameter bounds -- not monotonic, not independent. Do manual for now.
-# parameter bounds
-X_sip_lb=0.05; X_sip_ub=25.0; 
-Y_sip_lb=2.5; Y_sip_ub=7.5
+# Eigenanalysis
+evals, evecs = eigen(H_xy_ellipse; sortby = x -> -real(x))
+println("Eigenvectors and eigenvalues for "*model_name)
+println("Eigenvalues: ", evals)
+println("Eigenvectors: ", evecs)
 
-XY_sip_lower_bounds = [X_sip_lb,Y_sip_lb]
-XY_sip_upper_bounds = [X_sip_ub,Y_sip_ub]
+# Determine svd of phi mapping in xy coordinates
+J_ϕ_xy, U_xy, S_xy, Vt_xy = compute_ϕ_Jacobian(ϕ_func_xy, xy_MLE; method_type=:auto, compute_svd=true)
+println("\nSVD analysis in original coordinates:")
+println("Singular values: ", S_xy)
+println("Right singular vectors (V): ")
+display(Vt_xy)
 
-# initial guess for optimisation
-XY_sip_initial =  xytoXY_sip(xy_initial) # starting guesses
+# Calculate prediction at MLE for reference
+pred_mean_MLE = mean(distrib_fine_xy(xy_MLE))
+true_mean = mean(distrib_fine_xy(xy_true))
 
-# correct initial guesses if needed
-if XY_sip_initial[1] <= XY_sip_lower_bounds[1] || XY_sip_initial[1] >= XY_sip_upper_bounds[1]
-    XY_sip_initial[1] = mean([XY_sip_lower_bounds[1],XY_sip_upper_bounds[1]])
+# 1D Profiles
+profile_method = :LN_BOBYQA
+for i in 1:dim_all
+    target_index = i
+    nuisance_indices = setdiff(indices_all, target_index)
+    nuisance_guess = xy_MLE[nuisance_indices]
+
+    print("Variable: ", varnames["ψ"*string(i)], "\n")
+
+    # Generate multiple initial guesses for nuisance parameters
+    n_guesses_profiling = 3
+    nuisance_guesses = generate_initial_guesses(xy_lower_bounds[nuisance_indices],
+        xy_upper_bounds[nuisance_indices], n_guesses_profiling)
+
+    # Profile full likelihood
+    ψω_values, lnlike_ψ_values = profile_target(lnlike_xy, 
+        target_index,
+        xy_lower_bounds, 
+        xy_upper_bounds,
+        nuisance_guess; 
+        grid_steps=grid_steps,
+        ω_initial_extras=nuisance_guesses,
+        method=profile_method)
+
+    # Profile quadratic approximation
+    ψω_ellipse_values, lnlike_ψ_ellipse_values = profile_target(lnlike_xy_ellipse,
+        target_index,
+        xy_lower_bounds, 
+        xy_upper_bounds,
+        nuisance_guess; 
+        grid_steps=grid_steps,
+        ω_initial_extras=nuisance_guesses,
+        method=profile_method)
+
+    # Extract profiled parameter values
+    ψ_values = [ψω[target_index] for ψω in ψω_values]
+    ψ_ellipse_values = [ψω[target_index] for ψω in ψω_ellipse_values]
+
+    # Plot profiles
+    plot_1D_profile(model_name, ψ_values, lnlike_ψ_values,
+        varnames["ψ"*string(i)];
+        varname_save=varnames["ψ"*string(i)*"_save"],
+        ψ_true=xy_true[i])
+
+    plot_1D_profile_comparison(model_name, model_name*"_ellipse",
+        ψ_values, ψ_ellipse_values,
+        lnlike_ψ_values, lnlike_ψ_ellipse_values,
+        varnames["ψ"*string(i)];
+        varname_save=varnames["ψ"*string(i)*"_save"],
+        ψ_true=xy_true[i])
+
+    # Prediction CIs. Use fine grid for prediction
+    lower_ψ, upper_ψ, _ = construct_upper_lower_profile_wise_CIs_for_mean(
+        distrib_fine_xy, ψω_values, lnlike_ψ_values; l_level=95, df=1)
+
+    plot_profile_wise_CI_for_mean(
+        t, lower_ψ, upper_ψ, pred_mean_MLE,
+        model_name, "t", "t",
+        data_indep=t_obs, data_dep=data, 
+        true_mean=true_mean,
+        target=varnames["ψ"*string(i)])
 end
-if XY_sip_initial[2] <= XY_sip_lower_bounds[2] || XY_sip_initial[2] >= XY_sip_upper_bounds[2]
-    XY_sip_initial[2] = mean([XY_sip_lower_bounds[2],XY_sip_upper_bounds[2]])
+
+# 2D Profiles
+# Technically no profiles as we are in 2D but write generically for future extension
+
+param_pairs = [(i, j) for i in 1:dim_all for j in i+1:dim_all]
+profile_method = :LN_BOBYQA
+
+for (i, j) in param_pairs
+    target_indices_ij = [i,j]
+    nuisance_indices = setdiff(indices_all, target_indices_ij)
+    nuisance_guess = xy_MLE[nuisance_indices]
+    ψ_true_pair = xy_true[target_indices_ij]
+
+    # Generate multiple initial guesses for nuisance parameters if needed
+    if length(nuisance_indices) > 0
+        n_guesses_profiling = 3
+        nuisance_guesses = generate_initial_guesses(xy_lower_bounds[nuisance_indices],
+            xy_upper_bounds[nuisance_indices], n_guesses_profiling)
+    else
+        nuisance_guesses = nothing
+    end
+
+    print("Variables: ", varnames["ψ"*string(i)], ", ", varnames["ψ"*string(j)], "\n")
+
+    # Create a copy of varnames for this iteration
+    current_varnames = deepcopy(varnames)
+    current_varnames["ψ1"] = varnames["ψ"*string(i)]
+    current_varnames["ψ2"] = varnames["ψ"*string(j)]
+    current_varnames["ψ1_save"] = varnames["ψ"*string(i)*"_save"]
+    current_varnames["ψ2_save"] = varnames["ψ"*string(j)*"_save"]
+    
+    # Profile full likelihood
+    ψω_values, lnlike_ψ_values = profile_target(lnlike_xy, target_indices_ij,
+        xy_lower_bounds, xy_upper_bounds,
+        nuisance_guess; grid_steps=grid_steps,
+        ω_initial_extras=nuisance_guesses,
+        method=profile_method)
+
+    # Profile quadratic approximation
+    ψω_ellipse_values, lnlike_ψ_ellipse_values = profile_target(lnlike_xy_ellipse,
+        target_indices_ij,
+        xy_lower_bounds, xy_upper_bounds,
+        nuisance_guess; grid_steps=grid_steps,
+        ω_initial_extras=nuisance_guesses,
+        method=profile_method)
+
+    # Extract profiled parameter values
+    ψ_values = [ψω[target_indices_ij] for ψω in ψω_values]
+    ψ_ellipse_values = [ψω[target_indices_ij] for ψω in ψω_ellipse_values]
+
+    # Plot contours
+    plot_2D_contour(model_name, ψ_values, lnlike_ψ_values,
+        current_varnames; ψ_true=ψ_true_pair)
+
+    # Plot comparison with quadratic approximation
+    plot_2D_contour_comparison(model_name, model_name*"_ellipse",
+        ψ_values, ψ_ellipse_values,
+        lnlike_ψ_values, lnlike_ψ_ellipse_values,
+        current_varnames; ψ_true=ψ_true_pair)
+
+    # Get and plot 1D profiles from 2D grid
+    ψ1_values, ψ2_values, like_ψ1_values, like_ψ2_values = get_1D_profiles_from_2D(
+        ψ_values, lnlike_ψ_values)
+
+    plot_1D_profile(model_name, ψ1_values, log.(like_ψ1_values),
+        current_varnames["ψ1"];
+        varname_save=current_varnames["ψ1_save"]*"_from_2D",
+        ψ_true=ψ_true_pair[1])
+
+    plot_1D_profile(model_name, ψ2_values, log.(like_ψ2_values),
+        current_varnames["ψ2"];
+        varname_save=current_varnames["ψ2_save"]*"_from_2D",
+        ψ_true=ψ_true_pair[2])
+
+    # 2D prediction CIs using fine grid for predictions
+    lower_ψ1ψ2, upper_ψ1ψ2, _ = construct_upper_lower_profile_wise_CIs_for_mean(
+        distrib_fine_xy, ψω_values, lnlike_ψ_values; l_level=95, df=2)
+
+    plot_profile_wise_CI_for_mean(
+        t, lower_ψ1ψ2, upper_ψ1ψ2, pred_mean_MLE,
+        model_name, "t", "t",
+        data_indep=t_obs, data_dep=data,
+        true_mean=true_mean,
+        target=current_varnames["ψ1"]*"_"*current_varnames["ψ2"])
+
 end
 
-# new true value
-XY_sip_true = xytoXY_sip(xy_true)
-# new likelihood
-lnlike_XY_sip = SloppihoodTools.construct_lnlike_XY(lnlike_xy,XYtoxy_sip)
-
-# carries out 2D analysis first, then each 1D profile, and plots
-SloppihoodTools.execute_model_analysis_workflow_2D_profile("monod_model_sip",varnames,lnlike_XY_sip,XY_sip_lower_bounds,XY_sip_upper_bounds,XY_sip_initial;grid_steps=grid_steps,ψ_true=XY_sip_true)
