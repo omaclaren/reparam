@@ -49,13 +49,14 @@ The codebase is organized as:
 Basic model setup (using the simple stat_model.jl as an example):
 
 ```julia
-using .ReparamTools
+include("../ReparamTools.jl") # Assuming working in examples directory
+using .ReparamTools 
 
 # Define model through auxiliary mapping (maps parameters to data distribution parameters)
 ϕ_xy = xy -> [xy[1]*xy[2], xy[2]]
 
 # Create distribution mapping (specifies how distribution depends on parameters)
-distrib_xy = xy -> Normal(xy[1]*xy[2], sqrt(xy[1]*xy[2]*(1-xy[2])))
+distrib_xy = xy -> Normal(ϕ_xy(xy)[1], sqrt(ϕ_xy(xy)[1]*(1-ϕ_xy(xy)[2])))
 
 # Construct likelihood using data
 lnlike_xy = construct_lnlike_xy(distrib_xy, data)
