@@ -543,10 +543,10 @@ end
 # --------------------------------------------------------
 # Sloppihood-Informed Parameterization Analysis
 # --------------------------------------------------------
-model_name = "diffusion_sip"
+model_name = "diffusion_iir"
 print(model_name*"\n")
 
-# Scale and round eigenvectors for SIP transformation
+# Scale and round eigenvectors for iir transformation
 # Option 1. based on the eigenvalues and eigenvectors from the log parameterization
 # Option 2. based on the right singular vectors from the log parameterization
 use_singular_vectors = true
@@ -563,21 +563,21 @@ println("Original right singular vectors:")
 display(Vt_XY_log)
 
 # Construct transformation
-xytoXY_sip, XYtoxy_sip = reparam(evecs_scaled)
+xytoXY_iir, XYtoxy_iir = reparam(evecs_scaled)
 
 # Transform likelihood, distributions (obs and fine) and ϕ mapping
-lnlike_XY_sip = construct_lnlike_XY(lnlike_xy, XYtoxy_sip)
-distrib_XY_sip = construct_distrib_XY(distrib_xy, XYtoxy_sip)
-distrib_fine_XY_sip = construct_distrib_XY(distrib_fine_xy, XYtoxy_sip)
-ϕ_func_XY_sip = construct_ϕ_XY(ϕ_func_xy, XYtoxy_sip)
+lnlike_XY_iir = construct_lnlike_XY(lnlike_xy, XYtoxy_iir)
+distrib_XY_iir = construct_distrib_XY(distrib_xy, XYtoxy_iir)
+distrib_fine_XY_iir = construct_distrib_XY(distrib_fine_xy, XYtoxy_iir)
+ϕ_func_XY_iir = construct_ϕ_XY(ϕ_func_xy, XYtoxy_iir)
 
-# Set bounds for SIP coordinates (manual due to non-monotonic transform)
-XY_sip_lower_bounds = [0.5, 0.0001, 0.00001]
-XY_sip_upper_bounds = [1.5, 10, 1000]
-XY_sip_initial = [1.0, 1.0, 10.0]
-XY_sip_true = xytoXY_sip(xy_true)
+# Set bounds for iir coordinates (manual due to non-monotonic transform)
+XY_iir_lower_bounds = [0.5, 0.0001, 0.00001]
+XY_iir_upper_bounds = [1.5, 10, 1000]
+XY_iir_initial = [1.0, 1.0, 10.0]
+XY_iir_true = xytoXY_iir(xy_true)
 
-# Update variable names for SIP coordinates
+# Update variable names for iir coordinates
 if use_singular_vectors
     varnames["ψ1"] = "\\frac{D_2}{R}"
     varnames["ψ2"] = "\\frac{D_1}{\\sqrt{D_2R}}"
@@ -594,66 +594,66 @@ else
     varnames["ψ3_save"] = "D_1_D_2_R"*"_approx"
 end
 
-# Point estimation in SIP coordinates
+# Point estimation in iir coordinates
 target_indices = []  # empty for MLE
 n_guesses = 3
 # Generate multiple initial guesses
-nuisance_guesses = generate_initial_guesses(XY_sip_lower_bounds, XY_sip_upper_bounds, n_guesses)
+nuisance_guesses = generate_initial_guesses(XY_iir_lower_bounds, XY_iir_upper_bounds, n_guesses)
 
-XY_sip_MLE, lnlike_XY_sip_MLE = profile_target(lnlike_XY_sip, target_indices,
-    XY_sip_lower_bounds, XY_sip_upper_bounds, 
-    XY_sip_initial; grid_steps=grid_steps,
+XY_iir_MLE, lnlike_XY_iir_MLE = profile_target(lnlike_XY_iir, target_indices,
+    XY_iir_lower_bounds, XY_iir_upper_bounds, 
+    XY_iir_initial; grid_steps=grid_steps,
     ω_initial_extras=nuisance_guesses,
     method=point_estimation_method)
 
 # Quadratic approximation at MLE
-lnlike_XY_sip_ellipse, H_XY_sip_ellipse = construct_ellipse_lnlike_approx(lnlike_XY_sip, XY_sip_MLE)
+lnlike_XY_iir_ellipse, H_XY_iir_ellipse = construct_ellipse_lnlike_approx(lnlike_XY_iir, XY_iir_MLE)
 
-# Eigenanalysis in SIP coordinates
-evals_sip, evecs_sip = eigen(H_XY_sip_ellipse; sortby = x -> -real(x))
+# Eigenanalysis in iir coordinates
+evals_iir, evecs_iir = eigen(H_XY_iir_ellipse; sortby = x -> -real(x))
 println("Eigenvectors and eigenvalues for "*model_name)
-println("Eigenvalues: ", evals_sip)
-println("Eigenvectors: ", evecs_sip)
+println("Eigenvalues: ", evals_iir)
+println("Eigenvectors: ", evecs_iir)
 
 # Jacobian and svd analysis of φ mapping at MLE
-# J_ϕ_XY_sip = ForwardDiff.jacobian(ϕ_func_XY_sip, XY_sip_MLE)
-J_ϕ_XY_sip, U_XY_sip, S_XY_sip, Vt_XY_sip = compute_ϕ_Jacobian(ϕ_func_XY_sip, XY_sip_MLE; method_type=:auto, compute_svd=true)
+# J_ϕ_XY_iir = ForwardDiff.jacobian(ϕ_func_XY_iir, XY_iir_MLE)
+J_ϕ_XY_iir, U_XY_iir, S_XY_iir, Vt_XY_iir = compute_ϕ_Jacobian(ϕ_func_XY_iir, XY_iir_MLE; method_type=:auto, compute_svd=true)
 # print singular values and left/right singular vectors
 println("Singular values for "*model_name)
-println(S_XY_sip)
+println(S_XY_iir)
 # println("Left singular vectors for "*model_name)
-# println(U_XY_sip)
+# println(U_XY_iir)
 println("Right singular vectors for "*model_name)
-println(Vt_XY_sip)
+println(Vt_XY_iir)
 
 # Calculate prediction at MLE for reference using distribution on fine grid
-pred_mean_MLE_sip = mean(distrib_fine_XY_sip(XY_sip_MLE))
-true_mean_sip = mean(distrib_fine_XY_sip(XY_sip_true))
+pred_mean_MLE_iir = mean(distrib_fine_XY_iir(XY_iir_MLE))
+true_mean_iir = mean(distrib_fine_XY_iir(XY_iir_true))
 
-# 1D Profiles in SIP coordinates
+# 1D Profiles in iir coordinates
 profile_method = :LN_BOBYQA
 for i in 1:dim_all
     target_index = i
     nuisance_indices = setdiff(indices_all, target_index)
-    nuisance_guess = XY_sip_MLE[nuisance_indices]
-    # nuisance_guess = XY_sip_initial[nuisance_indices] # can use XY_sip_initial as well
+    nuisance_guess = XY_iir_MLE[nuisance_indices]
+    # nuisance_guess = XY_iir_initial[nuisance_indices] # can use XY_iir_initial as well
 
     # generate multiple initial guesses
     n_guesses_profiling = 3
-    nuisance_guess_extras = generate_initial_guesses(XY_sip_lower_bounds[nuisance_indices], XY_sip_upper_bounds[nuisance_indices], n_guesses_profiling)
+    nuisance_guess_extras = generate_initial_guesses(XY_iir_lower_bounds[nuisance_indices], XY_iir_upper_bounds[nuisance_indices], n_guesses_profiling)
 
     # Profile full likelihood
-    ψω_values, lnlike_ψ_values = profile_target(lnlike_XY_sip, target_index,
-        XY_sip_lower_bounds, XY_sip_upper_bounds,
+    ψω_values, lnlike_ψ_values = profile_target(lnlike_XY_iir, target_index,
+        XY_iir_lower_bounds, XY_iir_upper_bounds,
         nuisance_guess; grid_steps=grid_steps,
         ω_initial_extras=nuisance_guess_extras,
         method=profile_method)
 
     # Profile quadratic approximation
-    ψω_ellipse_values, lnlike_ψ_ellipse_values = profile_target(lnlike_XY_sip_ellipse,
+    ψω_ellipse_values, lnlike_ψ_ellipse_values = profile_target(lnlike_XY_iir_ellipse,
         target_index,
-        XY_sip_lower_bounds,
-        XY_sip_upper_bounds,
+        XY_iir_lower_bounds,
+        XY_iir_upper_bounds,
         nuisance_guess;
         grid_steps=grid_steps,
         ω_initial_extras=nuisance_guess_extras,
@@ -667,45 +667,45 @@ for i in 1:dim_all
     plot_1D_profile(model_name, ψ_values, lnlike_ψ_values,
         varnames["ψ"*string(i)];
         varname_save=varnames["ψ"*string(i)*"_save"],
-        ψ_true=XY_sip_true[i])
+        ψ_true=XY_iir_true[i])
 
     plot_1D_profile_comparison(model_name, model_name*"_ellipse",
         ψ_values, ψ_ellipse_values,
         lnlike_ψ_values, lnlike_ψ_ellipse_values,
         varnames["ψ"*string(i)];
         varname_save=varnames["ψ"*string(i)*"_save"],
-        ψ_true=XY_sip_true[i])
+        ψ_true=XY_iir_true[i])
 
     # Prediction CIs using distribution on fine grid
     lower_ψ, upper_ψ, _ = construct_upper_lower_profile_wise_CIs_for_mean(
-        distrib_fine_XY_sip, ψω_values, lnlike_ψ_values; l_level=95, df=1)
+        distrib_fine_XY_iir, ψω_values, lnlike_ψ_values; l_level=95, df=1)
 
     plot_profile_wise_CI_for_mean(
-        x, lower_ψ, upper_ψ, pred_mean_MLE_sip,
+        x, lower_ψ, upper_ψ, pred_mean_MLE_iir,
         model_name, "x", "x", data_indep=x_obs,
-        data_dep=data, true_mean=true_mean_sip,
+        data_dep=data, true_mean=true_mean_iir,
         target=varnames["ψ"*string(i)])
 end
 
-# 2D Profiles in SIP coordinates
+# 2D Profiles in iir coordinates
 profile_method = :LN_BOBYQA
 param_pairs = [(i,j) for i in 1:dim_all for j in (i+1):dim_all]
 
 for (i,j) in param_pairs
     target_indices_ij = [i,j]
     nuisance_indices = setdiff(indices_all, target_indices_ij)
-    nuisance_guess = XY_sip_MLE[nuisance_indices]
-    # nuisance_guess = XY_sip_initial[nuisance_indices] # can use XY_sip_initial as well
+    nuisance_guess = XY_iir_MLE[nuisance_indices]
+    # nuisance_guess = XY_iir_initial[nuisance_indices] # can use XY_iir_initial as well
 
     # generate multiple initial guesses
     if length(nuisance_indices) > 0
         n_guesses_profiling = 3
-        nuisance_guess_extras = generate_initial_guesses(XY_sip_lower_bounds[nuisance_indices], XY_sip_upper_bounds[nuisance_indices], n_guesses_profiling)
+        nuisance_guess_extras = generate_initial_guesses(XY_iir_lower_bounds[nuisance_indices], XY_iir_upper_bounds[nuisance_indices], n_guesses_profiling)
     else
         nuisance_guess_extras = nothing
     end
 
-    ψ_true_pair = XY_sip_true[target_indices_ij]
+    ψ_true_pair = XY_iir_true[target_indices_ij]
 
     # Create a copy of varnames for this iteration
     current_varnames = deepcopy(varnames)
@@ -717,17 +717,17 @@ for (i,j) in param_pairs
     current_varnames["ψ2_save"] = varnames["ψ"*string(j)*"_save"]
 
     # Profile full likelihood
-    ψω_values, lnlike_ψ_values = profile_target(lnlike_XY_sip, target_indices_ij,
-        XY_sip_lower_bounds, XY_sip_upper_bounds,
+    ψω_values, lnlike_ψ_values = profile_target(lnlike_XY_iir, target_indices_ij,
+        XY_iir_lower_bounds, XY_iir_upper_bounds,
         nuisance_guess; grid_steps=grid_steps,
         ω_initial_extras=nuisance_guess_extras,
         method=profile_method)
 
     # Profile quadratic approximation
-    ψω_ellipse_values, lnlike_ψ_ellipse_values = profile_target(lnlike_XY_sip_ellipse,
+    ψω_ellipse_values, lnlike_ψ_ellipse_values = profile_target(lnlike_XY_iir_ellipse,
         target_indices_ij,
-        XY_sip_lower_bounds,
-        XY_sip_upper_bounds,
+        XY_iir_lower_bounds,
+        XY_iir_upper_bounds,
         nuisance_guess;
         grid_steps=grid_steps,
         ω_initial_extras=nuisance_guess_extras,
@@ -762,12 +762,12 @@ for (i,j) in param_pairs
 
     # 2D prediction CIs using distribution on fine grid
     lower_ψ1ψ2, upper_ψ1ψ2, _ = construct_upper_lower_profile_wise_CIs_for_mean(
-        distrib_fine_XY_sip, ψω_values, lnlike_ψ_values; l_level=95, df=2)
+        distrib_fine_XY_iir, ψω_values, lnlike_ψ_values; l_level=95, df=2)
 
     plot_profile_wise_CI_for_mean(
-        x, lower_ψ1ψ2, upper_ψ1ψ2, pred_mean_MLE_sip,
+        x, lower_ψ1ψ2, upper_ψ1ψ2, pred_mean_MLE_iir,
         model_name, "x", "x",
         data_indep=x_obs, data_dep=data,
-        true_mean=true_mean_sip,
+        true_mean=true_mean_iir,
         target=current_varnames["ψ1"]*", "*current_varnames["ψ2"])
 end

@@ -335,10 +335,10 @@ end
 # --------------------------------------------------------
 # Sloppihood-Informed Parameterization Analysis
 # --------------------------------------------------------
-model_name = "stat_model_sip"
+model_name = "stat_model_iir"
 println(model_name)
 
-# Scale and round eigenvectors for SIP transformation
+# Scale and round eigenvectors for iir transformation
 # Option 1: based on eigenvectors from Fisher Information
 # Option 2: based on the right singular vectors from the phi mapping
 use_singular_vectors = true
@@ -356,68 +356,68 @@ println("Original right singular vectors:")
 display(Vt_XY_log)
 
 # Construct transformation
-xytoXY_sip, XYtoxy_sip = reparam(evecs_scaled)
+xytoXY_iir, XYtoxy_iir = reparam(evecs_scaled)
 
 # Transform likelihood, distribution, and phi mapping
-lnlike_XY_sip = construct_lnlike_XY(lnlike_xy, XYtoxy_sip)
-distrib_XY_sip = construct_distrib_XY(distrib_xy, XYtoxy_sip)
-ϕ_XY_sip = construct_ϕ_XY(ϕ_xy, XYtoxy_sip)
+lnlike_XY_iir = construct_lnlike_XY(lnlike_xy, XYtoxy_iir)
+distrib_XY_iir = construct_distrib_XY(distrib_xy, XYtoxy_iir)
+ϕ_XY_iir = construct_ϕ_XY(ϕ_xy, XYtoxy_iir)
 
-# Set bounds for SIP coordinates
-XY_sip_lower_bounds = [13.0, 25.0]
-XY_sip_upper_bounds = [25.0, 1000.0]
-XY_sip_initial = [mean([XY_sip_lower_bounds[1], XY_sip_upper_bounds[1]]),
-                  mean([XY_sip_lower_bounds[2], XY_sip_upper_bounds[2]])]
+# Set bounds for iir coordinates
+XY_iir_lower_bounds = [13.0, 25.0]
+XY_iir_upper_bounds = [25.0, 1000.0]
+XY_iir_initial = [mean([XY_iir_lower_bounds[1], XY_iir_upper_bounds[1]]),
+                  mean([XY_iir_lower_bounds[2], XY_iir_upper_bounds[2]])]
 
 # transform true value
-XY_sip_true = xytoXY_sip(xy_true)
+XY_iir_true = xytoXY_iir(xy_true)
 
-# Update variable names for SIP coordinates
+# Update variable names for iir coordinates
 varnames["ψ1"] = "np"
 varnames["ψ2"] = "\\frac{n}{p}"
 varnames["ψ1_save"] = "np"
 varnames["ψ2_save"] = "n_over_p"
 
-# Point estimation in SIP coordinates
+# Point estimation in iir coordinates
 target_indices = []  # empty for MLE
-XY_sip_MLE, lnlike_XY_sip_MLE = profile_target(lnlike_XY_sip, target_indices,
-    XY_sip_lower_bounds, XY_sip_upper_bounds, 
-    XY_sip_initial; grid_steps=grid_steps)
+XY_iir_MLE, lnlike_XY_iir_MLE = profile_target(lnlike_XY_iir, target_indices,
+    XY_iir_lower_bounds, XY_iir_upper_bounds, 
+    XY_iir_initial; grid_steps=grid_steps)
 
 # Quadratic approximation at MLE
-lnlike_XY_sip_ellipse, H_XY_sip_ellipse = construct_ellipse_lnlike_approx(lnlike_XY_sip, XY_sip_MLE)
+lnlike_XY_iir_ellipse, H_XY_iir_ellipse = construct_ellipse_lnlike_approx(lnlike_XY_iir, XY_iir_MLE)
 
-# Eigenanalysis in SIP coordinates
-evals_sip, evecs_sip = eigen(H_XY_sip_ellipse; sortby = x -> -real(x))
+# Eigenanalysis in iir coordinates
+evals_iir, evecs_iir = eigen(H_XY_iir_ellipse; sortby = x -> -real(x))
 println("Eigenvectors and eigenvalues for "*model_name)
-println("Eigenvalues: ", evals_sip)
-println("Eigenvectors: ", evecs_sip)
+println("Eigenvalues: ", evals_iir)
+println("Eigenvectors: ", evecs_iir)
 
-# Determine svd of phi mapping in SIP coordinates
-J_ϕ_XY_sip, U_XY_sip, S_XY_sip, Vt_XY_sip = compute_ϕ_Jacobian(ϕ_XY_sip, XY_sip_MLE, compute_svd=true)
+# Determine svd of phi mapping in iir coordinates
+J_ϕ_XY_iir, U_XY_iir, S_XY_iir, Vt_XY_iir = compute_ϕ_Jacobian(ϕ_XY_iir, XY_iir_MLE, compute_svd=true)
 
 # Compare eigenvectors from Fisher Information with singular vectors
 println("\nComparison of eigenvectors and singular vectors:")
-display(evecs_sip)
-display(Vt_XY_sip')
+display(evecs_iir)
+display(Vt_XY_iir')
 
 # 1D Profiles
 for i in 1:dim_all
     target_index = i
     nuisance_indices = setdiff(indices_all, target_index)
-    nuisance_guess = XY_sip_MLE[nuisance_indices]
+    nuisance_guess = XY_iir_MLE[nuisance_indices]
 
     print("Variable: ", varnames["ψ"*string(i)], "\n")
 
     # Profile full likelihood
-    ψω_values, lnlike_ψ_values = profile_target(lnlike_XY_sip, target_index,
-        XY_sip_lower_bounds, XY_sip_upper_bounds,
+    ψω_values, lnlike_ψ_values = profile_target(lnlike_XY_iir, target_index,
+        XY_iir_lower_bounds, XY_iir_upper_bounds,
         nuisance_guess; grid_steps=grid_steps)
 
     # Profile quadratic approximation
-    ψω_ellipse_values, lnlike_ψ_ellipse_values = profile_target(lnlike_XY_sip_ellipse,
+    ψω_ellipse_values, lnlike_ψ_ellipse_values = profile_target(lnlike_XY_iir_ellipse,
         target_index,
-        XY_sip_lower_bounds, XY_sip_upper_bounds,
+        XY_iir_lower_bounds, XY_iir_upper_bounds,
         nuisance_guess; grid_steps=grid_steps)
 
     # Extract profiled parameter values
@@ -428,14 +428,14 @@ for i in 1:dim_all
     plot_1D_profile(model_name, ψ_values, lnlike_ψ_values,
         varnames["ψ"*string(i)];
         varname_save=varnames["ψ"*string(i)*"_save"],
-        ψ_true=XY_sip_true[i])
+        ψ_true=XY_iir_true[i])
 
     plot_1D_profile_comparison(model_name, model_name*"_ellipse",
         ψ_values, ψ_ellipse_values,
         lnlike_ψ_values, lnlike_ψ_ellipse_values,
         varnames["ψ"*string(i)];
         varname_save=varnames["ψ"*string(i)*"_save"],
-        ψ_true=XY_sip_true[i])
+        ψ_true=XY_iir_true[i])
 end
 
 # 2D Profiles
@@ -444,8 +444,8 @@ param_pairs = [(i,j) for i in 1:dim_all for j in (i+1):dim_all]
 for (i,j) in param_pairs
     target_indices_ij = [i,j]
     nuisance_indices = setdiff(indices_all, target_indices_ij)
-    nuisance_guess = XY_sip_MLE[nuisance_indices]
-    ψ_true_pair = XY_sip_true[target_indices_ij]
+    nuisance_guess = XY_iir_MLE[nuisance_indices]
+    ψ_true_pair = XY_iir_true[target_indices_ij]
 
     # Create a copy of varnames for this iteration
     current_varnames = deepcopy(varnames)
@@ -455,14 +455,14 @@ for (i,j) in param_pairs
     current_varnames["ψ2_save"] = varnames["ψ"*string(j)*"_save"]
 
     # Profile full likelihood
-    ψω_values, lnlike_ψ_values = profile_target(lnlike_XY_sip, target_indices_ij,
-        XY_sip_lower_bounds, XY_sip_upper_bounds,
+    ψω_values, lnlike_ψ_values = profile_target(lnlike_XY_iir, target_indices_ij,
+        XY_iir_lower_bounds, XY_iir_upper_bounds,
         nuisance_guess; grid_steps=grid_steps)
 
     # Profile quadratic approximation
-    ψω_ellipse_values, lnlike_ψ_ellipse_values = profile_target(lnlike_XY_sip_ellipse,
+    ψω_ellipse_values, lnlike_ψ_ellipse_values = profile_target(lnlike_XY_iir_ellipse,
         target_indices_ij,
-        XY_sip_lower_bounds, XY_sip_upper_bounds,
+        XY_iir_lower_bounds, XY_iir_upper_bounds,
         nuisance_guess; grid_steps=grid_steps)
 
     # Extract profiled parameter values
