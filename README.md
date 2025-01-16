@@ -86,14 +86,4 @@ Each example includes:
 - Profile likelihood calculations
 - Visualisation of results
 
-## References
 
-[Citation of Invariant Image Reparameterisation paper, 2025]
-
-## Contributing
-
-Please feel free to submit issues or pull requests.
-
-## License
-
-[Add appropriate license information]
