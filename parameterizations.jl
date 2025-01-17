@@ -59,6 +59,23 @@ function reparam(evecs_scaled; a_func=x->log.(x), a_func_inv=x->exp.(x))
     return xytoXY, XYtoxy
 end
 
+function construct_ϕ_XY(ϕ_xy, XYtoxy)
+    """
+    Construct auxiliary mapping in transformed coordinates.
+
+    Note XY is of arbitrary dimension (not necessarily two).
+
+    Auxiliary mapping maps mechanistic parameters to data distribution parameters.
+
+    Parameters:
+    - ϕ_xy: Auxiliary mapping in original coordinates (mechanistic → distribution parameters)
+    - XYtoxy: Transformation from new (XY) to original (xy) coordinates
+
+    Returns: Function computing auxiliary mapping in XY coordinates, i.e. XY -> distribution parameters.
+    """
+    return XY -> ϕ_xy(XYtoxy(XY))
+end
+
 function construct_lnlike_XY(lnlike_xy, XYtoxy)
     """
     Construct log-likelihood function in transformed coordinates.
@@ -88,23 +105,6 @@ function construct_distrib_XY(distrib_xy, XYtoxy)
     """
     return XY -> distrib_xy(XYtoxy(XY))
 end 
-
-function construct_ϕ_XY(ϕ_xy, XYtoxy)
-    """
-    Construct auxiliary mapping in transformed coordinates.
-
-    Note XY is of arbitrary dimension (not necessarily two).
-
-    Auxiliary mapping maps mechanistic parameters to data distribution parameters.
-
-    Parameters:
-    - ϕ_xy: Auxiliary mapping in original coordinates (mechanistic → distribution parameters)
-    - XYtoxy: Transformation from new (XY) to original (xy) coordinates
-
-    Returns: Function computing auxiliary mapping in XY coordinates, i.e. XY -> distribution parameters.
-    """
-    return XY -> ϕ_xy(XYtoxy(XY))
-end
 
 # --------------------------------------------------------
 # Parameter Re-ordering Methods

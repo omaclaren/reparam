@@ -37,14 +37,14 @@ function plot_1D_profile(model_name, ψ_values, lnlike_ψ_values, varname;
               color=:black, lw=2, legend=false)
     
     # Add maximum likelihood line
-    vline!([ψ_max], color=:black, ls=:dot, lw=2)
+    vline!([ψ_max], color=:black, lw=2)
     
     # Add confidence threshold
     hline!([exp(-quantile(Chisq(1),l_level/100)/2)], color=:black, lw=1)
     
     # Add true value if provided
     if length(ψ_true) > 0
-        vline!([ψ_true], color=:gray, lw=2)
+        vline!([ψ_true], color=:black, ls=:dash, lw=2)
     end
     
     display(plt)
@@ -93,13 +93,13 @@ function plot_1D_profile_comparison(model_name1, model_name2,
               color=:black, lw=2, legend=false)
     
     plot!(ψ_values2, like_ψ_values2, 
-          ls=:dash, color=:black, lw=2, legend=false)
+          ls=:dot, color=:black, lw=2, legend=false)
     
-    vline!([ψ_max1], color=:black, ls=:dot, lw=2)
+    vline!([ψ_max1], color=:black, lw=2)
     hline!([exp(-quantile(Chisq(1),l_level/100)/2)], color=:black, lw=1)
     
     if length(ψ_true) > 0
-        vline!([ψ_true], color=:gray, lw=2)
+        vline!([ψ_true], color=:black, ls=:dash, lw=2)
     end
     
     display(plt)
@@ -153,12 +153,16 @@ function plot_2D_contour(model_name, ψ_values, lnlike_ψ_values, varnames;
     max_indices = argmax(like_ψ_values)
     ψ1_max = ψ1_values[max_indices[1]]
     ψ2_max = ψ2_values[max_indices[2]]
-    vline!([ψ1_max], color=:black, ls=:dot, lw=2, legend=false)
-    hline!([ψ2_max], color=:black, ls=:dot, lw=2, legend=false)
+    # vline!([ψ1_max], color=:black, lw=2, legend=false)
+    # hline!([ψ2_max], color=:black, lw=2, legend=false)
+    # marker
+    scatter!([ψ1_max], [ψ2_max], mc=:silver, msc=:match, markersize=6, markershape=:circle, legend=false)
     
     if length(ψ_true) > 0
-        vline!([ψ_true[1]], color=:gray, lw=2, legend=false)
-        hline!([ψ_true[2]], color=:gray, lw=2, legend=false)
+        #vline!([ψ_true[1]], color=:black, ls=:dash, lw=2, legend=false)
+        #hline!([ψ_true[2]], color=:black, ls=:dash, lw=2, legend=false)
+        # add marker
+        scatter!([ψ_true[1]], [ψ_true[2]], mc=:gold, msc=:match, markersize=8, markershape=:star, legend=false)
     end
     
     display(plt)
@@ -213,7 +217,7 @@ function plot_2D_contour_comparison(model_name1, model_name2,
     like_ψ_values2 = exp.(lnlike_ψ_values2)
 
     contour!(ψ1_values2, ψ2_values2, like_ψ_values2',
-            levels=[lstar], color=:black, colorbar=false, lw=2, ls=:dash)
+            levels=[lstar], color=:black, colorbar=false, lw=1.5, ls=:dash)
 
     # Labels etc
     xlabel!(latexstring(varnames["ψ1"]), xlabelfontsize=14)
@@ -223,22 +227,28 @@ function plot_2D_contour_comparison(model_name1, model_name2,
     max_indices1 = argmax(lnlike_ψ_values1)
     ψ1_values1_max = ψ1_values1[max_indices1[1]]
     ψ2_values1_max = ψ2_values1[max_indices1[2]]
-    vline!([ψ1_values1_max], color=:black, ls=:dot, lw=2, legend=false)
-    hline!([ψ2_values1_max], color=:black, ls=:dot, lw=2, legend=false)
+    # vline!([ψ1_values1_max], color=:black, lw=2, legend=false)
+    # hline!([ψ2_values1_max], color=:black, lw=2, legend=false)
+    # marker
+    scatter!([ψ1_values1_max], [ψ2_values1_max], mc=:silver, msc=:match, markersize=6, markershape=:circle, legend=false)
     
     # Add model 2 best 
     if add_model2_MLE
         max_indices2 = argmax(lnlike_ψ_values2)
         ψ1_values2_max = ψ1_values2[max_indices2[1]]
         ψ2_values2_max = ψ2_values2[max_indices2[2]]
-        vline!([ψ1_values2_max], color=:black, ls=:dot, lw=1, legend=false)
-        hline!([ψ2_values2_max], color=:black, ls=:dot, lw=1, legend=false)
+        # vline!([ψ1_values2_max], color=:black, lw=1, legend=false)
+        # hline!([ψ2_values2_max], color=:black, lw=1, legend=false)
+        # marker
+        scatter!([ψ1_values2_max], [ψ2_values2_max], mc=:silver, msc=:match, markersize=6, markershape=:+, legend=false)
     end
 
     # Add true
     if length(ψ_true) > 0
-        vline!([ψ_true[1]], color=:gray, lw=2, legend=false)
-        hline!([ψ_true[2]], color=:gray, lw=2, legend=false)
+        # vline!([ψ_true[1]], color=:black, ls=:dash, lw=2, legend=false)
+        # hline!([ψ_true[2]], color=:black, ls=:dash, lw=2, legend=false)
+        # marker
+        scatter!([ψ_true[1]], [ψ_true[2]], mc=:gold, msc=:match, markersize=8, markershape=:star, legend=false)
     end
     
     display(plt)
@@ -251,41 +261,59 @@ end
 # --------------------------------------------------------
 function plot_profile_wise_CI_for_mean(indep_var, lower, upper, mle, 
                  model_name, indep_varname, indep_varname_save;
-                 data=nothing, true_mean=nothing, target="",
-                 save_dir="./figures/", file_extension=".svg")
+                 data_indep=nothing, data_dep=nothing, true_mean=nothing, 
+                 target="", save_dir="./figures/", file_extension=".svg", 
+                 verbose_labels=false)
     """
     Plot confidence intervals for mean function based on profile likelihood.
 
     Parameters:
-    - indep_var: Independent variable values
+    - indep_var: Independent variable values. Typically fine grid for function.
     - lower, upper: Lower and upper bounds of confidence interval
     - mle: Maximum likelihood estimate of mean
     - model_name: Name for saving plot
     - indep_varname: Name of independent variable for plotting
     - indep_varname_save: Name of independent variable for saving
-    - data: Data points to overlay (optional)
+    - data_indep: Independent variable data points to overlay (optional)
+    - data_dep: Dependent variable data points to overlay (optional)
     - true_mean: True mean function if known (optional)
     - target: Description of target parameter (optional)
     - save_dir: Directory for saving plot (default: "./")
     - file_extension: File type for saving (default: ".svg")
+    - verbose_labels: Whether to add additional information to legend (default: false)
     """
-    plt = plot(indep_var, lower, lw=0, 
+    plt = plot(indep_var, lower, lw=0, primary=false,
               fillrange=upper, fillalpha=0.20, color=:purple,
               xlabel=latexstring(indep_varname),
               ylabel="profile likelihood CIs for mean",
               xlims=(indep_var[1], indep_var[end]),
               label=latexstring("CI ("*target*")"))
     
-    plot!(indep_var, mle, linecolor=:black, linestyle=:dash, label="MLE")
+    if verbose_labels
+        plot!(indep_var, mle, linecolor=:purple4, label="MLE")
+    else
+        plot!(indep_var, mle, linecolor=:purple4, label="")
+    end
     
-    if !isnothing(data)
-        scatter!(indep_var, data, 
-                mc=:black, msc=:match, markersize=3, 
-                markershape=:x, label="data")
+    # if have both independent and dependent data
+    if !isnothing(data_indep) && !isnothing(data_dep)
+        if verbose_labels
+            scatter!(data_indep, data_dep, 
+                    mc=:black, msc=:match, markersize=3, 
+                    markershape=:x, label="Data")
+        else
+            scatter!(data_indep, data_dep, 
+                    mc=:black, msc=:match, markersize=3, 
+                    markershape=:x, label="")
+        end
     end
     
     if !isnothing(true_mean)
-        plot!(indep_var, mle, linecolor=:black, label="Truth")
+        if verbose_labels
+            plot!(indep_var, true_mean, linecolor=:black, linestyle=:dash, label="Truth")
+        else
+            plot!(indep_var, true_mean, linecolor=:black, linestyle=:dash, label="")
+        end
     end
     
     display(plt)
