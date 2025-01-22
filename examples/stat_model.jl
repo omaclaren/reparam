@@ -20,16 +20,21 @@ Random.seed!(12)
 # Model Definition
 # Define model in xy = θ = [n, p] parameterization
 # --------------------------------------------------------
+# boolean for whether to use Poisson limit
+poisson_limit = true
 # Parameter -> data parameter mapping 
-ϕ_xy = xy -> [xy[1]*xy[2], xy[2]]  # Maps (n,p) to (np,p)
+if poisson_limit
+    ϕ_xy = xy -> [xy[1]*xy[2], xy[1]*xy[2]] # Maps (n,p) to (np,np)
+else
+    ϕ_xy = xy -> [xy[1]*xy[2], xy[1]*xy[2]*(1-xy[2])]  # Maps (n,p) to (np,np*(1-p))
+end
 
 # --------------------------------------------------------
 # Setup and Data Generation
 # --------------------------------------------------------
 
-# Parameter -> distribution mapping. Could use ϕ_xy explicitly 
-# distrib_xy = xy -> Normal(ϕ_xy(xy)[1], sqrt(ϕ_xy(xy)[1]*(1-ϕ_xy(xy)[2])))
-distrib_xy = xy -> Normal(xy[1]*xy[2], sqrt(xy[1]*xy[2]*(1-xy[2])))
+# Parameter -> distribution mapping. Use ϕ_xy explicitly 
+distrib_xy = xy -> Normal(ϕ_xy(xy)[1], sqrt(ϕ_xy(xy)[2]))
 
 # Variables and bounds
 varnames = Dict("ψ1" => "n", "ψ2" => "p")
@@ -60,7 +65,11 @@ data = [21.9, 22.3, 12.8, 16.4, 16.4, 20.3, 16.2, 20.0, 19.7, 24.4]
 # --------------------------------------------------------
 # Construct likelihood
 lnlike_xy = construct_lnlike_xy(distrib_xy, data)
-model_name = "stat_model_xy"
+if poisson_limit
+    model_name = "stat_model_xy_poisson"
+else
+    model_name = "stat_model_xy"
+end
 grid_steps = [500]
 dim_all = length(xy_initial)
 indices_all = 1:dim_all
@@ -188,7 +197,12 @@ end
 # --------------------------------------------------------
 # Log Parameterization Analysis
 # --------------------------------------------------------
-model_name = "stat_model_log"
+
+if poisson_limit
+    model_name = "stat_model_log_poisson"
+else
+    model_name = "stat_model_log"
+end
 
 # Coordinate transformation
 xytoXY_log(xy) = log.(xy)
@@ -236,7 +250,7 @@ println("Right singular vectors (V): ")
 display(Vt_XY_log)
 
 # Compare eigenvectors from Fisher Information with singular vectors
-println("\nComparison of eigenvectors and singular vectors:")
+println("\nComparison of eigenvectors (1) and singular vectors (2):")
 display(evecs_log)
 display(Vt_XY_log)
 
@@ -335,7 +349,11 @@ end
 # --------------------------------------------------------
 # Sloppihood-Informed Parameterization Analysis
 # --------------------------------------------------------
-model_name = "stat_model_iir"
+if poisson_limit
+    model_name = "stat_model_iir_poisson"
+else
+    model_name = "stat_model_iir"
+end
 println(model_name)
 
 # Scale and round eigenvectors for iir transformation
@@ -343,7 +361,7 @@ println(model_name)
 # Option 2: based on the right singular vectors from the phi mapping
 use_singular_vectors = true
 if use_singular_vectors
-    evecs_scaled = scale_and_round(Vt_XY_log; column_scales=[1,-1]) 
+    evecs_scaled = scale_and_round(Vt_XY_log; column_scales=[1,1]) 
 else
     evals_scaled = scale_and_round(evecs_log; column_scales=[1,1])
 end
@@ -397,7 +415,7 @@ println("Eigenvectors: ", evecs_iir)
 J_ϕ_XY_iir, U_XY_iir, S_XY_iir, Vt_XY_iir = compute_ϕ_Jacobian(ϕ_XY_iir, XY_iir_MLE, compute_svd=true)
 
 # Compare eigenvectors from Fisher Information with singular vectors
-println("\nComparison of eigenvectors and singular vectors:")
+println("\nComparison of eigenvectors (1) and singular vectors (2):")
 display(evecs_iir)
 display(Vt_XY_iir')
 
