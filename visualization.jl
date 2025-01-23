@@ -3,7 +3,7 @@
 # --------------------------------------------------------
 function plot_1D_profile(model_name, ψ_values, lnlike_ψ_values, varname;
     varname_save="", ψ_true=[], save_dir="./figures/",
-    file_extension=".svg", l_level=95)
+    file_extension=".pdf", l_level=95)
     """
     Plot 1D profile likelihood.
 
@@ -15,7 +15,7 @@ function plot_1D_profile(model_name, ψ_values, lnlike_ψ_values, varname;
     - varname_save: Parameter name for saving (default: varname)
     - ψ_true: True parameter value if known (optional)
     - save_dir: Directory for saving plot (default: "./")
-    - file_extension: File type for saving (default: ".svg")
+    - file_extension: File type for saving (default: ".pdf")
     - l_level: Confidence level for threshold (default: 95)
     """
     if varname_save == ""
@@ -56,7 +56,7 @@ function plot_1D_profile_comparison(model_name1, model_name2,
               lnlike_ψ_values1, lnlike_ψ_values2, 
               varname;
               varname_save="", ψ_true=[], 
-              save_dir="./figures/", file_extension=".svg",
+              save_dir="./figures/", file_extension=".pdf",
               l_level=95)
     """
     Plot comparison of 1D profile likelihoods from two models/approximations.
@@ -71,7 +71,7 @@ function plot_1D_profile_comparison(model_name1, model_name2,
     - varname_save: Parameter name for saving (default: varname)
     - ψ_true: True parameter value if known (optional)
     - save_dir: Directory for saving plot (default: "./")
-    - file_extension: File type for saving (default: ".svg")
+    - file_extension: File type for saving (default: ".pdf")
     - l_level: Confidence level for threshold (default: 95)
     """
     if varname_save == ""
@@ -110,7 +110,7 @@ end
 # 2D Profile Visualization
 # --------------------------------------------------------
 function plot_2D_contour(model_name, ψ_values, lnlike_ψ_values, varnames;
-    ψ_true=[], save_dir="./figures/", file_extension=".svg",
+    ψ_true=[], save_dir="./figures/", file_extension=".pdf",
     l_level=95, nshade_levels=20)
     """
     Plot 2D profile likelihood contours.
@@ -122,7 +122,7 @@ function plot_2D_contour(model_name, ψ_values, lnlike_ψ_values, varnames;
     - varnames: Dictionary of parameter names for plotting/saving
     - ψ_true: True parameter values if known (optional)
     - save_dir: Directory for saving plot (default: "./")
-    - file_extension: File type for saving (default: ".svg")
+    - file_extension: File type for saving (default: ".pdf")
     - l_level: Confidence level for contours (default: 95)
     - nshade_levels: Number of shading levels (default: 20)
     """
@@ -174,7 +174,7 @@ function plot_2D_contour_comparison(model_name1, model_name2,
               ψ_values1, ψ_values2,
               lnlike_ψ_values1, lnlike_ψ_values2, 
               varnames;
-              ψ_true=[], save_dir="./figures/", file_extension=".svg",
+              ψ_true=[], save_dir="./figures/", file_extension=".pdf",
               nshade_levels=20, l_level=95, 
               add_model2_MLE=false)
     """
@@ -189,7 +189,7 @@ function plot_2D_contour_comparison(model_name1, model_name2,
     - varnames: Dictionary of parameter names for plotting/saving
     - ψ_true: True parameter values if known (optional)
     - save_dir: Directory for saving plot (default: "./")
-    - file_extension: File type for saving (default: ".svg")
+    - file_extension: File type for saving (default: ".pdf")
     - nshade_levels: Number of shading levels (default: 20)
     - l_level: Confidence level for contours (default: 95)
     - add_model2_MLE: Whether to show MLE for second model (default: false)
@@ -262,7 +262,7 @@ end
 function plot_profile_wise_CI_for_mean(indep_var, lower, upper, mle, 
                  model_name, indep_varname, indep_varname_save;
                  data_indep=nothing, data_dep=nothing, true_mean=nothing, 
-                 target="", save_dir="./figures/", file_extension=".svg", 
+                 target="", save_dir="./figures/", file_extension=".pdf", 
                  verbose_labels=false)
     """
     Plot confidence intervals for mean function based on profile likelihood.
@@ -279,7 +279,7 @@ function plot_profile_wise_CI_for_mean(indep_var, lower, upper, mle,
     - true_mean: True mean function if known (optional)
     - target: Description of target parameter (optional)
     - save_dir: Directory for saving plot (default: "./")
-    - file_extension: File type for saving (default: ".svg")
+    - file_extension: File type for saving (default: ".pdf")
     - verbose_labels: Whether to add additional information to legend (default: false)
     """
     plt = plot(indep_var, lower, lw=0, primary=false,
