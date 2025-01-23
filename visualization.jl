@@ -3,7 +3,7 @@
 # --------------------------------------------------------
 function plot_1D_profile(model_name, ψ_values, lnlike_ψ_values, varname;
     varname_save="", ψ_true=[], save_dir="./figures/",
-    file_extension=".pdf", l_level=95)
+    fmt=:png, dpi=600, l_level=95)
     """
     Plot 1D profile likelihood.
 
@@ -15,7 +15,7 @@ function plot_1D_profile(model_name, ψ_values, lnlike_ψ_values, varname;
     - varname_save: Parameter name for saving (default: varname)
     - ψ_true: True parameter value if known (optional)
     - save_dir: Directory for saving plot (default: "./")
-    - file_extension: File type for saving (default: ".pdf")
+    - fmt: File type for saving (default: :png)
     - l_level: Confidence level for threshold (default: 95)
     """
     if varname_save == ""
@@ -48,7 +48,8 @@ function plot_1D_profile(model_name, ψ_values, lnlike_ψ_values, varname;
     end
     
     display(plt)
-    savefig(plt, save_dir*model_name*"_"*varname_save*"_profile"*file_extension)
+    gr(fmt=fmt, dpi=dpi)
+    savefig(plt, save_dir*model_name*"_"*varname_save*"_profile"*".$fmt")
 end
 
 function plot_1D_profile_comparison(model_name1, model_name2, 
@@ -56,7 +57,7 @@ function plot_1D_profile_comparison(model_name1, model_name2,
               lnlike_ψ_values1, lnlike_ψ_values2, 
               varname;
               varname_save="", ψ_true=[], 
-              save_dir="./figures/", file_extension=".pdf",
+              save_dir="./figures/", fmt=:png, dpi=600,
               l_level=95)
     """
     Plot comparison of 1D profile likelihoods from two models/approximations.
@@ -71,7 +72,7 @@ function plot_1D_profile_comparison(model_name1, model_name2,
     - varname_save: Parameter name for saving (default: varname)
     - ψ_true: True parameter value if known (optional)
     - save_dir: Directory for saving plot (default: "./")
-    - file_extension: File type for saving (default: ".pdf")
+    - fmt: File type for saving (default: :png)
     - l_level: Confidence level for threshold (default: 95)
     """
     if varname_save == ""
@@ -103,14 +104,15 @@ function plot_1D_profile_comparison(model_name1, model_name2,
     end
     
     display(plt)
-    savefig(plt, save_dir*model_name1*"_"*model_name2*"_"*varname_save*"_profiles"*file_extension)
+    gr(fmt=fmt, dpi=dpi)
+    savefig(plt, save_dir*model_name1*"_"*model_name2*"_"*varname_save*"_profiles"*".$fmt")
 end
 
 # --------------------------------------------------------
 # 2D Profile Visualization
 # --------------------------------------------------------
 function plot_2D_contour(model_name, ψ_values, lnlike_ψ_values, varnames;
-    ψ_true=[], save_dir="./figures/", file_extension=".pdf",
+    ψ_true=[], save_dir="./figures/", fmt=:png, dpi=600,
     l_level=95, nshade_levels=20)
     """
     Plot 2D profile likelihood contours.
@@ -122,9 +124,10 @@ function plot_2D_contour(model_name, ψ_values, lnlike_ψ_values, varnames;
     - varnames: Dictionary of parameter names for plotting/saving
     - ψ_true: True parameter values if known (optional)
     - save_dir: Directory for saving plot (default: "./")
-    - file_extension: File type for saving (default: ".pdf")
+    - fmt: File type for saving (default: :png)
     - l_level: Confidence level for contours (default: 95)
     - nshade_levels: Number of shading levels (default: 20)
+    - dpi: Resolution for saving (default: 300)
     """
     # Split into grid components for plotting. Need unique to undo Cartesian product
     ψ1_values = unique([ψ1 for (ψ1, _) in ψ_values])
@@ -166,7 +169,8 @@ function plot_2D_contour(model_name, ψ_values, lnlike_ψ_values, varnames;
     end
     
     display(plt)
-    savefig(plt, save_dir*model_name*"_"*varnames["ψ1_save"]*"_"*varnames["ψ2_save"]*file_extension)
+    gr(fmt=fmt, dpi=dpi)
+    savefig(plt, save_dir*model_name*"_"*varnames["ψ1_save"]*"_"*varnames["ψ2_save"]*".$fmt")
 
 end
 
@@ -174,7 +178,7 @@ function plot_2D_contour_comparison(model_name1, model_name2,
               ψ_values1, ψ_values2,
               lnlike_ψ_values1, lnlike_ψ_values2, 
               varnames;
-              ψ_true=[], save_dir="./figures/", file_extension=".pdf",
+              ψ_true=[], save_dir="./figures/", fmt=:png, dpi=600,
               nshade_levels=20, l_level=95, 
               add_model2_MLE=false)
     """
@@ -189,9 +193,10 @@ function plot_2D_contour_comparison(model_name1, model_name2,
     - varnames: Dictionary of parameter names for plotting/saving
     - ψ_true: True parameter values if known (optional)
     - save_dir: Directory for saving plot (default: "./")
-    - file_extension: File type for saving (default: ".pdf")
+    - fmt: File type for saving (default: :png)
     - nshade_levels: Number of shading levels (default: 20)
     - l_level: Confidence level for contours (default: 95)
+    - dpi: Resolution for saving (default: 300)
     - add_model2_MLE: Whether to show MLE for second model (default: false)
     """
     # Contour plots with chi square calibration
@@ -252,8 +257,9 @@ function plot_2D_contour_comparison(model_name1, model_name2,
     end
     
     display(plt)
+    gr(fmt=fmt, dpi=dpi)
     savefig(plt, save_dir*model_name1*"_"*model_name2*"_comparison_"*
-            varnames["ψ1_save"]*"_"*varnames["ψ2_save"]*file_extension)
+            varnames["ψ1_save"]*"_"*varnames["ψ2_save"]*".$fmt")
 end
 
 # --------------------------------------------------------
@@ -262,7 +268,7 @@ end
 function plot_profile_wise_CI_for_mean(indep_var, lower, upper, mle, 
                  model_name, indep_varname, indep_varname_save;
                  data_indep=nothing, data_dep=nothing, true_mean=nothing, 
-                 target="", save_dir="./figures/", file_extension=".pdf", 
+                 target="", save_dir="./figures/", fmt=:png, dpi=600,
                  verbose_labels=false)
     """
     Plot confidence intervals for mean function based on profile likelihood.
@@ -279,7 +285,7 @@ function plot_profile_wise_CI_for_mean(indep_var, lower, upper, mle,
     - true_mean: True mean function if known (optional)
     - target: Description of target parameter (optional)
     - save_dir: Directory for saving plot (default: "./")
-    - file_extension: File type for saving (default: ".pdf")
+    - fmt: File type for saving (default: :png)
     - verbose_labels: Whether to add additional information to legend (default: false)
     """
     plt = plot(indep_var, lower, lw=0, primary=false,
@@ -317,6 +323,7 @@ function plot_profile_wise_CI_for_mean(indep_var, lower, upper, mle,
     end
     
     display(plt)
-    savefig(plt, save_dir*model_name*"_mean_vs_"*indep_varname_save*"_"*target*"_profile"*file_extension)
+    gr(fmt=fmt, dpi=dpi)
+    savefig(plt, save_dir*model_name*"_mean_vs_"*indep_varname_save*"_"*target*"_profile"*".$fmt")
 
 end
