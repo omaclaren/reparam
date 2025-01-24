@@ -2,7 +2,7 @@
 # 1D Profile Visualization
 # --------------------------------------------------------
 function plot_1D_profile(model_name, ψ_values, lnlike_ψ_values, varname;
-    varname_save="", ψ_true=[], save_dir="./figures/",
+    varname_save="", ψ_true=[], ψ_MLE=[], save_dir="./figures/",
     fmt=:png, dpi=600, l_level=95)
     """
     Plot 1D profile likelihood.
@@ -14,6 +14,7 @@ function plot_1D_profile(model_name, ψ_values, lnlike_ψ_values, varname;
     - varname: Parameter name for plotting
     - varname_save: Parameter name for saving (default: varname)
     - ψ_true: True parameter value if known (optional)
+    - ψ_MLE: Maximum likelihood estimate if known (optional). If not provided will use grid max.
     - save_dir: Directory for saving plot (default: "./")
     - fmt: File type for saving (default: :png)
     - l_level: Confidence level for threshold (default: 95)
@@ -24,27 +25,29 @@ function plot_1D_profile(model_name, ψ_values, lnlike_ψ_values, varname;
 
     # Convert to likelihood scale
     like_ψ_values = exp.(lnlike_ψ_values)
-
-    # Get location of max
-    max_indices = argmax(like_ψ_values)
-    ψ_max = ψ_values[max_indices]
     
     # Create plot
     plt = plot(ψ_values, exp.(lnlike_ψ_values), 
               xlabel=latexstring(varname), 
               ylabel="profile likelihood for "*latexstring(varname),
               xlabelfontsize=14, ylabelfontsize=14,
-              color=:black, lw=2, legend=false)
+              color=:black, lw=2, legend=false, grid=false)
     
     # Add maximum likelihood line
-    vline!([ψ_max], color=:black, lw=2)
+    if length(ψ_MLE) > 0
+        vline!([ψ_MLE], color=:silver, lw=3)
+    else
+        max_indices = argmax(like_ψ_values)
+        ψ_max = ψ_values[max_indices]
+        vline!([ψ_max], color=:silver, lw=3)
+    end
     
     # Add confidence threshold
     hline!([exp(-quantile(Chisq(1),l_level/100)/2)], color=:black, lw=1)
     
     # Add true value if provided
     if length(ψ_true) > 0
-        vline!([ψ_true], color=:black, ls=:dash, lw=2)
+        vline!([ψ_true], color=:gold, ls=:dash, lw=3)
     end
     
     display(plt)
@@ -56,7 +59,7 @@ function plot_1D_profile_comparison(model_name1, model_name2,
               ψ_values1, ψ_values2,
               lnlike_ψ_values1, lnlike_ψ_values2, 
               varname;
-              varname_save="", ψ_true=[], 
+              varname_save="", ψ_true=[], ψ_MLE1=[], ψ_MLE2=[], add_model2_MLE=false,
               save_dir="./figures/", fmt=:png, dpi=600,
               l_level=95)
     """
@@ -71,6 +74,7 @@ function plot_1D_profile_comparison(model_name1, model_name2,
     - varname: Parameter name for plotting
     - varname_save: Parameter name for saving (default: varname)
     - ψ_true: True parameter value if known (optional)
+    - ψ_MLE1, ψ_MLE2: Maximum likelihood estimates if known (optional). If not provided will use grid max.
     - save_dir: Directory for saving plot (default: "./")
     - fmt: File type for saving (default: :png)
     - l_level: Confidence level for threshold (default: 95)
@@ -83,24 +87,39 @@ function plot_1D_profile_comparison(model_name1, model_name2,
     like_ψ_values1 = exp.(lnlike_ψ_values1)
     like_ψ_values2 = exp.(lnlike_ψ_values2)
     
-    # Get location of max for model 1
-    max_indices1 = argmax(like_ψ_values1)
-    ψ_max1 = ψ_values1[max_indices1]
-    
     plt = plot(ψ_values1, like_ψ_values1, 
               xlabel=latexstring(varname), 
               ylabel="profile likelihood for "*latexstring(varname),
               xlabelfontsize=14, ylabelfontsize=14,
-              color=:black, lw=2, legend=false)
+              color=:black, lw=2, legend=false, grid=false)
     
     plot!(ψ_values2, like_ψ_values2, 
           ls=:dot, color=:black, lw=2, legend=false)
+
+    if length(ψ_MLE1) > 0
+        ψ_max1 = ψ_MLE1[1]
+    else
+        # Get location of max for model 1
+        max_indices1 = argmax(like_ψ_values1)
+        ψ_max1 = ψ_values1[max_indices1]
+    end
     
-    vline!([ψ_max1], color=:black, lw=2)
+    vline!([ψ_max1], color=:silver, lw=3)
     hline!([exp(-quantile(Chisq(1),l_level/100)/2)], color=:black, lw=1)
     
     if length(ψ_true) > 0
-        vline!([ψ_true], color=:black, ls=:dash, lw=2)
+        vline!([ψ_true], color=:gold, ls=:dash, lw=3)
+    end
+
+    if add_model2_MLE
+        if length(ψ_MLE2) > 0
+            ψ_max2 = ψ_MLE2[1]
+        else
+            # Get location of max for model 2
+            max_indices2 = argmax(like_ψ_values2)
+            ψ_max2 = ψ_values2[max_indices2]
+        end
+        vline!([ψ_max2], color=:silver, lw=3, ls=:dot)
     end
     
     display(plt)
@@ -112,7 +131,7 @@ end
 # 2D Profile Visualization
 # --------------------------------------------------------
 function plot_2D_contour(model_name, ψ_values, lnlike_ψ_values, varnames;
-    ψ_true=[], save_dir="./figures/", fmt=:png, dpi=600,
+    ψ_true=[], ψ_MLE=[], save_dir="./figures/", fmt=:png, dpi=600,
     l_level=95, nshade_levels=20)
     """
     Plot 2D profile likelihood contours.
@@ -123,6 +142,7 @@ function plot_2D_contour(model_name, ψ_values, lnlike_ψ_values, varnames;
     - lnlike_ψ_values: 2D Profile log-likelihood values
     - varnames: Dictionary of parameter names for plotting/saving
     - ψ_true: True parameter values if known (optional)
+    - ψ_MLE: Maximum likelihood estimate if known (optional). If not provided will use grid max.
     - save_dir: Directory for saving plot (default: "./")
     - fmt: File type for saving (default: :png)
     - l_level: Confidence level for contours (default: 95)
@@ -143,9 +163,12 @@ function plot_2D_contour(model_name, ψ_values, lnlike_ψ_values, varnames;
     
     plt = contourf(ψ1_values, ψ2_values, like_ψ_values',
                   color=:dense, levels=nshade_levels, lw=0)
+
+    # Explicitly add colorbar
+    plot!(colorbar=true)
     
     contour!(ψ1_values, ψ2_values, like_ψ_values',
-            levels=[lstar], color=:black, colorbar=false, lw=1)
+            levels=[lstar], color=:black, lw=1, legend=false, fill = false)
     
     xlabel!(latexstring(varnames["ψ1"]), xlabelfontsize=14)
     ylabel!(latexstring(varnames["ψ2"]), ylabelfontsize=14)
@@ -153,18 +176,16 @@ function plot_2D_contour(model_name, ψ_values, lnlike_ψ_values, varnames;
     ylims!(minimum(ψ2_values), maximum(ψ2_values))
     
     # Add best and true
-    max_indices = argmax(like_ψ_values)
-    ψ1_max = ψ1_values[max_indices[1]]
-    ψ2_max = ψ2_values[max_indices[2]]
-    # vline!([ψ1_max], color=:black, lw=2, legend=false)
-    # hline!([ψ2_max], color=:black, lw=2, legend=false)
-    # marker
-    scatter!([ψ1_max], [ψ2_max], mc=:silver, msc=:match, markersize=6, markershape=:circle, legend=false)
+    if length(ψ_MLE) > 0
+        scatter!([ψ_MLE[1]], [ψ_MLE[2]], mc=:silver, msc=:match, markersize=6, markershape=:circle, legend=false)
+    else
+        max_indices = argmax(like_ψ_values)
+        ψ1_max = ψ1_values[max_indices[1]]
+        ψ2_max = ψ2_values[max_indices[2]]
+        scatter!([ψ1_max], [ψ2_max], mc=:silver, msc=:match, markersize=6, markershape=:circle, legend=false)
+    end
     
     if length(ψ_true) > 0
-        #vline!([ψ_true[1]], color=:black, ls=:dash, lw=2, legend=false)
-        #hline!([ψ_true[2]], color=:black, ls=:dash, lw=2, legend=false)
-        # add marker
         scatter!([ψ_true[1]], [ψ_true[2]], mc=:gold, msc=:match, markersize=8, markershape=:star, legend=false)
     end
     
@@ -178,7 +199,7 @@ function plot_2D_contour_comparison(model_name1, model_name2,
               ψ_values1, ψ_values2,
               lnlike_ψ_values1, lnlike_ψ_values2, 
               varnames;
-              ψ_true=[], save_dir="./figures/", fmt=:png, dpi=600,
+              ψ_true=[], ψ_MLE1=[], ψ_MLE2=[], save_dir="./figures/", fmt=:png, dpi=600,
               nshade_levels=20, l_level=95, 
               add_model2_MLE=false)
     """
@@ -192,6 +213,7 @@ function plot_2D_contour_comparison(model_name1, model_name2,
     - lnlike_ψ_values1, lnlike_ψ_values2: Profile log-likelihood values for each model
     - varnames: Dictionary of parameter names for plotting/saving
     - ψ_true: True parameter values if known (optional)
+    - ψ_MLE1, ψ_MLE2: Maximum likelihood estimates if known (optional). If not provided will use grid max.
     - save_dir: Directory for saving plot (default: "./")
     - fmt: File type for saving (default: :png)
     - nshade_levels: Number of shading levels (default: 20)
@@ -229,30 +251,29 @@ function plot_2D_contour_comparison(model_name1, model_name2,
     ylabel!(latexstring(varnames["ψ2"]), ylabelfontsize=14)
 
     # Add model 1 best 
-    max_indices1 = argmax(lnlike_ψ_values1)
-    ψ1_values1_max = ψ1_values1[max_indices1[1]]
-    ψ2_values1_max = ψ2_values1[max_indices1[2]]
-    # vline!([ψ1_values1_max], color=:black, lw=2, legend=false)
-    # hline!([ψ2_values1_max], color=:black, lw=2, legend=false)
-    # marker
-    scatter!([ψ1_values1_max], [ψ2_values1_max], mc=:silver, msc=:match, markersize=6, markershape=:circle, legend=false)
-    
+    if length(ψ_MLE1) > 0
+        scatter!([ψ_MLE1[1]], [ψ_MLE1[2]], mc=:silver, msc=:match, markersize=6, markershape=:circle, legend=false)
+    else
+        max_indices1 = argmax(like_ψ_values1)
+        ψ1_values1_max = ψ1_values1[max_indices1[1]]
+        ψ2_values1_max = ψ2_values1[max_indices1[2]]
+        scatter!([ψ1_values1_max], [ψ2_values1_max], mc=:silver, msc=:match, markersize=6, markershape=:circle, legend=false)
+    end
+        
     # Add model 2 best 
     if add_model2_MLE
-        max_indices2 = argmax(lnlike_ψ_values2)
-        ψ1_values2_max = ψ1_values2[max_indices2[1]]
-        ψ2_values2_max = ψ2_values2[max_indices2[2]]
-        # vline!([ψ1_values2_max], color=:black, lw=1, legend=false)
-        # hline!([ψ2_values2_max], color=:black, lw=1, legend=false)
-        # marker
-        scatter!([ψ1_values2_max], [ψ2_values2_max], mc=:silver, msc=:match, markersize=6, markershape=:+, legend=false)
+        if length(ψ_MLE2) > 0
+            scatter!([ψ_MLE2[1]], [ψ_MLE2[2]], mc=:silver, msc=:match, markersize=6, markershape=:circle, legend=false)
+        else
+            max_indices2 = argmax(like_ψ_values2)
+            ψ1_values2_max = ψ1_values2[max_indices2[1]]
+            ψ2_values2_max = ψ2_values2[max_indices2[2]]
+            scatter!([ψ1_values2_max], [ψ2_values2_max], mc=:silver, msc=:match, markersize=6, markershape=:circle, legend=false)
+        end
     end
 
     # Add true
     if length(ψ_true) > 0
-        # vline!([ψ_true[1]], color=:black, ls=:dash, lw=2, legend=false)
-        # hline!([ψ_true[2]], color=:black, ls=:dash, lw=2, legend=false)
-        # marker
         scatter!([ψ_true[1]], [ψ_true[2]], mc=:gold, msc=:match, markersize=8, markershape=:star, legend=false)
     end
     
