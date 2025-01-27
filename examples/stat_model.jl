@@ -21,7 +21,7 @@ Random.seed!(12)
 # Define model in xy = θ = [n, p] parameterization
 # --------------------------------------------------------
 # boolean for whether to use Poisson limit
-poisson_limit = true
+poisson_limit = false
 # Parameter -> data parameter mapping 
 if poisson_limit
     ϕ_xy = xy -> [xy[1]*xy[2], xy[1]*xy[2]] # Maps (n,p) to (np,np)
