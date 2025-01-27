@@ -21,10 +21,10 @@ Random.seed!(321)
 # Model Definition
 # --------------------------------------------------------
 
-# Define the Monod model ODE 
+# Define the Michaelis-Menten model ODE 
 function DE!(dC, C, θ, t)
     """
-    Monod model ODE definition.
+    Michaelis-Menten model ODE definition.
     
     Parameters:
     - dC: Rate of change vector (modified in-place)
@@ -38,7 +38,7 @@ end
 # ODE model solver  
 function solve_ode(t_save, θ; solver=Rodas4())
     """
-    Monod model solution: maps parameters θ to solution values 
+    Michaelis-Menten model solution: maps parameters θ to solution values 
     on the specified time grid.
     
     Parameters:
@@ -131,7 +131,7 @@ plot!(t, solve_ode(t, xy_true), label="True Solution", xlabel="Time", ylabel="Co
 
 # Construct log-likelihood in original parameterization given (iid) data
 lnlike_xy = construct_lnlike_xy(distrib_xy, data; dist_type=:multi)
-model_name = "monod_model_xy"
+model_name = "mm_model_xy"
 println(model_name)
 
 # Grid sizes for profiling
@@ -324,7 +324,7 @@ end
 # --------------------------------------------------------
 # Log Parameterization Analysis
 # --------------------------------------------------------
-model_name = "monod_model_log"
+model_name = "mm_model_log"
 println(model_name)
 
 # Coordinate transformation
@@ -517,7 +517,7 @@ end
 # --------------------------------------------------------
 # Sloppihood-Informed Parameterization Analysis
 # --------------------------------------------------------
-model_name = "monod_model_iir"
+model_name = "mm_model_iir"
 println(model_name)
 
 # Scale and round eigenvectors for iir transformation
