@@ -15,59 +15,61 @@ using Random
 using DifferentialEquations
 
 # Set random seed for reproducibility
-Random.seed!(321)
+Random.seed!(4321)
 
 # --------------------------------------------------------
 # Model Definition
 # --------------------------------------------------------
 
 # Define the Michaelis-Menten model ODE 
-function DE!(dC, C, θ, t)
+function DE!(dS, S, θ, t)
     """
     Michaelis-Menten model ODE definition.
     
     Parameters:
-    - dC: Rate of change vector (modified in-place)
-    - C: Current state vector
+    - dS: Rate of change vector (modified in-place)
+    - S: Current state vector
     - θ: Parameter vector 
     - t: Current time
     """
-    dC[1] = -θ[1]*C[1]/(θ[2] + C[1])
+    dS[1] = -θ[1]*S[1]/(θ[2] + S[1])
 end
 
 # ODE model solver  
-function solve_ode(t_save, θ; solver=Rodas4())
+function solve_ode(t_save, θ, S0; solver=Rodas4())
     """
     Michaelis-Menten model solution: maps parameters θ to solution values 
     on the specified time grid.
     
     Parameters:
+    - t_save: Time grid points
     - θ: Parameter vector
-    - t: Time grid points
+    - S0: Initial condition
     - solver: ODE solver (default: Rodas4())
     
     Returns:
     - Vector of solution values on the time grid
     """
     tspan = (0.0, maximum(t_save))
-    prob = ODEProblem(DE!, [1.0], tspan, θ)
+    prob = ODEProblem(DE!, [S0], tspan, θ)
     sol = solve(prob, solver, saveat=t_save, abstol=1e-12, reltol=1e-9)
     return sol[1, :]
 end
 
 # Creates a ϕ mapping function with fixed grid parameters
-function create_ϕ_mapping(t)
+function create_ϕ_mapping(t, S0)
     """
     Create a ϕ mapping function from model parameters to solution values
     with fixed grid parameters.
     
     Parameters:
     - t: Time grid points
+    - S0: Initial condition
     
     Returns:
     - ϕ mapping function from θ to solution values
     """
-    return θ -> solve_ode(t, θ)
+    return θ -> solve_ode(t, θ, S0)
 end
 
 # --------------------------------------------------------
@@ -87,39 +89,39 @@ obs_matrix = construct_observation_matrix(indices_obs, indices_fine)
 t_obs = t[indices_obs]
 
 # Initial condition and observation parameters
-C0 = 0.5
+S0 = 1.0
 σ = 0.05
 
 # --------------------------------------------------------
 # --- Analysis in original parameterisation and data generation ---
 # --------------------------------------------------------
 # Define ϕ mapping in original coordinates on fine grid
-ϕ_func_xy = create_ϕ_mapping(t)
+ϕ_func_xy = create_ϕ_mapping(t, S0)
 
 # Parameter -> data distribution (forward) mapping on fine grid
 solver = Rodas4()
-distrib_fine_xy = xy -> MvNormal(solve_ode(t, xy; solver=solver), σ^2*I(NT))
+distrib_fine_xy = xy -> MvNormal(solve_ode(t, xy, S0; solver=solver), σ^2*I(NT))
 
 # Parameter -> data distribution (forward) mapping on observation grid
-distrib_xy = xy -> MvNormal(solve_ode(t_obs, xy; solver=solver), σ^2*I(NT_obs))
+distrib_xy = xy -> MvNormal(solve_ode(t_obs, xy, S0; solver=solver), σ^2*I(NT_obs))
 
 # Variable names
-varnames = Dict("ψ1" => "k_1", "ψ2" => "k_2")
-varnames["ψ1_save"] = "k_1"
-varnames["ψ2_save"] = "k_2"
+varnames = Dict("ψ1" => "ν", "ψ2" => "K")
+varnames["ψ1_save"] = "nu"
+varnames["ψ2_save"] = "K" 
 
 # Parameter bounds
-k1_min, k1_max = 0.1, 10.0
-k2_min, k2_max = 0.1, 50.0
-xy_lower_bounds = [k1_min, k2_min]
-xy_upper_bounds = [k1_max, k2_max]
+ν_min, ν_max = 0.1, 10.0
+K_min, K_max = 0.1, 50.0
+xy_lower_bounds = [ν_min, K_min]
+xy_upper_bounds = [ν_max, K_max]
 
 # Initial guess for optimization
 xy_initial = 0.5 * (xy_lower_bounds + xy_upper_bounds)
 
 # True parameter
-k1_true, k2_true = 1.0, 5.0
-xy_true = [k1_true, k2_true]
+ν_true, K_true = 1.0, 5.0
+xy_true = [ν_true, K_true]
 
 # Generate data
 Nrep = 1
@@ -127,7 +129,7 @@ data = rand(distrib_xy(xy_true), Nrep)
 
 # Visualize data and true solution
 scatter(t_obs, data, label="Data")
-plot!(t, solve_ode(t, xy_true), label="True Solution", xlabel="Time", ylabel="Concentration", legend=:topleft)
+plot!(t, solve_ode(t, xy_true, S0), label="True Solution", xlabel="Time", ylabel="Concentration", legend=:topleft)
 
 # Construct log-likelihood in original parameterization given (iid) data
 lnlike_xy = construct_lnlike_xy(distrib_xy, data; dist_type=:multi)
@@ -232,7 +234,8 @@ for i in 1:dim_all
         model_name, "t", "t",
         data_indep=t_obs, data_dep=data, 
         true_mean=true_mean,
-        target=varnames["ψ"*string(i)])
+        target=varnames["ψ"*string(i)],
+        target_save=varnames["ψ"*string(i)*"_save"])
 end
 
 # 2D Profiles
@@ -317,7 +320,8 @@ for (i, j) in param_pairs
         model_name, "t", "t",
         data_indep=t_obs, data_dep=data,
         true_mean=true_mean,
-        target=current_varnames["ψ1"]*"_"*current_varnames["ψ2"])
+        target=current_varnames["ψ1"]*"_"*current_varnames["ψ2"],
+        target_save=current_varnames["ψ1_save"]*"_"*current_varnames["ψ2_save"])
 
 end
 
@@ -343,10 +347,10 @@ distrib_fine_XY_log = construct_distrib_XY(distrib_fine_xy, XYtoxy_log)
 ϕ_func_XY_log = construct_ϕ_XY(ϕ_func_xy, XYtoxy_log)
 
 # Update variable names for log coordinates
-varnames["ψ1"] = "\\ln\\ k_1"
-varnames["ψ2"] = "\\ln\\ k_2"
-varnames["ψ1_save"] = "ln_k_1"
-varnames["ψ2_save"] = "ln_k_2"
+varnames["ψ1"] = "\\ln\\ \\nu"
+varnames["ψ2"] = "\\ln\\ K"
+varnames["ψ1_save"] = "ln_nu"
+varnames["ψ2_save"] = "ln_K"
 
 # Point estimation in log coordinates
 target_indices = []  # empty for MLE
@@ -433,7 +437,8 @@ for i in 1:dim_all
         model_name, "t", "t",
         data_indep=t_obs, data_dep=data,
         true_mean=true_mean_log,
-        target=varnames["ψ"*string(i)])
+        target=varnames["ψ"*string(i)],
+        target_save=varnames["ψ"*string(i)*"_save"])
 end
 
 # 2D Profiles in log coordinates
@@ -511,7 +516,8 @@ for (i,j) in param_pairs
         model_name, "t", "t",
         data_indep=t_obs, data_dep=data,
         true_mean=true_mean_log,
-        target=current_varnames["ψ1"]*"_"*current_varnames["ψ2"])
+        target=current_varnames["ψ1"]*"_"*current_varnames["ψ2"],
+        target_save=current_varnames["ψ1_save"]*"_"*current_varnames["ψ2_save"])
 end
 
 # --------------------------------------------------------
@@ -547,8 +553,8 @@ distrib_fine_XY_iir = construct_distrib_XY(distrib_fine_xy, XYtoxy_iir)
 
 # Set bounds for iir coordinates based on transformation of original bounds
 # Note: These bounds might need manual adjustment
-XY_iir_lower_bounds = [0.05, 0.05]  # k2/k1, k1*k2
-XY_iir_upper_bounds = [10.0, 100]  # k2/k1, k1*k2
+XY_iir_lower_bounds = [0.05, 0.05]  # K/ν, ν*K
+XY_iir_upper_bounds = [10.0, 100]  # K/ν, ν*K
 
 # Initial guess for iir coordinates (manual coz non-monotonic/complex transform)
 # XY_iir_initial = xytoXY_iir(xy_initial)
@@ -571,10 +577,10 @@ end
 XY_iir_true = xytoXY_iir(xy_true)
 
 # Update variable names for iir coordinates
-varnames["ψ1"] = "\\frac{k_2}{k_1}"
-varnames["ψ2"] = "k_1k_2"
-varnames["ψ1_save"] = "k_2_over_k_1"
-varnames["ψ2_save"] = "k_1k_2"
+varnames["ψ1"] = "\\frac{K}{\\nu}"
+varnames["ψ2"] = "\\nu K"
+varnames["ψ1_save"] = "K_over_nu"
+varnames["ψ2_save"] = "nu_K"
 
 # Point estimation in iir coordinates
 target_indices = []  # empty for MLE
@@ -661,7 +667,8 @@ for i in 1:dim_all
         model_name, "t", "t",
         data_indep=t_obs, data_dep=data,
         true_mean=true_mean_iir,
-        target=varnames["ψ"*string(i)])
+        target=varnames["ψ"*string(i)],
+        target_save=varnames["ψ"*string(i)*"_save"])
 end
 
 # 2D Profiles
@@ -739,6 +746,7 @@ for (i,j) in param_pairs
         model_name, "t", "t",
         data_indep=t_obs, data_dep=data,
         true_mean=true_mean_iir,
-        target=current_varnames["ψ1"]*"_"*current_varnames["ψ2"])
+        target=current_varnames["ψ1"]*"_"*current_varnames["ψ2"],
+        target_save=current_varnames["ψ1_save"]*"_"*current_varnames["ψ2_save"])
 end
 

@@ -289,7 +289,7 @@ end
 function plot_profile_wise_CI_for_mean(indep_var, lower, upper, mle, 
                  model_name, indep_varname, indep_varname_save;
                  data_indep=nothing, data_dep=nothing, true_mean=nothing, 
-                 target="", save_dir="./figures/", fmt=:png, dpi=600,
+                 target="", target_save="", save_dir="./figures/", fmt=:png, dpi=600,
                  verbose_labels=false)
     """
     Plot confidence intervals for mean function based on profile likelihood.
@@ -304,18 +304,20 @@ function plot_profile_wise_CI_for_mean(indep_var, lower, upper, mle,
     - data_indep: Independent variable data points to overlay (optional)
     - data_dep: Dependent variable data points to overlay (optional)
     - true_mean: True mean function if known (optional)
-    - target: Description of target parameter (optional)
+    - target: Target parameter name for plotting (optional)
+    - target_save: Target parameter name for saving (optional)
     - save_dir: Directory for saving plot (default: "./")
     - fmt: File type for saving (default: :png)
     - verbose_labels: Whether to add additional information to legend (default: false)
     """
-    plt = plot(indep_var, lower, lw=0, primary=false,
+    plt = plot(indep_var, lower, lw=0,
               fillrange=upper, fillalpha=0.20, color=:purple,
               xlabel=latexstring(indep_varname),
               ylabel="profile likelihood CIs for mean",
               xlims=(indep_var[1], indep_var[end]),
-              label=latexstring("CI ("*target*")"))
-    
+              label=latexstring("CI ("*target*")"), 
+              legend=:topright, grid=false)
+
     if verbose_labels
         plot!(indep_var, mle, linecolor=:purple4, label="MLE")
     else
@@ -345,6 +347,6 @@ function plot_profile_wise_CI_for_mean(indep_var, lower, upper, mle,
     
     display(plt)
     gr(fmt=fmt, dpi=dpi)
-    savefig(plt, save_dir*model_name*"_mean_vs_"*indep_varname_save*"_"*target*"_profile"*".$fmt")
+    savefig(plt, save_dir*model_name*"_mean_vs_"*indep_varname_save*"_"*target_save*"_profile"*".$fmt")
 
 end
