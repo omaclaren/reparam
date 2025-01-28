@@ -23,3 +23,7 @@ docs/site/
 # environment.
 Manifest.toml
 .DS_Store
+
+# My own extra
+*.png
+*.svg
