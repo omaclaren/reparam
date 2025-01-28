@@ -118,7 +118,7 @@ S0 = 1.0
 # --- Analysis in original parameterisation and data generation ---
 # --------------------------------------------------------
 # Choose whether to use the limit form of the model
-limit = true
+limit = false
 
 if limit
     model_name = "mm_model_xy_limit"
@@ -259,7 +259,7 @@ for i in 1:dim_all
 
     # Prediction CIs. Use fine grid for prediction
     lower_ψ, upper_ψ, _ = construct_upper_lower_profile_wise_CIs_for_mean(
-        distrib_fine_xy, ψω_values, lnlike_ψ_values; l_level=95, df=1)
+        distrib_fine_xy, ψω_values, lnlike_ψ_values; l_level=95, df=2)
 
     plot_profile_wise_CI_for_mean(
         t, lower_ψ, upper_ψ, pred_mean_MLE,
@@ -352,7 +352,7 @@ for (i, j) in param_pairs
         model_name, "t", "t",
         data_indep=t_obs, data_dep=data,
         true_mean=true_mean,
-        target=current_varnames["ψ1"]*"_"*current_varnames["ψ2"],
+        target=current_varnames["ψ1"]*", "*current_varnames["ψ2"],
         target_save=current_varnames["ψ1_save"]*"_"*current_varnames["ψ2_save"])
 
 end
@@ -466,7 +466,7 @@ for i in 1:dim_all
 
     # Prediction CIs using fine grid distribution
     lower_ψ, upper_ψ, _ = construct_upper_lower_profile_wise_CIs_for_mean(
-        distrib_fine_XY_log, ψω_values, lnlike_ψ_values; l_level=95, df=1)
+        distrib_fine_XY_log, ψω_values, lnlike_ψ_values; l_level=95, df=2)
 
     plot_profile_wise_CI_for_mean(
         t, lower_ψ, upper_ψ, pred_mean_MLE_log,
@@ -552,7 +552,7 @@ for (i,j) in param_pairs
         model_name, "t", "t",
         data_indep=t_obs, data_dep=data,
         true_mean=true_mean_log,
-        target=current_varnames["ψ1"]*"_"*current_varnames["ψ2"],
+        target=current_varnames["ψ1"]*", "*current_varnames["ψ2"],
         target_save=current_varnames["ψ1_save"]*"_"*current_varnames["ψ2_save"])
 end
 
@@ -700,7 +700,7 @@ for i in 1:dim_all
 
     # Prediction CIs using fine grid distribution
     lower_ψ, upper_ψ, _ = construct_upper_lower_profile_wise_CIs_for_mean(
-        distrib_fine_XY_iir, ψω_values, lnlike_ψ_values; l_level=95, df=1)
+        distrib_fine_XY_iir, ψω_values, lnlike_ψ_values; l_level=95, df=2)
 
     plot_profile_wise_CI_for_mean(
         t, lower_ψ, upper_ψ, pred_mean_MLE_iir,
@@ -786,7 +786,7 @@ for (i,j) in param_pairs
         model_name, "t", "t",
         data_indep=t_obs, data_dep=data,
         true_mean=true_mean_iir,
-        target=current_varnames["ψ1"]*"_"*current_varnames["ψ2"],
+        target=current_varnames["ψ1"]*", "*current_varnames["ψ2"],
         target_save=current_varnames["ψ1_save"]*"_"*current_varnames["ψ2_save"])
 end
 

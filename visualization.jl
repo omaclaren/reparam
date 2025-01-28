@@ -339,9 +339,9 @@ function plot_profile_wise_CI_for_mean(indep_var, lower, upper, mle,
     
     if !isnothing(true_mean)
         if verbose_labels
-            plot!(indep_var, true_mean, linecolor=:black, linestyle=:dash, label="Truth")
+            plot!(indep_var, true_mean, linecolor=:gold, linestyle=:dash, label="Truth")
         else
-            plot!(indep_var, true_mean, linecolor=:black, linestyle=:dash, label="")
+            plot!(indep_var, true_mean, linecolor=:gold, linestyle=:dash, label="")
         end
     end
     
