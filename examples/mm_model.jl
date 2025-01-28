@@ -32,11 +32,26 @@ function DE!(dS, S, θ, t)
     - θ: Parameter vector 
     - t: Current time
     """
+
     dS[1] = -θ[1]*S[1]/(θ[2] + S[1])
 end
 
+# Define the Michaelis-Menten model ODE: limit form
+function DE_limit!(dS, S, θ, t)
+    """
+    Michaelis-Menten model ODE definition for limit.
+    
+    Parameters:
+    - dS: Rate of change vector (modified in-place)
+    - S: Current state vector
+    - θ: Parameter vector 
+    - t: Current time
+    """
+    dS[1] = -θ[1]*S[1]/(θ[2])
+end
+
 # ODE model solver  
-function solve_ode(t_save, θ, S0; solver=Rodas4())
+function solve_ode(t_save, θ, S0; solver=Rodas4(), limit=false)
     """
     Michaelis-Menten model solution: maps parameters θ to solution values 
     on the specified time grid.
@@ -46,18 +61,24 @@ function solve_ode(t_save, θ, S0; solver=Rodas4())
     - θ: Parameter vector
     - S0: Initial condition
     - solver: ODE solver (default: Rodas4())
+    - limit: Whether to use the limit form of the model (default: false)
     
     Returns:
     - Vector of solution values on the time grid
     """
     tspan = (0.0, maximum(t_save))
-    prob = ODEProblem(DE!, [S0], tspan, θ)
+    if limit
+        ODE = DE_limit!
+    else
+        ODE = DE!
+    end
+    prob = ODEProblem(ODE, [S0], tspan, θ)
     sol = solve(prob, solver, saveat=t_save, abstol=1e-12, reltol=1e-9)
     return sol[1, :]
 end
 
 # Creates a ϕ mapping function with fixed grid parameters
-function create_ϕ_mapping(t, S0)
+function create_ϕ_mapping(t, S0; limit=false)
     """
     Create a ϕ mapping function from model parameters to solution values
     with fixed grid parameters.
@@ -65,11 +86,12 @@ function create_ϕ_mapping(t, S0)
     Parameters:
     - t: Time grid points
     - S0: Initial condition
+    - limit: Whether to use the limit form of the model (default: false)
     
     Returns:
     - ϕ mapping function from θ to solution values
     """
-    return θ -> solve_ode(t, θ, S0)
+    return θ -> solve_ode(t, θ, S0; limit=limit)
 end
 
 # --------------------------------------------------------
@@ -95,15 +117,25 @@ S0 = 1.0
 # --------------------------------------------------------
 # --- Analysis in original parameterisation and data generation ---
 # --------------------------------------------------------
+# Choose whether to use the limit form of the model
+limit = false
+
+if limit
+    model_name = "mm_model_xy_limit"
+else
+    model_name = "mm_model_xy"
+end
+println(model_name)
+
 # Define ϕ mapping in original coordinates on fine grid
-ϕ_func_xy = create_ϕ_mapping(t, S0)
+ϕ_func_xy = create_ϕ_mapping(t, S0; limit=limit)
 
 # Parameter -> data distribution (forward) mapping on fine grid
 solver = Rodas4()
-distrib_fine_xy = xy -> MvNormal(solve_ode(t, xy, S0; solver=solver), σ^2*I(NT))
+distrib_fine_xy = xy -> MvNormal(solve_ode(t, xy, S0; solver=solver, limit=limit), σ^2*I(NT))
 
 # Parameter -> data distribution (forward) mapping on observation grid
-distrib_xy = xy -> MvNormal(solve_ode(t_obs, xy, S0; solver=solver), σ^2*I(NT_obs))
+distrib_xy = xy -> MvNormal(solve_ode(t_obs, xy, S0; solver=solver, limit=limit), σ^2*I(NT_obs))
 
 # Variable names
 varnames = Dict("ψ1" => "ν", "ψ2" => "K")
@@ -133,8 +165,6 @@ plot!(t, solve_ode(t, xy_true, S0), label="True Solution", xlabel="Time", ylabel
 
 # Construct log-likelihood in original parameterization given (iid) data
 lnlike_xy = construct_lnlike_xy(distrib_xy, data; dist_type=:multi)
-model_name = "mm_model_xy"
-println(model_name)
 
 # Grid sizes for profiling
 grid_steps = [500]
@@ -328,7 +358,11 @@ end
 # --------------------------------------------------------
 # Log Parameterization Analysis
 # --------------------------------------------------------
-model_name = "mm_model_log"
+if limit
+    model_name = "mm_model_log_limit"
+else
+    model_name = "mm_model_log"
+end
 println(model_name)
 
 # Coordinate transformation
@@ -523,17 +557,27 @@ end
 # --------------------------------------------------------
 # Sloppihood-Informed Parameterization Analysis
 # --------------------------------------------------------
-model_name = "mm_model_iir"
+if limit
+    model_name = "mm_model_iir_limit"
+else
+    model_name = "mm_model_iir"
+end
 println(model_name)
 
 # Scale and round eigenvectors for iir transformation
 # Option 1: based on eigenvectors from Fisher Information
 # Option 2: based on the right singular vectors from the phi mapping
 use_singular_vectors = true
-if use_singular_vectors
-    evecs_scaled = scale_and_round(Vt_XY_log; column_scales=[1,1])
+# signs may be flipped for limit model, so make consistent.
+if limit 
+    column_scales = [-1, 1]
 else
-    evecs_scaled = scale_and_round(evecs_log; column_scales=[1,1])
+    column_scales = [1, 1]
+end
+if use_singular_vectors
+    evecs_scaled = scale_and_round(Vt_XY_log; column_scales=column_scales)
+else
+    evecs_scaled = scale_and_round(evecs_log; column_scales=column_scales)
 end
 
 println("Transformations:")
