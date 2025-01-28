@@ -35,7 +35,7 @@ The codebase is organized as:
 
 ### Examples
 - `diffusion_model.jl` - Demonstration of parameter identifiability analysis for a diffusion model
-- `monod_model.jl` - Example using the Monod/Michaelis-Menten model
+- `mm_model.jl` - Example using the Michaelis-Menten/Monod model
 - `stat_model.jl` - Simple statistical model example 
 
 ### Implementation Files
@@ -76,7 +76,7 @@ The repository includes several examples demonstrating the methods:
    - Demonstrates basic structural and practical parameter identifiability analysis for model with vector output on a fine grid and coarser observation grid
    - Includes predictive uncertainty quantification
 
-3. Monod Model (`monod_model.jl`)
+3. Michaelis-Menten Model (`mm_model.jl`)
    - Similar to diffusion example but includes the use of an ODE solver as part of model definition
 
 Each example includes:
