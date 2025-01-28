@@ -118,7 +118,7 @@ S0 = 1.0
 # --- Analysis in original parameterisation and data generation ---
 # --------------------------------------------------------
 # Choose whether to use the limit form of the model
-limit = false
+limit = true
 
 if limit
     model_name = "mm_model_xy_limit"
@@ -155,9 +155,11 @@ xy_initial = 0.5 * (xy_lower_bounds + xy_upper_bounds)
 ν_true, K_true = 1.0, 5.0
 xy_true = [ν_true, K_true]
 
-# Generate data
-Nrep = 1
-data = rand(distrib_xy(xy_true), Nrep)
+# Generate new data
+# Nrep = 1
+# data = rand(distrib_xy(xy_true), Nrep)
+# Use saved realisation for reproducibility
+data = [1.04, 0.66, 0.50, 0.36, 0.28, 0.18, 0.01, 0.08, 0.02, 0.07, 0.05]
 
 # Visualize data and true solution
 scatter(t_obs, data, label="Data")
@@ -568,16 +570,10 @@ println(model_name)
 # Option 1: based on eigenvectors from Fisher Information
 # Option 2: based on the right singular vectors from the phi mapping
 use_singular_vectors = true
-# signs may be flipped for limit model, so make consistent.
-if limit 
-    column_scales = [-1, 1]
-else
-    column_scales = [1, 1]
-end
 if use_singular_vectors
-    evecs_scaled = scale_and_round(Vt_XY_log; column_scales=column_scales)
+    evecs_scaled = scale_and_round(Vt_XY_log; column_scales=[1,1])
 else
-    evecs_scaled = scale_and_round(evecs_log; column_scales=column_scales)
+    evecs_scaled = scale_and_round(evecs_log; column_scales=[1,1])
 end
 
 println("Transformations:")
