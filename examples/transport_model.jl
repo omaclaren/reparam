@@ -41,15 +41,15 @@ function solve_model(θ, x, L)
     α = θ[3]*L/(2*θ[2])-β/L
     
     # Solution in each region
-    Φ_1(x) = -θ[3]/(2*θ[1])*x^2 + α*x
-    Φ_2(x) = -θ[3]/(2*θ[2])*x^2 + α*x + β
+    H_1(x) = -θ[3]/(2*θ[1])*x^2 + α*x
+    H_2(x) = -θ[3]/(2*θ[2])*x^2 + α*x + β
     
     # Evaluate solution in each region
     for i in 1:mid_index 
-        y[i] = Φ_1(x[i])
+        y[i] = H_1(x[i])
     end 
     for i in mid_index:length(x) 
-        y[i] = Φ_2(x[i])
+        y[i] = H_2(x[i])
     end 
     return y
 end
@@ -80,8 +80,8 @@ x = LinRange(0, L, 201)
 indices_fine = 1:length(x)
 
 # Observation grid and matrix
-n_steps = 10
-indices_obs = 0+n_steps:n_steps:length(x)-n_steps
+obs_step_size = 10
+indices_obs = 0+obs_step_size:obs_step_size:length(x)-obs_step_size
 obs_matrix = construct_observation_matrix(indices_obs, indices_fine)
 # Option 1. Use matrix multiplication to get the observation points
 # x_obs = obs_matrix * x
