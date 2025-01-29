@@ -21,12 +21,12 @@ Random.seed!(1)
 # --------------------------------------------------------
 function solve_model(θ, x, L)
     """
-    Diffusion model solution: maps parameters θ = [D₁, D₂, R]
+    transport model solution: maps parameters θ = [T₁, T₂, R]
     to solution values on the specified spatial grid. Basis for 
     the ϕ mapping function.
     
     Parameters:
-    - θ: Vector θ = [D₁, D₂, R] of diffusion and source parameters
+    - θ: Vector θ = [T₁, T₂, R] of transport and source parameters
     - x: Spatial grid points
     - L: Domain length
     
@@ -90,7 +90,7 @@ x_obs = x[indices_obs]
 
 # --------------------------------------------------------
 # Original Parameterization Analysis and Data Generation
-# Define xy = θ = [D₁, D₂, R]
+# Define xy = θ = [T₁, T₂, R]
 # --------------------------------------------------------
 
 # Define ϕ mapping function for fine grid
@@ -107,25 +107,25 @@ distrib_xy = xy -> MvLogNormal(log.(abs.(ϕ_func_xy(xy)[indices_obs])), σ^2*I(l
 distrib_fine_xy = xy -> MvLogNormal(log.(abs.(ϕ_func_xy(xy))), σ^2*I(length(x)))
 
 # Variables and bounds
-varnames = Dict("ψ1" => "D_1", "ψ2" => "D_2", "ψ3" => "R")
-varnames["ψ1_save"] = "D_1"
-varnames["ψ2_save"] = "D_2"
+varnames = Dict("ψ1" => "T_1", "ψ2" => "T_2", "ψ3" => "R")
+varnames["ψ1_save"] = "T_1"
+varnames["ψ2_save"] = "T_2"
 varnames["ψ3_save"] = "R"
 
 # Parameter bounds
-D_1_min, D_1_max = 0.1, 5.0
-D_2_min, D_2_max = 0.1, 5.0
+T_1_min, T_1_max = 0.1, 5.0
+T_2_min, T_2_max = 0.1, 5.0
 R_min, R_max = 0.1, 5.0
 
-xy_lower_bounds = [D_1_min, D_2_min, R_min]
-xy_upper_bounds = [D_1_max, D_2_max, R_max]
+xy_lower_bounds = [T_1_min, T_2_min, R_min]
+xy_upper_bounds = [T_1_max, T_2_max, R_max]
 
 # Initial guess for optimisation
 xy_initial = 0.5 * (xy_lower_bounds + xy_upper_bounds)
 
 # True parameter
-D_1_true, D_2_true, R_true = 3.0, 1.0, 1.0
-xy_true = [D_1_true, D_2_true, R_true]
+T_1_true, T_2_true, R_true = 3.0, 1.0, 1.0
+xy_true = [T_1_true, T_2_true, R_true]
 
 # Generate data
 Nrep = 1
@@ -136,7 +136,7 @@ scatter(x_obs, data)
 
 # Construct likelihood
 lnlike_xy = construct_lnlike_xy(distrib_xy, data; dist_type=:multi)
-model_name = "diffusion_xy"
+model_name = "transport_xy"
 print(model_name*"\n")
 
 grid_steps = [500]
@@ -334,7 +334,7 @@ end
 # --------------------------------------------------------
 # Log Parameterization Analysis
 # --------------------------------------------------------
-model_name = "diffusion_log"
+model_name = "transport_log"
 print(model_name*"\n")
 
 # Coordinate transformation
@@ -354,11 +354,11 @@ distrib_fine_XY_log = construct_distrib_XY(distrib_fine_xy, XYtoxy_log)
 ϕ_func_XY_log = construct_ϕ_XY(ϕ_func_xy, XYtoxy_log)
 
 # Update variable names for log coordinates
-varnames["ψ1"] = "\\ln\\ D_1"
-varnames["ψ2"] = "\\ln\\ D_2"
+varnames["ψ1"] = "\\ln\\ T_1"
+varnames["ψ2"] = "\\ln\\ T_2"
 varnames["ψ3"] = "\\ln\\ R"
-varnames["ψ1_save"] = "ln_D_1"
-varnames["ψ2_save"] = "ln_D_2"
+varnames["ψ1_save"] = "ln_T_1"
+varnames["ψ2_save"] = "ln_T_2"
 varnames["ψ3_save"] = "ln_R"
 
 # Point estimation in log coordinates
@@ -543,7 +543,7 @@ end
 # --------------------------------------------------------
 # Sloppihood-Informed Parameterization Analysis
 # --------------------------------------------------------
-model_name = "diffusion_iir"
+model_name = "transport_iir"
 print(model_name*"\n")
 
 # Scale and round eigenvectors for iir transformation
@@ -579,19 +579,19 @@ XY_iir_true = xytoXY_iir(xy_true)
 
 # Update variable names for iir coordinates
 if use_singular_vectors
-    varnames["ψ1"] = "\\frac{D_2}{R}"
-    varnames["ψ2"] = "\\frac{D_1}{\\sqrt{D_2R}}"
-    varnames["ψ3"] = "D_1 D_2 R"
-    varnames["ψ1_save"] = "D_2_over_R"
-    varnames["ψ2_save"] = "D_1_over_sqrt_D_2_R"
-    varnames["ψ3_save"] = "D_1_D_2_R"
+    varnames["ψ1"] = "\\frac{T_2}{R}"
+    varnames["ψ2"] = "\\frac{T_1}{\\sqrt{T_2R}}"
+    varnames["ψ3"] = "T_1 T_2 R"
+    varnames["ψ1_save"] = "T_2_over_R"
+    varnames["ψ2_save"] = "T_1_over_sqrt_T_2_R"
+    varnames["ψ3_save"] = "T_1_T_2_R"
 else
-    varnames["ψ1"] = "\\frac{D_2}{R}"
-    varnames["ψ2"] = "\\frac{D_1}{\\sqrt{D_2R}}"
-    varnames["ψ3"] = "D_1 D_2 R"
-    varnames["ψ1_save"] = "D_2_over_R"*"_approx"
-    varnames["ψ2_save"] = "D_1_over_sqrt_D_2_R"*"_approx"
-    varnames["ψ3_save"] = "D_1_D_2_R"*"_approx"
+    varnames["ψ1"] = "\\frac{T_2}{R}"
+    varnames["ψ2"] = "\\frac{T_1}{\\sqrt{T_2R}}"
+    varnames["ψ3"] = "T_1 T_2 R"
+    varnames["ψ1_save"] = "T_2_over_R"*"_approx"
+    varnames["ψ2_save"] = "T_1_over_sqrt_T_2_R"*"_approx"
+    varnames["ψ3_save"] = "T_1_T_2_R"*"_approx"
 end
 
 # Point estimation in iir coordinates

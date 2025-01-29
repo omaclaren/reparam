@@ -34,7 +34,7 @@ The codebase is organized as:
 - `ReparamTools.jl` - The primary module that users interact with, providing the interface for parameter transformations, identifiability analysis, and likelihood-based inference
 
 ### Examples
-- `diffusion_model.jl` - Demonstration of parameter identifiability analysis for a diffusion model
+- `transport_model.jl` - Demonstration of parameter identifiability analysis for a transport model (diffusive flow in composite medium)
 - `mm_model.jl` - Example using the Michaelis-Menten/Monod model
 - `stat_model.jl` - Simple statistical model example 
 
@@ -72,7 +72,7 @@ The repository includes several examples demonstrating the methods:
 1. Statistical Model Example (`stat_model.jl`)
    - Demonstrates basic structural and practical parameter identifiability analysis for model with scalar output
 
-2. Diffusion Model (`diffusion_model.jl`)
+2. Transport Model (`transport_model.jl`)
    - Demonstrates basic structural and practical parameter identifiability analysis for model with vector output on a fine grid and coarser observation grid
    - Includes predictive uncertainty quantification
 
