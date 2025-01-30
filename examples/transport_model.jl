@@ -233,13 +233,14 @@ for i in 1:dim_all
 
     # Prediction CIs. Use fine grid distribution for prediction
     lower_ψ, upper_ψ, _ = construct_upper_lower_profile_wise_CIs_for_mean(
-        distrib_fine_xy, ψω_values, lnlike_ψ_values; l_level=95, df=1)
+        distrib_fine_xy, ψω_values, lnlike_ψ_values; l_level=95, df=2)
 
     plot_profile_wise_CI_for_mean(
         x, lower_ψ, upper_ψ, pred_mean_MLE,
         model_name, "x", "x", data_indep=x_obs,
         data_dep=data, true_mean=true_mean,
-        target=varnames["ψ"*string(i)])
+        target=varnames["ψ"*string(i)],
+        target_save=varnames["ψ"*string(i)*"_save"])
 end
 
 # 2D Profiles
@@ -328,7 +329,8 @@ for (i,j) in param_pairs
         model_name, "x", "x",
         data_indep=x_obs, data_dep=data,
         true_mean=true_mean,
-        target=current_varnames["ψ1"]*", "*current_varnames["ψ2"])
+        target=current_varnames["ψ1"]*", "*current_varnames["ψ2"],
+        target_save=current_varnames["ψ1_save"]*"_"*current_varnames["ψ2_save"])
 end
 
 # --------------------------------------------------------
@@ -446,13 +448,14 @@ for i in 1:dim_all
 
     # Prediction CIs using distribution on fine grid
     lower_ψ, upper_ψ, _ = construct_upper_lower_profile_wise_CIs_for_mean(
-        distrib_fine_XY_log, ψω_values, lnlike_ψ_values; l_level=95, df=1)
+        distrib_fine_XY_log, ψω_values, lnlike_ψ_values; l_level=95, df=2)
 
     plot_profile_wise_CI_for_mean(
         x, lower_ψ, upper_ψ, pred_mean_MLE_log,
         model_name, "x", "x", data_indep=x_obs,
         data_dep=data, true_mean=true_mean_log,
-        target=varnames["ψ"*string(i)])
+        target=varnames["ψ"*string(i)],
+        target_save=varnames["ψ"*string(i)*"_save"])
 end
 
 # 2D Profiles in log coordinates
@@ -537,7 +540,8 @@ for (i,j) in param_pairs
         model_name, "x", "x",
         data_indep=x_obs, data_dep=data,
         true_mean=true_mean_log,
-        target=current_varnames["ψ1"]*", "*current_varnames["ψ2"])
+        target=current_varnames["ψ1"]*", "*current_varnames["ψ2"],
+        target_save=current_varnames["ψ1_save"]*"_"*current_varnames["ψ2_save"])
 end
 
 # --------------------------------------------------------
@@ -678,13 +682,14 @@ for i in 1:dim_all
 
     # Prediction CIs using distribution on fine grid
     lower_ψ, upper_ψ, _ = construct_upper_lower_profile_wise_CIs_for_mean(
-        distrib_fine_XY_iir, ψω_values, lnlike_ψ_values; l_level=95, df=1)
+        distrib_fine_XY_iir, ψω_values, lnlike_ψ_values; l_level=95, df=2)
 
     plot_profile_wise_CI_for_mean(
         x, lower_ψ, upper_ψ, pred_mean_MLE_iir,
         model_name, "x", "x", data_indep=x_obs,
         data_dep=data, true_mean=true_mean_iir,
-        target=varnames["ψ"*string(i)])
+        target=varnames["ψ"*string(i)],
+        target_save=varnames["ψ"*string(i)*"_save"])
 end
 
 # 2D Profiles in iir coordinates
@@ -769,5 +774,6 @@ for (i,j) in param_pairs
         model_name, "x", "x",
         data_indep=x_obs, data_dep=data,
         true_mean=true_mean_iir,
-        target=current_varnames["ψ1"]*", "*current_varnames["ψ2"])
+        target=current_varnames["ψ1"]*", "*current_varnames["ψ2"],
+        target_save=current_varnames["ψ1_save"]*"_"*current_varnames["ψ2_save"])
 end
