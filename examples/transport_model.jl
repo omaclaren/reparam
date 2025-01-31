@@ -547,18 +547,44 @@ end
 # --------------------------------------------------------
 # Sloppihood-Informed Parameterization Analysis
 # --------------------------------------------------------
-model_name = "transport_iir"
+use_analytical_basis = false
+if use_analytical_basis
+    model_name = "transport_analytical"
+    evecs_scaled = [[0, 1, -1] [1, 0, -1] [1, 1, 1]]
+    # Update variable names for analytical coordinates
+    varnames["ψ1"] = "\\frac{T_2}{R}"
+    varnames["ψ2"] = "\\frac{T_1}{R}"
+    varnames["ψ3"] = "T_1 T_2 R"
+    varnames["ψ1_save"] = "T_2_over_R"
+    varnames["ψ2_save"] = "T_1_over_R"
+    varnames["ψ3_save"] = "T_1_T_2_R"
+else
+    model_name = "transport_iir"
+    # Scale and round eigenvectors for iir transformation
+    # Option 1. based on the eigenvalues and eigenvectors from the log parameterization
+    # Option 2. based on the right singular vectors from the log parameterization
+    use_singular_vectors = true
+    # Update variable names for iir coordinates
+    if use_singular_vectors
+        evecs_scaled = scale_and_round(Vt_XY_log; round_within=0.5, column_scales=[1,1,1])
+        varnames["ψ1"] = "\\frac{T_2}{R}"
+        varnames["ψ2"] = "\\frac{T_1}{\\sqrt{T_2R}}"
+        varnames["ψ3"] = "T_1 T_2 R"
+        varnames["ψ1_save"] = "T_2_over_R"
+        varnames["ψ2_save"] = "T_1_over_sqrt_T_2_R"
+        varnames["ψ3_save"] = "T_1_T_2_R"
+    else
+        evecs_scaled = scale_and_round(evecs_log; round_within=0.5, column_scales=[1,1,1])
+        varnames["ψ1"] = "\\frac{T_2}{R}"
+        varnames["ψ2"] = "\\frac{T_1}{\\sqrt{T_2R}}"
+        varnames["ψ3"] = "T_1 T_2 R"
+        varnames["ψ1_save"] = "T_2_over_R"*"_approx"
+        varnames["ψ2_save"] = "T_1_over_sqrt_T_2_R"*"_approx"
+        varnames["ψ3_save"] = "T_1_T_2_R"*"_approx"
+    end
+end
 print(model_name*"\n")
 
-# Scale and round eigenvectors for iir transformation
-# Option 1. based on the eigenvalues and eigenvectors from the log parameterization
-# Option 2. based on the right singular vectors from the log parameterization
-use_singular_vectors = true
-if use_singular_vectors
-    evecs_scaled = scale_and_round(Vt_XY_log; round_within=0.5, column_scales=[1,1,1])
-else
-    evecs_scaled = scale_and_round(evecs_log; round_within=0.5, column_scales=[1,1,1])
-end
 println("Transformations:")
 display(evecs_scaled)
 display(inv(evecs_scaled))
@@ -580,23 +606,6 @@ XY_iir_lower_bounds = [0.5, 0.0001, 0.00001]
 XY_iir_upper_bounds = [1.5, 10, 1000]
 XY_iir_initial = [1.0, 1.0, 10.0]
 XY_iir_true = xytoXY_iir(xy_true)
-
-# Update variable names for iir coordinates
-if use_singular_vectors
-    varnames["ψ1"] = "\\frac{T_2}{R}"
-    varnames["ψ2"] = "\\frac{T_1}{\\sqrt{T_2R}}"
-    varnames["ψ3"] = "T_1 T_2 R"
-    varnames["ψ1_save"] = "T_2_over_R"
-    varnames["ψ2_save"] = "T_1_over_sqrt_T_2_R"
-    varnames["ψ3_save"] = "T_1_T_2_R"
-else
-    varnames["ψ1"] = "\\frac{T_2}{R}"
-    varnames["ψ2"] = "\\frac{T_1}{\\sqrt{T_2R}}"
-    varnames["ψ3"] = "T_1 T_2 R"
-    varnames["ψ1_save"] = "T_2_over_R"*"_approx"
-    varnames["ψ2_save"] = "T_1_over_sqrt_T_2_R"*"_approx"
-    varnames["ψ3_save"] = "T_1_T_2_R"*"_approx"
-end
 
 # Point estimation in iir coordinates
 target_indices = []  # empty for MLE
