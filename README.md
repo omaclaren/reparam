@@ -19,12 +19,17 @@ This package requires Julia 1.0 or higher. Install the required packages:
 using Pkg
 Pkg.add([
     "Distributions", 
-    "LinearAlgebra",
     "ForwardDiff",
+    "LaTeXStrings",
+    "Measures",
     "NLopt",
     "Plots"
 ])
 ```
+
+This package also uses the following standard libraries:
+* `LinearAlgebra`
+* `SparseArrays`
 
 ## Structure
 

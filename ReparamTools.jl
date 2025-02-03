@@ -7,6 +7,7 @@ using ForwardDiff
 using NLopt
 using Plots
 using LaTeXStrings
+using Measures
 
 # Include component files
 include("utils.jl")

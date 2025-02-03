@@ -237,7 +237,7 @@ for i in 1:dim_all
 
     plot_profile_wise_CI_for_mean(
         x, lower_ψ, upper_ψ, pred_mean_MLE,
-        model_name, "x", "x", data_indep=x_obs,
+        model_name, "h", "x", "x", data_indep=x_obs,
         data_dep=data, true_mean=true_mean,
         target=varnames["ψ"*string(i)],
         target_save=varnames["ψ"*string(i)*"_save"])
@@ -326,7 +326,7 @@ for (i,j) in param_pairs
 
     plot_profile_wise_CI_for_mean(
         x, lower_ψ1ψ2, upper_ψ1ψ2, pred_mean_MLE,
-        model_name, "x", "x",
+        model_name, "h", "x", "x",
         data_indep=x_obs, data_dep=data,
         true_mean=true_mean,
         target=current_varnames["ψ1"]*", "*current_varnames["ψ2"],
@@ -452,7 +452,7 @@ for i in 1:dim_all
 
     plot_profile_wise_CI_for_mean(
         x, lower_ψ, upper_ψ, pred_mean_MLE_log,
-        model_name, "x", "x", data_indep=x_obs,
+        model_name, "h", "x", "x", data_indep=x_obs,
         data_dep=data, true_mean=true_mean_log,
         target=varnames["ψ"*string(i)],
         target_save=varnames["ψ"*string(i)*"_save"])
@@ -537,7 +537,7 @@ for (i,j) in param_pairs
 
     plot_profile_wise_CI_for_mean(
         x, lower_ψ1ψ2, upper_ψ1ψ2, pred_mean_MLE_log,
-        model_name, "x", "x",
+        model_name, "h", "x", "x",
         data_indep=x_obs, data_dep=data,
         true_mean=true_mean_log,
         target=current_varnames["ψ1"]*", "*current_varnames["ψ2"],
@@ -695,7 +695,7 @@ for i in 1:dim_all
 
     plot_profile_wise_CI_for_mean(
         x, lower_ψ, upper_ψ, pred_mean_MLE_iir,
-        model_name, "x", "x", data_indep=x_obs,
+        model_name, "h", "x", "x", data_indep=x_obs,
         data_dep=data, true_mean=true_mean_iir,
         target=varnames["ψ"*string(i)],
         target_save=varnames["ψ"*string(i)*"_save"])
@@ -780,7 +780,7 @@ for (i,j) in param_pairs
 
     plot_profile_wise_CI_for_mean(
         x, lower_ψ1ψ2, upper_ψ1ψ2, pred_mean_MLE_iir,
-        model_name, "x", "x",
+        model_name, "h", "x", "x",
         data_indep=x_obs, data_dep=data,
         true_mean=true_mean_iir,
         target=current_varnames["ψ1"]*", "*current_varnames["ψ2"],
