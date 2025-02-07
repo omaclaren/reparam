@@ -2,14 +2,15 @@
 # Set default plotting style options
 # --------------------------------------------------------
 default(
-    xguidefontsize=14,
-    yguidefontsize=14,
-    xtickfontsize=12,
-    ytickfontsize=12,
-    xlabelfontsize=14,
-    ylabelfontsize=14,
-    legendfontsize=10,
-    margin=2.5mm
+    xguidefontsize=24,
+    yguidefontsize=24,
+    xtickfontsize=16,
+    ytickfontsize=16,
+    legendfontsize=16,
+    bottom_margin=6mm,
+    left_margin=6mm,
+    top_margin=4.5mm,
+    right_margin=4.5mm
 )
 
 # --------------------------------------------------------
@@ -43,7 +44,7 @@ function plot_1D_profile(model_name, ψ_values, lnlike_ψ_values, varname;
     # Create plot
     plt = plot(ψ_values, exp.(lnlike_ψ_values), 
               xlabel=latexstring(varname), 
-              ylabel="profile likelihood for "*latexstring(varname),
+              ylabel="profile likelihood",
               color=:black, lw=2, legend=false, grid=false)
     
     # Add maximum likelihood line
@@ -102,7 +103,7 @@ function plot_1D_profile_comparison(model_name1, model_name2,
     
     plt = plot(ψ_values1, like_ψ_values1, 
               xlabel=latexstring(varname), 
-              ylabel="profile likelihood for "*latexstring(varname),
+              ylabel="profile likelihood",
               color=:black, lw=2, legend=false, grid=false)
     
     plot!(ψ_values2, like_ψ_values2, 
