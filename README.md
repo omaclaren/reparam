@@ -1,6 +1,6 @@
 # Invariant Image Reparameterisation
 
-This repository contains a Julia implementation of methods described in "Invariant Image Reparameterisation: A Unified Approach to Structural and Practical Identifiability and Model Reduction". A preprint is available from arxiv.org/abs/2502.04867, and a working version of the paper is available in the repository under docs. The docs also contain some presentation slides from The Joint Meeting of the New Zealand, Australian and American Mathematical Societies (2024). 
+This repository contains a Julia implementation of methods described in "Invariant Image Reparameterisation: A Unified Approach to Structural and Practical Identifiability and Model Reduction". A preprint is available from [arxiv.org/abs/2502.04867](arxiv.org/abs/2502.04867), and a working version of the paper is available in the repository under docs. The docs also contain some presentation slides from The Joint Meeting of the New Zealand, Australian and American Mathematical Societies (2024). 
 
 ## Overview
 
