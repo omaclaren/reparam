@@ -27,3 +27,4 @@ Manifest.toml
 # My own extra
 *.png
 *.svg
+revision_notes/
