@@ -254,6 +254,7 @@ println("\nComparison of eigenvectors (1) and singular vectors (2):")
 display(evecs_log)
 display(Vt_XY_log)
 
+
 for i in 1:dim_all
     target_index = i
     nuisance_indices = setdiff(indices_all, target_index)
