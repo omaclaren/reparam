@@ -348,34 +348,133 @@ for (i,j) in param_pairs
 end
 
 # --------------------------------------------------------
-# Sloppihood-Informed Parameterization Analysis
+# Invariant Subspace Analysis in Log Coordinates
+# --------------------------------------------------------
+
+println("\n" * "="^60)
+println("Invariant Subspace Analysis (Algorithm 1 from Paper)")
+println("="^60)
+
+# Apply find_invariant_subspace as described in Algorithm 1
+# This implements the "Initial-Extract-Final" approach:
+# 1. Local SVD to find candidate null space basis V_0
+# 2. Higher-order invariance test via Hessian to separate invariant/non-invariant
+# 3. Construction of final reparameterization matrix
+
+S_inv, N_inv, N_perp_inv, rank_inv = find_invariant_subspace(ϕ_XY_log, XY_log_MLE)
+
+println("\nJacobian Analysis:")
+println("  Singular values: ", S_inv)
+println("  Numerical rank: ", rank_inv, " / ", length(XY_log_MLE))
+println("  Dimension of invariant null space (N): ", size(N_inv, 2))
+println("  Dimension of identifiable space (N_perp): ", size(N_perp_inv, 2))
+
+# Determine type of reparameterization
+if size(N_inv, 2) == 0
+    println("\n✓ Full null space is invariant")
+    println("  → MINIMAL IMAGE reparameterization")
+    println("  → Maximum model reduction achieved")
+    reparam_type = "minimal_image"
+elseif size(N_inv, 2) > 0 && size(N_inv, 2) < length(XY_log_MLE)
+    println("\n⚠ Partial null space is invariant (dimension ", size(N_inv, 2), ")")
+    println("  → IMAGE (not minimal image) reparameterization")
+    println("  → Some non-identifiable structure remains")
+    reparam_type = "image"
+else
+    println("\n⚠ No invariant structure found")
+    println("  → Consider different structural assumptions or check model")
+    reparam_type = "none"
+end
+
+# Display the key subspaces
+if size(N_inv, 2) > 0
+    println("\nInvariant null space basis N (columns):")
+    display(N_inv)
+    println("\nThese directions remain in the null space under perturbation")
+end
+
+println("\nIdentifiable space basis N_perp (columns):")
+display(N_perp_inv)
+
+# Construct reparameterization matrix as in Algorithm 1
+A_inv = N_perp_inv'  # A = N_perp^T
+println("\nReparameterization matrix A = N_perp^T:")
+display(A_inv)
+
+println("\n" * "="^60)
+println("Interpretation for This Model")
+println("="^60)
+
+if poisson_limit
+    println("\nPoisson limit case: ϕ(n,p) = [np, np]")
+    println("Expected: 1D invariant null space (non-identifiable)")
+    println("Expected: 1D identifiable space (np is identifiable)")
+    
+    if size(N_inv, 2) == 1
+        println("\n✓ Results match expectation!")
+        println("  Invariant direction (in log space):")
+        display(N_inv)
+        println("  This represents the non-identifiable combination of log(n) and log(p)")
+        println("\n  Identifiable direction:")
+        display(N_perp_inv)
+        println("  This represents the identifiable combination log(np)")
+    end
+else
+    println("\nBinomial case: ϕ(n,p) = [np, np(1-p)]")
+    println("Expected: Full identifiability (no invariant null space)")
+    
+    if size(N_inv, 2) == 0 && rank_inv == 2
+        println("\n✓ Results match expectation!")
+        println("  Both n and p are identifiable")
+        println("  N_perp spans the full parameter space")
+    end
+end
+
+# For compatibility with downstream code, create aliases
+S_XY_log = S_inv
+Vt_XY_log = A_inv  # Already in correct orientation (rows are transformations)
+
+# --------------------------------------------------------
+# Sloppy-Informed Parameterization Analysis
 # --------------------------------------------------------
 if poisson_limit
     model_name = "stat_model_iir_poisson"
 else
     model_name = "stat_model_iir"
 end
-println(model_name)
+
+println("\n" * "="^60)
+println("Model: ", model_name)
+println("="^60)
 
 # Scale and round eigenvectors for iir transformation
-# Option 1: based on eigenvectors from Fisher Information
-# Option 2: based on the right singular vectors from the phi mapping
-use_singular_vectors = true
-if use_singular_vectors
-    evecs_scaled = scale_and_round(Vt_XY_log; column_scales=[1,1]) 
+# Use the invariant subspace analysis results
+use_invariant_subspace = true
+
+if use_invariant_subspace
+    println("\nUsing invariant subspace analysis (Algorithm 1 from paper)")
+    # A_inv = N_perp^T is already computed above
+    evecs_scaled = scale_and_round(A_inv; column_scales=[1,1])
+    
+    println("\nScaled and rounded reparameterization matrix:")
+    display(evecs_scaled)
+    
+    if size(N_inv, 2) > 0
+        println("\nNote: This is an image (not minimal) reparameterization")
+        println("Some invariant null space structure remains (dimension ", size(N_inv, 2), ")")
+        println("This doesn't affect model predictions, but these combinations are non-identifiable")
+    end
 else
-    evals_scaled = scale_and_round(evecs_log; column_scales=[1,1])
+    println("\nUsing simple SVD (for comparison/legacy)")
+    # This would be the old approach without invariance testing
+    J_ϕ_XY_log, U_XY_log, S_XY_log, Vt_XY_log = compute_ϕ_Jacobian(ϕ_XY_log, XY_log_MLE, compute_svd=true)
+    evecs_scaled = scale_and_round(Vt_XY_log; column_scales=[1,1])
+    display(evecs_scaled)
 end
-# evecs_scaled = scale_and_round(evecs_log; column_scales=[1,1])
-println("Transformations:")
+
+println("\nTransformations:")
 display(evecs_scaled)
 display(inv(evecs_scaled))
-
-println("Original right singular vectors:")
-display(Vt_XY_log)
-
-# Construct transformation
-xytoXY_iir, XYtoxy_iir = reparam(evecs_scaled)
 
 # Transform likelihood, distribution, and phi mapping
 lnlike_XY_iir = construct_lnlike_XY(lnlike_xy, XYtoxy_iir)
