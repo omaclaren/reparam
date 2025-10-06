@@ -2,10 +2,10 @@
 #   Functions for finding invariant null space and complement
 # ----------------------------------------------------------------
 
-function find_invariant_subspace(ϕ_func, θ0; 
+function find_invariant_subspace(ϕ_func, θ0;
                                  compute_J=compute_ϕ_Jacobian,
-                                 rtolJ=sqrt(eps(real(eltype(θ0)))), 
-                                 rtolM=sqrt(eps(real(eltype(θ0)))))
+                                 rtolJ=sqrt(eps(real(eltype(θ0)))),
+                                 atolM=1e-10)
 
     """
     Finds invariant null subspace and its orthogonal complement for the auxiliary mapping ϕ_func at point θ0.
@@ -30,7 +30,7 @@ function find_invariant_subspace(ϕ_func, θ0;
     - `compute_J`: Function to compute Jacobian (default: compute_ϕ_Jacobian). 
                    Can pass custom implementation for flexibility.
     - `rtolJ`: Relative tolerance for determining numerical rank of J (default: √eps)
-    - `rtolM`: Relative tolerance for determining numerical rank of invariance test matrix (default: √eps)
+    - `atolM`: Absolute tolerance for determining numerical rank of invariance test matrix (default: 1e-10)
 
     # Returns
     - `S`: Singular values from the initial Jacobian SVD
@@ -57,7 +57,7 @@ function find_invariant_subspace(ϕ_func, θ0;
     if size(N, 2) == 0
         println("Minimal image reparameterization - maximum reduction")
     else
-        println("Image reparameterization - dimension $(size(N, 2)) invariant null space remains")
+        println("Image reparameterization - dimension \$(size(N, 2)) invariant null space remains")
     end
     
     # With custom Jacobian computation
@@ -112,18 +112,19 @@ function find_invariant_subspace(ϕ_func, θ0;
     # Reduced SVD to separate invariant from non-invariant null space directions
     M_test_svd = svd(M_test; full=false)
     MS = M_test_svd.S
-    τM = rtolM * (isempty(MS) ? one(T) : maximum(MS))
-    rankM = count(>(τM), MS)
-    
+    # Use absolute tolerance since we expect MS ≈ 0 for invariant null space
+    # atolM is absolute tolerance (default 1e-10)
+    rankM = count(>(atolM), MS)
+
     V_Mr = M_test_svd.V[:, 1:rankM]      # Coefficients for non-invariant combinations of V₀
     V_M0 = M_test_svd.V[:, rankM+1:end]  # Coefficients for invariant combinations of V₀
 
     # --- 3. Construct Final Reparameterization Subspaces ---
-    
+
     # N_perp spans the orthogonal complement of the invariant null space
     # This is the identifiable space (for minimal image) or identifiable + non-invariant (for image)
     N_perp = hcat(V_r, V_0 * V_Mr)
-    
+
     # N spans the invariant null space
     # Empty for minimal image, non-empty for image reparameterization
     N = V_0 * V_M0

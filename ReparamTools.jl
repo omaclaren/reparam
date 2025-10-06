@@ -14,7 +14,7 @@ include("utils.jl")
 include("parameterizations.jl")
 include("core.jl")
 include("visualization.jl")
-
+include("invariance.jl")  
 # Export commonly used functions
 export 
     # Core functionality
@@ -27,6 +27,7 @@ export
     construct_ellipse_lnlike_approx,
     construct_upper_lower_profile_wise_CIs_for_mean,
     compute_ϕ_Jacobian,
+    find_invariant_subspace, 
 
     # Visualization functions
     plot_1D_profile,

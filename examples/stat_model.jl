@@ -356,7 +356,6 @@ println("Invariant Subspace Analysis (Algorithm 1 from Paper)")
 println("="^60)
 
 # Apply find_invariant_subspace as described in Algorithm 1
-# This implements the "Initial-Extract-Final" approach:
 # 1. Local SVD to find candidate null space basis V_0
 # 2. Higher-order invariance test via Hessian to separate invariant/non-invariant
 # 3. Construction of final reparameterization matrix
@@ -365,25 +364,31 @@ S_inv, N_inv, N_perp_inv, rank_inv = find_invariant_subspace(ϕ_XY_log, XY_log_M
 
 println("\nJacobian Analysis:")
 println("  Singular values: ", S_inv)
-println("  Numerical rank: ", rank_inv, " / ", length(XY_log_MLE))
+println("  Numerical rank: ", rank_inv)
 println("  Dimension of invariant null space (N): ", size(N_inv, 2))
 println("  Dimension of identifiable space (N_perp): ", size(N_perp_inv, 2))
 
 # Determine type of reparameterization
-if size(N_inv, 2) == 0
+null_space_dim = length(XY_log_MLE) - rank_inv
+if size(N_inv, 2) == null_space_dim && null_space_dim > 0
     println("\n✓ Full null space is invariant")
     println("  → MINIMAL IMAGE reparameterization")
     println("  → Maximum model reduction achieved")
     reparam_type = "minimal_image"
-elseif size(N_inv, 2) > 0 && size(N_inv, 2) < length(XY_log_MLE)
-    println("\n⚠ Partial null space is invariant (dimension ", size(N_inv, 2), ")")
-    println("  → IMAGE (not minimal image) reparameterization")
-    println("  → Some non-identifiable structure remains")
+elseif size(N_inv, 2) > 0 && size(N_inv, 2) < null_space_dim
+    println("\n⚠ Partial null space is invariant (dimension ", size(N_inv, 2), " of ", null_space_dim, ")")
+    println("  → IMAGE (not minimal) reparameterization")
+    println("  → Some non-invariant null space structure remains")
     reparam_type = "image"
-else
-    println("\n⚠ No invariant structure found")
-    println("  → Consider different structural assumptions or check model")
-    reparam_type = "none"
+elseif size(N_inv, 2) == 0 && null_space_dim > 0
+    println("\n⚠ No null space is invariant")
+    println("  → IMAGE (not minimal) reparameterization")
+    println("  → All null space directions vary with parameters")
+    reparam_type = "image"
+else # null_space_dim == 0
+    println("\n✓ No null space - model is fully identifiable")
+    println("  → No reparameterization needed")
+    reparam_type = "identifiable"
 end
 
 # Display the key subspaces
@@ -435,7 +440,8 @@ S_XY_log = S_inv
 Vt_XY_log = A_inv  # Already in correct orientation (rows are transformations)
 
 # --------------------------------------------------------
-# Sloppy-Informed Parameterization Analysis
+# IIR Parameterization Analysis
+# (Invariant Image Reparameterization - replaces "Sloppy-Informed")
 # --------------------------------------------------------
 if poisson_limit
     model_name = "stat_model_iir_poisson"
@@ -444,7 +450,7 @@ else
 end
 
 println("\n" * "="^60)
-println("Model: ", model_name)
+println("IIR Parameterization: ", model_name)
 println("="^60)
 
 # Scale and round eigenvectors for iir transformation
@@ -453,28 +459,44 @@ use_invariant_subspace = true
 
 if use_invariant_subspace
     println("\nUsing invariant subspace analysis (Algorithm 1 from paper)")
-    # A_inv = N_perp^T is already computed above
-    evecs_scaled = scale_and_round(A_inv; column_scales=[1,1])
-    
+    # Construct full transformation matrix: [N_perp^T; N^T]
+    # This maintains full parameter vector for compatibility with existing code
+    A_full = vcat(N_perp_inv', N_inv')
+    evecs_scaled = scale_and_round(A_full; column_scales=[1,1])
+
     println("\nScaled and rounded reparameterization matrix:")
     display(evecs_scaled)
-    
+
     if size(N_inv, 2) > 0
-        println("\nNote: This is an image (not minimal) reparameterization")
-        println("Some invariant null space structure remains (dimension ", size(N_inv, 2), ")")
-        println("This doesn't affect model predictions, but these combinations are non-identifiable")
+        if reparam_type == "minimal_image"
+            println("\nNote: Minimal image reparameterization")
+            println("First ", size(N_perp_inv, 2), " parameter(s) are identifiable")
+            println("Last ", size(N_inv, 2), " parameter(s) are non-identifiable (invariant null space)")
+        else
+            println("\nNote: Image (not minimal) reparameterization")
+            println("First ", size(N_perp_inv, 2), " parameter(s) include identifiable + non-invariant combinations")
+            println("Last ", size(N_inv, 2), " parameter(s) are non-identifiable (invariant null space)")
+        end
+        println("The non-identifiable parameters don't affect model predictions")
     end
 else
     println("\nUsing simple SVD (for comparison/legacy)")
     # This would be the old approach without invariance testing
-    J_ϕ_XY_log, U_XY_log, S_XY_log, Vt_XY_log = compute_ϕ_Jacobian(ϕ_XY_log, XY_log_MLE, compute_svd=true)
-    evecs_scaled = scale_and_round(Vt_XY_log; column_scales=[1,1])
+    J_ϕ_XY_log_temp, U_XY_log_temp, S_XY_log_temp, Vt_XY_log_temp = compute_ϕ_Jacobian(ϕ_XY_log, XY_log_MLE, compute_svd=true)
+    evecs_scaled = scale_and_round(Vt_XY_log_temp; column_scales=[1,1])
     display(evecs_scaled)
 end
 
-println("\nTransformations:")
+println("\nTransformation matrices:")
+println("Forward (original → IIR):")
 display(evecs_scaled)
+println("\nInverse (IIR → original):")
 display(inv(evecs_scaled))
+
+# Define coordinate transformation using the IIR matrix
+# ψ(θ) = f^{-1}(A f(θ)) where f = log, f^{-1} = exp, A = evecs_scaled
+xytoXY_iir(xy) = exp.(evecs_scaled * log.(xy))
+XYtoxy_iir(XY) = exp.(inv(evecs_scaled) * log.(XY))
 
 # Transform likelihood, distribution, and phi mapping
 lnlike_XY_iir = construct_lnlike_XY(lnlike_xy, XYtoxy_iir)
@@ -517,7 +539,7 @@ J_ϕ_XY_iir, U_XY_iir, S_XY_iir, Vt_XY_iir = compute_ϕ_Jacobian(ϕ_XY_iir, XY_i
 # Compare eigenvectors from Fisher Information with singular vectors
 println("\nComparison of eigenvectors (1) and singular vectors (2):")
 display(evecs_iir)
-display(Vt_XY_iir')
+display(Vt_XY_iir');
 
 # 1D Profiles
 for i in 1:dim_all
