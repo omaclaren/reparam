@@ -21,7 +21,7 @@ Random.seed!(12)
 # Define model in xy = θ = [n, p] parameterization
 # --------------------------------------------------------
 # boolean for whether to use Poisson limit
-poisson_limit = true
+poisson_limit = false
 # Parameter -> data parameter mapping 
 if poisson_limit
     ϕ_xy = xy -> [xy[1]*xy[2], xy[1]*xy[2]] # Maps (n,p) to (np,np)
@@ -191,7 +191,7 @@ for (i,j) in param_pairs
     plot_1D_profile(model_name, ψ2_values, log.(like_ψ2_values),
         current_varnames["ψ2"];
         varname_save=current_varnames["ψ2_save"]*"_from_2D",
-        ψ_true=ψ_true_pair[2], ψ_MLE=xy_MLE[i])
+        ψ_true=ψ_true_pair[2], ψ_MLE=xy_MLE[j])
 end
 
 # --------------------------------------------------------
@@ -344,7 +344,7 @@ for (i,j) in param_pairs
     plot_1D_profile(model_name, ψ2_values, log.(like_ψ2_values),
         current_varnames["ψ2"];
         varname_save=current_varnames["ψ2_save"]*"_from_2D",
-        ψ_true=ψ_true_pair[2], ψ_MLE=XY_log_MLE[i])
+        ψ_true=ψ_true_pair[2], ψ_MLE=XY_log_MLE[j])
 end
 
 # --------------------------------------------------------
@@ -386,8 +386,9 @@ elseif size(N_inv, 2) == 0 && null_space_dim > 0
     println("  → All null space directions vary with parameters")
     reparam_type = "image"
 else # null_space_dim == 0
-    println("\n✓ No null space - model is fully identifiable")
-    println("  → No reparameterization needed")
+    println("\n✓ No null space - model is structurally identifiable")
+    println("  → All parameters (or combinations) are identifiable")
+    println("  → IIR reparameterization still valuable to separate well/poorly identified combinations")
     reparam_type = "identifiable"
 end
 
@@ -405,6 +406,21 @@ display(N_perp_inv)
 A_inv = N_perp_inv'  # A = N_perp^T
 println("\nReparameterization matrix A = N_perp^T:")
 display(A_inv)
+
+# ALWAYS show ranking by singular values (degree of identifiability)
+println("\nParameter Combination Ranking by Identifiability:")
+println("-"^60)
+for i in 1:size(N_perp_inv, 2)
+    println("Combination ", i, " (σ = ", round(S_inv[i], digits=3), "):")
+    println("  Direction in log space: ", round.(N_perp_inv[:,i], digits=3))
+    if i == 1
+        println("  → Best identified combination")
+    elseif i == size(N_perp_inv, 2)
+        println("  → Least identified combination")
+    else
+        println("  → Moderately identified")
+    end
+end
 
 println("\n" * "="^60)
 println("Interpretation for This Model")
@@ -427,11 +443,33 @@ if poisson_limit
 else
     println("\nBinomial case: ϕ(n,p) = [np, np(1-p)]")
     println("Expected: Full identifiability (no invariant null space)")
-    
+
     if size(N_inv, 2) == 0 && rank_inv == 2
         println("\n✓ Results match expectation!")
         println("  Both n and p are identifiable")
         println("  N_perp spans the full parameter space")
+
+        # Check for practical non-identifiability via condition number
+        cond_num = S_inv[1] / S_inv[end]
+        if cond_num > 100
+            println("\n⚠️  However, practical non-identifiability detected:")
+            println("  Condition number: ", round(cond_num, digits=1), " (>100)")
+            println("  σ₂/σ₁ ratio: ", round(S_inv[2]/S_inv[1], sigdigits=3))
+            println("  → One combination much better identified than the other")
+            println("  → IIR reparameterization still valuable for separating well/poorly identified combinations")
+            println("\n  Better identified combination (σ=", round(S_inv[1], digits=2), "):")
+            println("    Direction in log space: ", round.(N_perp_inv[:,1], digits=3))
+            println("  Poorly identified combination (σ=", round(S_inv[2], digits=2), "):")
+            println("    Direction in log space: ", round.(N_perp_inv[:,2], digits=3))
+        elseif cond_num > 10
+            println("\n⚠️  Moderate practical non-identifiability:")
+            println("  Condition number: ", round(cond_num, digits=1))
+            println("  → Some difference in identifiability between combinations")
+            println("  Better identified (σ=", round(S_inv[1], digits=2), "): ", round.(N_perp_inv[:,1], digits=3))
+            println("  Weaker identified (σ=", round(S_inv[2], digits=2), "): ", round.(N_perp_inv[:,2], digits=3))
+        else
+            println("\n  Condition number: ", round(cond_num, digits=1), " - well-conditioned")
+        end
     end
 end
 
@@ -459,10 +497,11 @@ use_invariant_subspace = true
 
 if use_invariant_subspace
     println("\nUsing invariant subspace analysis (Algorithm 1 from paper)")
-    # Construct full transformation matrix: [N_perp^T; N^T]
-    # This maintains full parameter vector for compatibility with existing code
-    A_full = vcat(N_perp_inv', N_inv')
-    evecs_scaled = scale_and_round(A_full; column_scales=[1,1])
+    # Construct column-stacked matrix (columns are vectors to be scaled)
+    # Scale BEFORE transposing so row combinations stay intact
+    A_full_T = hcat(N_perp_inv, N_inv)
+    A_full_T_scaled = scale_and_round(A_full_T; column_scales=[1,1])
+    evecs_scaled = A_full_T_scaled'  # Transpose to get rows as parameter combinations
 
     println("\nScaled and rounded reparameterization matrix:")
     display(evecs_scaled)
@@ -631,5 +670,5 @@ for (i,j) in param_pairs
     plot_1D_profile(model_name, ψ2_values, log.(like_ψ2_values),
         current_varnames["ψ2"];
         varname_save=current_varnames["ψ2_save"]*"_from_2D",
-        ψ_true=ψ_true_pair[2], ψ_MLE=XY_iir_MLE[i])
+        ψ_true=ψ_true_pair[2], ψ_MLE=XY_iir_MLE[j])
 end
