@@ -21,7 +21,7 @@ Random.seed!(12)
 # Define model in xy = θ = [n, p] parameterization
 # --------------------------------------------------------
 # boolean for whether to use Poisson limit
-poisson_limit = false
+poisson_limit = true
 # Parameter -> data parameter mapping 
 if poisson_limit
     ϕ_xy = xy -> [xy[1]*xy[2], xy[1]*xy[2]] # Maps (n,p) to (np,np)
@@ -128,14 +128,14 @@ for i in 1:dim_all
     plot_1D_profile(model_name, ψ_values, lnlike_ψ_values,
         varnames["ψ"*string(i)];
         varname_save=varnames["ψ"*string(i)*"_save"],
-        ψ_true=xy_true[i], ψ_MLE=xy_MLE[i])
+        ψ_true=xy_true[i], ψ_MLE=xy_MLE[i], save_dir="../figures/")
 
     plot_1D_profile_comparison(model_name, model_name*"_ellipse",
         ψ_values, ψ_ellipse_values,
         lnlike_ψ_values, lnlike_ψ_ellipse_values,
         varnames["ψ"*string(i)];
         varname_save=varnames["ψ"*string(i)*"_save"],
-        ψ_true=xy_true[i], ψ_MLE1=xy_MLE[i])
+        ψ_true=xy_true[i], ψ_MLE1=xy_MLE[i], save_dir="../figures/")
 end
 
 # 2D Profiles
@@ -171,13 +171,13 @@ for (i,j) in param_pairs
 
     # Plot contours
     plot_2D_contour(model_name, ψ_values, lnlike_ψ_values,
-        current_varnames; ψ_true=ψ_true_pair, ψ_MLE=xy_MLE)
+        current_varnames; ψ_true=ψ_true_pair, ψ_MLE=xy_MLE, save_dir="../figures/")
 
     # Plot comparison with quadratic approximation
     plot_2D_contour_comparison(model_name, model_name*"_ellipse",
         ψ_values, ψ_ellipse_values,
         lnlike_ψ_values, lnlike_ψ_ellipse_values,
-        current_varnames; ψ_true=ψ_true_pair, ψ_MLE1=xy_MLE)
+        current_varnames; ψ_true=ψ_true_pair, ψ_MLE1=xy_MLE, save_dir="../figures/")
 
     # Get and plot 1D profiles from 2D grid
     ψ1_values, ψ2_values, like_ψ1_values, like_ψ2_values = get_1D_profiles_from_2D(
@@ -186,12 +186,12 @@ for (i,j) in param_pairs
     plot_1D_profile(model_name, ψ1_values, log.(like_ψ1_values),
         current_varnames["ψ1"];
         varname_save=current_varnames["ψ1_save"]*"_from_2D",
-        ψ_true=ψ_true_pair[1], ψ_MLE=xy_MLE[i])
+        ψ_true=ψ_true_pair[1], ψ_MLE=xy_MLE[i], save_dir="../figures/")
 
     plot_1D_profile(model_name, ψ2_values, log.(like_ψ2_values),
         current_varnames["ψ2"];
         varname_save=current_varnames["ψ2_save"]*"_from_2D",
-        ψ_true=ψ_true_pair[2], ψ_MLE=xy_MLE[j])
+        ψ_true=ψ_true_pair[2], ψ_MLE=xy_MLE[j], save_dir="../figures/")
 end
 
 # --------------------------------------------------------
@@ -281,14 +281,14 @@ for i in 1:dim_all
     plot_1D_profile(model_name, ψ_values, lnlike_ψ_values,
         varnames["ψ"*string(i)];
         varname_save=varnames["ψ"*string(i)*"_save"],
-        ψ_true=XY_log_true[i], ψ_MLE=XY_log_MLE[i])
+        ψ_true=XY_log_true[i], ψ_MLE=XY_log_MLE[i], save_dir="../figures/")
 
     plot_1D_profile_comparison(model_name, model_name*"_ellipse",
         ψ_values, ψ_ellipse_values,
         lnlike_ψ_values, lnlike_ψ_ellipse_values,
         varnames["ψ"*string(i)];
         varname_save=varnames["ψ"*string(i)*"_save"],
-        ψ_true=XY_log_true[i], ψ_MLE1=XY_log_MLE[i])
+        ψ_true=XY_log_true[i], ψ_MLE1=XY_log_MLE[i], save_dir="../figures/")
 end
 
 # 2D Profiles
@@ -324,13 +324,13 @@ for (i,j) in param_pairs
 
     # Plot contours
     plot_2D_contour(model_name, ψ_values, lnlike_ψ_values,
-        current_varnames; ψ_true=ψ_true_pair, ψ_MLE=XY_log_MLE)
+        current_varnames; ψ_true=ψ_true_pair, ψ_MLE=XY_log_MLE, save_dir="../figures/")
 
     # Plot comparison with quadratic approximation
     plot_2D_contour_comparison(model_name, model_name*"_ellipse",
         ψ_values, ψ_ellipse_values,
         lnlike_ψ_values, lnlike_ψ_ellipse_values,
-        current_varnames; ψ_true=ψ_true_pair, ψ_MLE1=XY_log_MLE)
+        current_varnames; ψ_true=ψ_true_pair, ψ_MLE1=XY_log_MLE, save_dir="../figures/")
 
     # Get and plot 1D profiles from 2D grid
     ψ1_values, ψ2_values, like_ψ1_values, like_ψ2_values = get_1D_profiles_from_2D(
@@ -339,12 +339,12 @@ for (i,j) in param_pairs
     plot_1D_profile(model_name, ψ1_values, log.(like_ψ1_values),
         current_varnames["ψ1"];
         varname_save=current_varnames["ψ1_save"]*"_from_2D",
-        ψ_true=ψ_true_pair[1], ψ_MLE=XY_log_MLE[i])
+        ψ_true=ψ_true_pair[1], ψ_MLE=XY_log_MLE[i], save_dir="../figures/")
 
     plot_1D_profile(model_name, ψ2_values, log.(like_ψ2_values),
         current_varnames["ψ2"];
         varname_save=current_varnames["ψ2_save"]*"_from_2D",
-        ψ_true=ψ_true_pair[2], ψ_MLE=XY_log_MLE[j])
+        ψ_true=ψ_true_pair[2], ψ_MLE=XY_log_MLE[j], save_dir="../figures/")
 end
 
 # --------------------------------------------------------
@@ -570,14 +570,14 @@ for i in 1:dim_all
     plot_1D_profile(model_name, ψ_values, lnlike_ψ_values,
         varnames["ψ"*string(i)];
         varname_save=varnames["ψ"*string(i)*"_save"],
-        ψ_true=XY_iir_true[i], ψ_MLE=XY_iir_MLE[i])
+        ψ_true=XY_iir_true[i], ψ_MLE=XY_iir_MLE[i], save_dir="../figures/")
 
     plot_1D_profile_comparison(model_name, model_name*"_ellipse",
         ψ_values, ψ_ellipse_values,
         lnlike_ψ_values, lnlike_ψ_ellipse_values,
         varnames["ψ"*string(i)];
         varname_save=varnames["ψ"*string(i)*"_save"],
-        ψ_true=XY_iir_true[i], ψ_MLE1=XY_iir_MLE[i])
+        ψ_true=XY_iir_true[i], ψ_MLE1=XY_iir_MLE[i], save_dir="../figures/")
 end
 
 # 2D Profiles
@@ -613,13 +613,13 @@ for (i,j) in param_pairs
 
     # Plot contours
     plot_2D_contour(model_name, ψ_values, lnlike_ψ_values,
-        current_varnames; ψ_true=ψ_true_pair, ψ_MLE=XY_iir_MLE)
+        current_varnames; ψ_true=ψ_true_pair, ψ_MLE=XY_iir_MLE, save_dir="../figures/")
 
     # Plot comparison with quadratic approximation
     plot_2D_contour_comparison(model_name, model_name*"_ellipse",
         ψ_values, ψ_ellipse_values,
         lnlike_ψ_values, lnlike_ψ_ellipse_values,
-        current_varnames; ψ_true=ψ_true_pair, ψ_MLE1=XY_iir_MLE)
+        current_varnames; ψ_true=ψ_true_pair, ψ_MLE1=XY_iir_MLE, save_dir="../figures/")
 
     # Get and plot 1D profiles from 2D grid
     ψ1_values, ψ2_values, like_ψ1_values, like_ψ2_values = get_1D_profiles_from_2D(
@@ -628,10 +628,10 @@ for (i,j) in param_pairs
     plot_1D_profile(model_name, ψ1_values, log.(like_ψ1_values),
         current_varnames["ψ1"];
         varname_save=current_varnames["ψ1_save"]*"_from_2D",
-        ψ_true=ψ_true_pair[1], ψ_MLE=XY_iir_MLE[i])
+        ψ_true=ψ_true_pair[1], ψ_MLE=XY_iir_MLE[i], save_dir="../figures/")
 
     plot_1D_profile(model_name, ψ2_values, log.(like_ψ2_values),
         current_varnames["ψ2"];
         varname_save=current_varnames["ψ2_save"]*"_from_2D",
-        ψ_true=ψ_true_pair[2], ψ_MLE=XY_iir_MLE[j])
+        ψ_true=ψ_true_pair[2], ψ_MLE=XY_iir_MLE[j], save_dir="../figures/")
 end

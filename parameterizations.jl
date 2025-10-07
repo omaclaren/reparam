@@ -25,13 +25,32 @@ function scale_and_round(evecs; round_within=0.5, column_scales=nothing)
     
     # Rescale each column so smallest non-zero is one
     for (i, col) in enumerate(eachcol(evecs))
-        min_nonzero = col[argmin(abs.(col[abs.(col) .> round_within]))]
-        evecs_scaled[:, i] = col / min_nonzero
+        # Find values above threshold
+        above_threshold = abs.(col) .> round_within
+        if any(above_threshold)
+            # Scale by smallest value above threshold
+            col_above = col[above_threshold]
+            min_nonzero = col_above[argmin(abs.(col_above))]
+            evecs_scaled[:, i] = col / min_nonzero
+        else
+            # All values below threshold - scale by maximum absolute value
+            max_val = maximum(abs.(col))
+            if max_val > eps()
+                evecs_scaled[:, i] = col / col[argmax(abs.(col))]
+            else
+                # Column is essentially zero
+                evecs_scaled[:, i] = col
+            end
+        end
     end
     
     # Round last
-    evecs_scaled_rounded = round.(evecs_scaled/round_within)*round_within*diagm(column_scales)
-    
+    evecs_scaled_rounded = round.(evecs_scaled/round_within)*round_within
+    # Apply column scales
+    for i in 1:length(column_scales)
+        evecs_scaled_rounded[:, i] *= column_scales[i]
+    end
+
     return evecs_scaled_rounded
  end
 
