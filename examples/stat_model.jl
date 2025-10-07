@@ -371,24 +371,20 @@ println("  Dimension of identifiable space (N_perp): ", size(N_perp_inv, 2))
 # Determine type of reparameterization
 null_space_dim = length(XY_log_MLE) - rank_inv
 if size(N_inv, 2) == null_space_dim && null_space_dim > 0
-    println("\n✓ Full null space is invariant")
-    println("  → MINIMAL IMAGE reparameterization")
-    println("  → Maximum model reduction achieved")
+    println("\nFull null space is invariant")
+    println("  Type: Minimal image reparameterization")
     reparam_type = "minimal_image"
 elseif size(N_inv, 2) > 0 && size(N_inv, 2) < null_space_dim
-    println("\n⚠ Partial null space is invariant (dimension ", size(N_inv, 2), " of ", null_space_dim, ")")
-    println("  → IMAGE (not minimal) reparameterization")
-    println("  → Some non-invariant null space structure remains")
+    println("\nPartial null space is invariant (dimension ", size(N_inv, 2), " of ", null_space_dim, ")")
+    println("  Type: Image (not minimal) reparameterization")
     reparam_type = "image"
 elseif size(N_inv, 2) == 0 && null_space_dim > 0
-    println("\n⚠ No null space is invariant")
-    println("  → IMAGE (not minimal) reparameterization")
-    println("  → All null space directions vary with parameters")
+    println("\nNo null space is invariant")
+    println("  Type: Image (not minimal) reparameterization")
     reparam_type = "image"
 else # null_space_dim == 0
-    println("\n✓ No null space - model is structurally identifiable")
-    println("  → All parameters (or combinations) are identifiable")
-    println("  → IIR reparameterization still valuable to separate well/poorly identified combinations")
+    println("\nNo null space detected")
+    println("  Type: Appears structurally identifiable")
     reparam_type = "identifiable"
 end
 
@@ -423,53 +419,20 @@ for i in 1:size(N_perp_inv, 2)
 end
 
 println("\n" * "="^60)
-println("Interpretation for This Model")
+println("Model-Specific Notes")
 println("="^60)
 
 if poisson_limit
     println("\nPoisson limit case: ϕ(n,p) = [np, np]")
-    println("Expected: 1D invariant null space (non-identifiable)")
-    println("Expected: 1D identifiable space (np is identifiable)")
-    
     if size(N_inv, 2) == 1
-        println("\n✓ Results match expectation!")
-        println("  Invariant direction (in log space):")
-        display(N_inv)
-        println("  This represents the non-identifiable combination of log(n) and log(p)")
-        println("\n  Identifiable direction:")
-        display(N_perp_inv)
-        println("  This represents the identifiable combination log(np)")
+        println("  Invariant null space dimension: 1")
+        println("  Identifiable space dimension: 1")
     end
 else
     println("\nBinomial case: ϕ(n,p) = [np, np(1-p)]")
-    println("Expected: Full identifiability (no invariant null space)")
-
     if size(N_inv, 2) == 0 && rank_inv == 2
-        println("\n✓ Results match expectation!")
-        println("  Both n and p are identifiable")
-        println("  N_perp spans the full parameter space")
-
-        # Check for practical non-identifiability via condition number
-        cond_num = S_inv[1] / S_inv[end]
-        if cond_num > 100
-            println("\n⚠️  However, practical non-identifiability detected:")
-            println("  Condition number: ", round(cond_num, digits=1), " (>100)")
-            println("  σ₂/σ₁ ratio: ", round(S_inv[2]/S_inv[1], sigdigits=3))
-            println("  → One combination much better identified than the other")
-            println("  → IIR reparameterization still valuable for separating well/poorly identified combinations")
-            println("\n  Better identified combination (σ=", round(S_inv[1], digits=2), "):")
-            println("    Direction in log space: ", round.(N_perp_inv[:,1], digits=3))
-            println("  Poorly identified combination (σ=", round(S_inv[2], digits=2), "):")
-            println("    Direction in log space: ", round.(N_perp_inv[:,2], digits=3))
-        elseif cond_num > 10
-            println("\n⚠️  Moderate practical non-identifiability:")
-            println("  Condition number: ", round(cond_num, digits=1))
-            println("  → Some difference in identifiability between combinations")
-            println("  Better identified (σ=", round(S_inv[1], digits=2), "): ", round.(N_perp_inv[:,1], digits=3))
-            println("  Weaker identified (σ=", round(S_inv[2], digits=2), "): ", round.(N_perp_inv[:,2], digits=3))
-        else
-            println("\n  Condition number: ", round(cond_num, digits=1), " - well-conditioned")
-        end
+        println("  Appears structurally identifiable (no invariant null space)")
+        println("  Condition number: ", round(S_inv[1] / S_inv[end], digits=1))
     end
 end
 
