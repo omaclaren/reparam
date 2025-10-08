@@ -1,6 +1,86 @@
 # --------------------------------------------------------
 # Parameter Scaling Methods
 # --------------------------------------------------------
+
+"""
+    varimax_rotation(N_perp; n_restarts=200, threshold=1e-2, gamma=1.0)
+
+Apply varimax rotation to N_perp basis to encourage sparse, interpretable loadings.
+Uses multiple random restarts to escape local optima.
+
+Essential for sequential IIR: ensures each stage produces parameter combinations
+with local structure (e.g., products like n₁p₁, n₂p₂) rather than global mixtures.
+
+# Arguments
+- `N_perp`: n×k matrix of potentially identifiable basis vectors (columns)
+- `n_restarts`: Number of random restarts (default: 200). More restarts help for
+                symmetric problems with flat optimization surfaces.
+- `threshold`: Threshold for zeroing small entries after rotation (default: 1e-2)
+- `gamma`: Varimax parameter (1.0 for varimax, 0.0 for quartimax)
+
+# Returns
+Rotated N_perp with sparse structure
+
+# Notes
+- Requires FactorLoadingMatrices.jl package
+- Multiple restarts essential: single random start often gives poor local optimum
+- Tentative observation: SVD output from symmetric problems may need more restarts
+  than typical factor analysis applications. Further investigation needed.
+
+# Reference
+Kaiser, H. F. (1958). The varimax criterion for analytic rotation in factor analysis.
+"""
+function varimax_rotation(N_perp; n_restarts=200, threshold=1e-2, gamma=1.0)
+    # Note: Requires FactorLoadingMatrices to be loaded
+    # Save original column norms
+    col_norms = [norm(N_perp[:, i]) for i in 1:size(N_perp, 2)]
+    N_norm = N_perp ./ col_norms'
+
+    # Varimax objective function
+    function varimax_objective(L)
+        n, p = size(L)
+        sum(sum(L.^4, dims=1) .- (sum(L.^2, dims=1).^2) ./ n)
+    end
+
+    # Multiple random restarts to escape local optima
+    best_obj = -Inf
+    best_rotated = N_norm
+
+    for trial in 1:n_restarts
+        # Random orthogonal rotation as starting point
+        Q_rand = Matrix(qr(randn(size(N_perp, 2), size(N_perp, 2))).Q)
+        candidate = N_norm * Q_rand
+
+        # Apply varimax
+        rotated = varimax(candidate; gamma=gamma)
+
+        # Compute objective
+        obj = varimax_objective(rotated)
+
+        if obj > best_obj + 1e-6
+            best_obj = obj
+            best_rotated = rotated
+        end
+    end
+
+    # Re-orthonormalize via QR
+    Q_final = Matrix(qr(best_rotated).Q)
+    rotated = Q_final .* col_norms'
+
+    # Threshold small entries
+    rotated[abs.(rotated) .< threshold] .= 0.0
+
+    # Renormalize non-zero columns
+    for j in 1:size(rotated, 2)
+        col_norm = norm(rotated[:, j])
+        if col_norm > 0
+            rotated[:, j] ./= col_norm
+        end
+    end
+
+    return rotated
+end
+
 function scale_and_round(evecs; round_within=0.5, column_scales=nothing)
     """
     Scale and round eigenvectors for more interpretable parameter transformations.

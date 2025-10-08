@@ -12,6 +12,7 @@ using Plots
 using Distributions
 using LinearAlgebra
 using Random
+using FactorLoadingMatrices  # For varimax rotation
 
 # Set random seed for reproducibility
 Random.seed!(42)
@@ -329,52 +330,13 @@ end
 println("\nIdentifiable space basis N_perp (columns):")
 display(N_perp_stage1)
 
-# Interpretability pass: rotate N_perp to align with sparse parameter-local combinations
-println("\nApplying interpretability pass to N_perp...")
-k = size(N_perp_stage1, 2)  # Number of potentially identifiable directions
-n_params = size(N_perp_stage1, 1)
-
-# Step 1: Cluster parameters based on their participation in N_perp columns
-# Simple greedy clustering: assign each parameter to the column where it has highest absolute loading
-row_loadings = abs.(N_perp_stage1)
-clusters = zeros(Int, n_params)
-for i in 1:n_params
-    # Find which column this parameter loads most strongly on
-    clusters[i] = argmax(row_loadings[i, :])
-end
-
-println("  Parameter clusters: ", clusters)
-
-# Step 2: Build template directions - one per cluster
-T = zeros(n_params, k)
-for i in 1:k
-    # Find parameters in cluster i
-    cluster_params = findall(clusters .== i)
-    T[cluster_params, i] .= 1.0
-end
-println("  Template matrix T (columns are cluster indicators):")
-display(T)
-
-# Step 3: Project templates into span(N_perp)
-P = N_perp_stage1 * (N_perp_stage1' * T)
-println("  Projected templates P:")
-display(P)
-
-# Zero out tiny entries
-for j in 1:size(P, 2)
-    col = P[:, j]
-    col[abs.(col) .< 1e-10] .= 0.0
-    P[:, j] = col
-end
-
-# Step 4: Orthonormalize the projections
-Q, R = qr(P)
-N_perp_rotated = Matrix(Q[:, 1:k])
-println("  Rotated N_perp (sparse, orthonormal):")
-display(N_perp_rotated)
-
-# Use the rotated basis instead of the original
-N_perp_stage1 = N_perp_rotated
+# Interpretability pass: apply Varimax rotation for sparse structure
+# Essential for sequential IIR - ensures Stage 1 produces local products (n₁p₁, n₂p₂)
+# rather than global mixtures that would break Stage 2
+println("\nApplying Varimax rotation to N_perp...")
+N_perp_stage1 = varimax_rotation(N_perp_stage1; n_restarts=200, threshold=1e-2)
+println("  Rotated N_perp (sparse via Varimax):")
+display(N_perp_stage1)
 
 # Construct full transformation matrix A1
 # CRITICAL: For rotated (sparse) N_perp, just normalize to {0, ±1} pattern

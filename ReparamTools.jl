@@ -8,6 +8,7 @@ using NLopt
 using Plots
 using LaTeXStrings
 using Measures
+using FactorLoadingMatrices  # For varimax rotation
 
 # Include component files
 include("utils.jl")
@@ -38,6 +39,7 @@ export
 
     # Utility functions
     scale_and_round,
+    varimax_rotation,
     reparam,
     generate_initial_guesses,
     construct_observation_matrix
