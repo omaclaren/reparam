@@ -1,0 +1,13 @@
+# Framing ideas for Sequential IIR with Varimax Rotation
+
+## Methods/Theory
+
+Sequential application of IIR enables identification of more complex parameter combinations through compositional reduction. This requires selecting a particular basis inside the invariant image at intermediate stages. Algorithm 1 identifies the potentially identifiable subspace $\text{span}(N_{\perp})$ independently of basis choice; the SVD basis orders its columns by singular value and is therefore optimal for single-stage reduction in terms of degree of identifiability. For compositional reduction, however, other bases within this subspace may expose structure that a downstream stage can exploit. We illustrate this with a simple statistical model.
+
+## Results (sum-of-Poisson example)
+
+We demonstrate sequential IIR on the model $\mu=\sigma^{2}=n_{1}p_{1}+n_{2}p_{2}$. Stage 1 (with $f=\log$) should expose the monomials $n_{1}p_{1}$ and $n_{2}p_{2}$; Stage 2 (with $f=\mathrm{id}$) can then identify their sum. The raw SVD columns from Stage 1 instead yield fully balanced monomials mixing all four parameters (e.g., $n_{1}^{1}p_{1}^{1}n_{2}^{0.5}p_{2}^{0.5}$), so Stage 2 learns nothing. We therefore rotate the Stage 1 basis with Varimax (Kaiser 1958), an orthogonal factor-analysis rotation that maximises the variance of squared loadings. This produces the sparse columns $[1,1,0,0]^{\top}$ and $[0,0,1,1]^{\top}$, i.e., $n_{1}p_{1}$ and $n_{2}p_{2}$. Stage 2 then correctly identifies a single identifiable direction $n_{1}p_{1}+n_{2}p_{2}$.
+
+## Discussion
+
+We have developed a numerical algorithm for reparameterisations that are one-to-one functions of monomials, and derived general conditions describing how sequential reductions behave. The later stages must nevertheless receive a suitable basis of the invariant image, and finding that basis currently requires heuristics. We show that an orthogonal rotation (Varimax) of the SVD basis suffices in the Poisson-sum example when the unrotated SVD basis does not. Whether Varimax and similar (though potentially non-orthogonal) rotation methods generalise to more complicated compositional structures is an open question. This highlights the connection to the compositional-sparsity concept of Poggio et al. (2024): discovering compositional structure may inherently rely on choosing a 'good', e.g., sparse basis at each stage, here in $\text{span}(N_{\perp})$, not merely on single-stage degree of informedness. Developing general-purpose basis-selection criteria remains future work; the present work constrains the space in which to search for these bases.
