@@ -376,6 +376,43 @@ Based on varimax_rotation.md, the proper solution is to use **Varimax rotation**
 - Single-stage examples (stat_model.jl) don't need it
 - Some Stage 2 examples may not need it if Stage 1 produces sufficiently clean output
 
+### Recent Progress (2025-01-09)
+
+#### PK Model Implementation and Critical Finding
+
+**Implemented**: 2-compartment pharmacokinetic model with Michaelis-Menten clearance (Meshkat et al. 2014)
+- 8 parameters: [b₁, c₁, k₀₁, k₀₂, k₁₂, k₂₁, V_M, K_M]
+- 5 known identifiable combinations (q₁...q₅)
+- Sequential IIR applied with Varimax rotation
+
+**Technical Success** ✓:
+- Fixed orthogonality preservation (separated orthonormal from scaled matrices)
+- Proper matrix inversion (A1_inv = inv(A1_full), not transpose)
+- All q₁...q₅ perfectly reconstructible (errors ~1e-16)
+- Stage 1 correctly identifies rank 6/8
+
+**Critical Finding** ⚠️:
+**Basis choice problem discovered**: Varimax rotation optimizes for sparsity but not for compositional reducibility.
+
+After Varimax rotation in Stage 1, identifiable combinations q₃ = k₀₂+k₁₂ and q₅ = c₁V_M(k₀₁+k₂₁) become **nonlinear functions** of the θ¹ coordinates. Stage 2 with f=identity can only find LINEAR combinations, so cannot recover these.
+
+**Example**: If θ¹[i] ∝ 1/k₀₂, then q₃ = k₀₂ + k₁₂ requires 1/θ¹[i] + θ¹[j] (reciprocal + linear), which Stage 2 cannot identify.
+
+**Comparison**:
+- **stat_sum_model.jl** ✓: Structure aligns perfectly, both stages successful
+- **pk_model.jl** ⚠️: Varimax creates misalignment, Stage 2 cannot complete
+
+**Implication**: Any rotation within span(N_perp) is mathematically equivalent for Stage 1, but produces different Stage 2 results. Varimax optimizes wrong objective for sequential composition.
+
+**Files Created**:
+- `pk_model.jl`: Full implementation
+- `pk_stage2_analysis.jl`: Focused analysis revealing limitation
+- `test_pk_reconstruction.jl`: Validation of transformation accuracy
+- `ANALYSIS_SUMMARY.md`: Complete technical documentation
+- `NEXT_STEPS.md`: Decision points for paper revision
+
+**Recommendation**: Report this as honest scientific finding. The PK model demonstrates both method capabilities (correct rank) and limitations (basis dependence), revealing important open research problems.
+
 ### Last Updated
 
-2025-10-08 (varimax rotation integration complete and verified)
+2025-01-09 (PK model analysis revealing basis choice limitation)
