@@ -5,7 +5,8 @@
 function find_invariant_subspace(ϕ_func, θ0;
                                  compute_J=compute_ϕ_Jacobian,
                                  rtolJ=sqrt(eps(real(eltype(θ0)))),
-                                 atolM=1e-10)
+                                 atolM=1e-10,
+                                 kwargs...)
 
     """
     Finds invariant null subspace and its orthogonal complement for the auxiliary mapping ϕ_func at point θ0.
@@ -95,29 +96,95 @@ function find_invariant_subspace(ϕ_func, θ0;
 
     # --- 2. Extract Invariant Component via Higher-Order Test ---
     r0 = size(V_0, 2)
-    
-    # Efficiently compute Hessian-vector products: differentiate J(θ)*V_0 instead of full J(θ)
-    # This gives (m*r0)×p instead of (m*p)×p - significant savings when r0 << p
-    flat_JV_func = θ -> vec(compute_J(ϕ_func, θ) * V_0)
-    H_JV = ForwardDiff.jacobian(flat_JV_func, θ0)  # (m*r0) × p
 
-    # Build the stacked test matrix M_test = [H₁V₀; H₂V₀; ...; HₚV₀]
-    # This implements the invariance condition: H_i(θ*)α = 0 for all i
-    M_test = Matrix{T}(undef, m * p, r0)
-    for k in 1:p
-        rows = (k-1)*m + 1 : k*m
-        M_test[rows, :] = reshape(view(H_JV, :, k), m, r0)
+    # Check if we should use finite-difference invariance test (for stiff ODEs)
+    use_fd_invariance = haskey(kwargs, :invariance_method) && kwargs[:invariance_method] == :finite_difference
+
+    if use_fd_invariance
+        # Finite-difference invariance test (single-level AD only)
+        # For each null vector α ∈ V_0, perturb θ along α and check if J(θ+δ)·α ≈ 0
+
+        ε = get(kwargs, :fd_epsilon, 1e-6)  # Perturbation size
+        n_probes = get(kwargs, :fd_n_probes, 3)  # Number of perturbation points per direction
+
+        # Build test matrix by evaluating J(θ + ε·s·α)·α for multiple s values
+        M_test = zeros(T, m * n_probes, r0)
+
+        for j in 1:r0  # For each null vector
+            α = V_0[:, j]
+
+            # Test at multiple perturbations: ±ε, ±2ε, etc.
+            for i in 1:n_probes
+                s = (i - (n_probes+1)/2) * ε  # e.g., [-2ε, -ε, 0, ε, 2ε] for n_probes=5
+                if abs(s) < 1e-12
+                    s = ε  # Avoid testing exactly at θ0 (already know J(θ0)·α ≈ 0)
+                end
+
+                θ_pert = θ0 + s * α
+                J_pert = compute_J(ϕ_func, θ_pert)
+
+                # Store J(θ_pert)·α
+                row_start = (i-1)*m + 1
+                M_test[row_start:row_start+m-1, j] = J_pert * α
+            end
+        end
+
+        # α is invariant if ||J(θ+δ)·α|| stays small for all perturbations
+        # Use column norms to classify
+        invariance_scores = [norm(M_test[:, j]) for j in 1:r0]
+
+        # Use atolM as threshold for invariance
+        invariant_mask = invariance_scores .< atolM
+        rankM = count(.!invariant_mask)  # Number of non-invariant directions
+
+        # Separate invariant from non-invariant
+        invariant_indices = findall(invariant_mask)
+        noninvariant_indices = findall(.!invariant_mask)
+
+        V_Mr = r0 > 0 && rankM > 0 ? V_0[:, noninvariant_indices] : zeros(T, p, 0)
+        V_M0 = r0 > 0 && length(invariant_indices) > 0 ? V_0[:, invariant_indices] : zeros(T, p, 0)
+
+        # Need to return as coefficient matrices (like SVD.V)
+        if rankM > 0
+            V_Mr_coeff = Matrix{T}(I, r0, r0)[:, noninvariant_indices]
+        else
+            V_Mr_coeff = zeros(T, r0, 0)
+        end
+
+        if length(invariant_indices) > 0
+            V_M0_coeff = Matrix{T}(I, r0, r0)[:, invariant_indices]
+        else
+            V_M0_coeff = zeros(T, r0, 0)
+        end
+
+        V_Mr = V_Mr_coeff
+        V_M0 = V_M0_coeff
+
+    else
+        # Original Hessian-based test (requires nested AD)
+        # Efficiently compute Hessian-vector products: differentiate J(θ)*V_0 instead of full J(θ)
+        # This gives (m*r0)×p instead of (m*p)×p - significant savings when r0 << p
+        flat_JV_func = θ -> vec(compute_J(ϕ_func, θ) * V_0)
+        H_JV = ForwardDiff.jacobian(flat_JV_func, θ0)  # (m*r0) × p
+
+        # Build the stacked test matrix M_test = [H₁V₀; H₂V₀; ...; HₚV₀]
+        # This implements the invariance condition: H_i(θ*)α = 0 for all i
+        M_test = Matrix{T}(undef, m * p, r0)
+        for k in 1:p
+            rows = (k-1)*m + 1 : k*m
+            M_test[rows, :] = reshape(view(H_JV, :, k), m, r0)
+        end
+
+        # Reduced SVD to separate invariant from non-invariant null space directions
+        M_test_svd = svd(M_test; full=false)
+        MS = M_test_svd.S
+        # Use absolute tolerance since we expect MS ≈ 0 for invariant null space
+        # atolM is absolute tolerance (default 1e-10)
+        rankM = count(>(atolM), MS)
+
+        V_Mr = M_test_svd.V[:, 1:rankM]      # Coefficients for non-invariant combinations of V₀
+        V_M0 = M_test_svd.V[:, rankM+1:end]  # Coefficients for invariant combinations of V₀
     end
-
-    # Reduced SVD to separate invariant from non-invariant null space directions
-    M_test_svd = svd(M_test; full=false)
-    MS = M_test_svd.S
-    # Use absolute tolerance since we expect MS ≈ 0 for invariant null space
-    # atolM is absolute tolerance (default 1e-10)
-    rankM = count(>(atolM), MS)
-
-    V_Mr = M_test_svd.V[:, 1:rankM]      # Coefficients for non-invariant combinations of V₀
-    V_M0 = M_test_svd.V[:, rankM+1:end]  # Coefficients for invariant combinations of V₀
 
     # --- 3. Construct Final Reparameterization Subspaces ---
 
