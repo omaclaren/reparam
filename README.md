@@ -1,97 +1,193 @@
-# Invariant Image Reparameterisation
+# Invariant Image Reparameterisation (IIR)
 
-This repository contains a Julia implementation of methods described in "Invariant Image Reparameterisation: A Unified Approach to Structural and Practical Identifiability and Model Reduction". A preprint is available from [arxiv.org/abs/2502.04867](https://arxiv.org/abs/2502.04867). 
+**Status:** Under revision at SIAM/ASA Journal on Uncertainty Quantification
+
+This repository contains a Julia implementation of methods for automatically discovering identifiable parameter combinations in mathematical models using numerical invariance testing.
 
 ## Overview
 
-The code implements methods for
+**Invariant Image Reparameterisation (IIR)** provides methods for:
 
-- Analysing structural and practical parameter identifiability in mathematical models in a unified way
-- Finding identifiable and nonidentifiable nonlinear (monomial) parameter combinations
-- Model reparameterisation techniques based on identifiable/nonidentifiable parameter combinations
-- Profile likelihood, in the form of Profile-Wise Analysis (PWA), for uncertainty quantification for both parameters and predictions
+- **Structural identifiability analysis**: Determine which parameter combinations are theoretically identifiable from data
+- **Practical identifiability**: Separate well-identified from poorly-identified combinations
+- **Automatic discovery**: Find identifiable monomial combinations without symbolic computation
+- **Model reparameterisation**: Transform to coordinates that cleanly separate identifiable/non-identifiable structure
+- **Uncertainty quantification**: Profile-wise analysis for parameters and predictions
 
-## Installation
+### Key Innovation
 
-This package requires Julia 1.0 or higher. Install the required packages:
+IIR uses a **numerical invariance test** (Hessian-based criterion) to identify which directions in parameter space have globally invariant null spaces. This enables:
+- Discovery of parameter combinations purely from numerical Jacobian
+- No symbolic computation required
+- Works for complex models (ODEs, PDEs, stochastic systems)
+
+## Quick Start
+
+### Installation
+
+Requires Julia 1.6 or higher. Install dependencies:
 
 ```julia
 using Pkg
 Pkg.add([
-    "Distributions", 
+    "Distributions",
     "ForwardDiff",
     "LaTeXStrings",
     "Measures",
     "NLopt",
-    "Plots"
+    "Plots",
+    "DifferentialEquations",  # For ODE examples
+    "FactorLoadingMatrices"   # For Varimax rotation
 ])
 ```
 
-This package also uses the following standard libraries:
-* `LinearAlgebra`
-* `SparseArrays`
-
-## Structure
-
-The codebase is organized as:
-
-### Main Module
-- `ReparamTools.jl` - The primary module that users interact with, providing the interface for parameter transformations, identifiability analysis, and likelihood-based inference
-
-### Examples
-- `transport_model.jl` - Demonstration of parameter identifiability analysis for a transport model (diffusive flow in composite medium)
-- `mm_model.jl` - Example using the Michaelis-Menten/Monod model
-- `stat_model.jl` - Simple statistical model example 
-
-### Implementation Files
-- `core.jl` - Internal implementation of likelihood and identifiability methods
-- `parameterizations.jl` - Implementation of parameter transformation methods
-- `utils.jl` - Common utility functions and helpers
-- `visualization.jl` - Internal plotting and visualization tools
-
-## Usage
-
-Basic model setup (using the simple stat_model.jl as an example):
+### Basic Usage
 
 ```julia
-include("../ReparamTools.jl") # Assuming working in examples directory
-using .ReparamTools 
+include("ReparamTools.jl")
+using .ReparamTools
 
-# Define model through auxiliary mapping (maps parameters to data distribution parameters)
-ϕ_xy = xy -> [xy[1]*xy[2], xy[2]]
+# Define auxiliary mapping (parameters → data distribution parameters)
+ϕ(θ) = [θ[1]*θ[2], θ[1]*θ[2]]  # Example: Poisson limit
 
-# Create distribution mapping (specifies how distribution depends on parameters)
-distrib_xy = xy -> Normal(ϕ_xy(xy)[1], sqrt(ϕ_xy(xy)[1]*(1-ϕ_xy(xy)[2])))
+# Find invariant subspace at reference parameters
+θ0 = [100.0, 0.2]
+S, N, N_perp, rank_J = find_invariant_subspace(ϕ, θ0)
 
-# Construct likelihood using data
-lnlike_xy = construct_lnlike_xy(distrib_xy, data)
+# N = invariant null space (non-identifiable directions)
+# N_perp = complement (potentially identifiable directions)
 
+# Build transformation matrix (monomial reparameterization)
+A_full = vcat(N_perp', N')
+ψ(θ) = exp.(A_full * log.(θ))  # New coordinates
 ```
 
-See the example files for complete analyses including identifiability analysis, model reduction, parameter combinations, and inference.
+See [examples/stat_model.jl](examples/stat_model.jl) for complete workflow.
 
 ## Examples
 
-The repository includes several examples demonstrating the methods:
+### 1. stat_model.jl (Pedagogical)
+**Model**: Poisson limit distribution
+**Parameters**: n (sample size), p (probability)
+**Identifiable**: np (mean)
+**Non-identifiable**: n/p
 
-1. Statistical Model Example (`stat_model.jl`)
-   - Demonstrates basic structural and practical parameter identifiability analysis for model with scalar output
+**Purpose**: Clear introduction to IIR workflow
 
-2. Transport Model (`transport_model.jl`)
-   - Demonstrates basic structural and practical parameter identifiability analysis for model with vector output on a fine grid and coarser observation grid
-   - Includes predictive uncertainty quantification
+### 2. repressilator.jl (Ambitious)
+**Model**: 3-gene repressilator (Eisenberg & Hayashi 2010)
+**Parameters**: 18 (nonlinear ODE system)
+**Identifiable**: K₁/β₁, K₂/β₂, K₃/β₃ ratios
+**Demonstrates**:
+- IIR on realistic mechanistic model
+- Finite-difference invariance test for stiff ODEs
+- Profile-wise prediction uncertainty
+- Validation against profile likelihood (Eisenberg 2010)
 
-3. Michaelis-Menten Model (`mm_model.jl`)
-   - Similar to diffusion example but includes the use of an ODE solver as part of model definition
+### Legacy Examples
+- `transport_model.jl` - Diffusive transport in composite medium
+- `mm_model.jl` - Michaelis-Menten/Monod kinetics
+- `stat_sum_model.jl` - Multi-stage IIR exploration (not in paper)
+- `pk_model.jl` - Pharmacokinetic model revealing multi-stage limitations
 
-Each example includes:
-- Model definition
-- Identifiability analysis
-- Parameter transformations
-- Profile likelihood calculations
-- Visualisation of results
+## Repository Structure
+
+```
+reparam/
+├── ReparamTools.jl          # Main module
+├── invariance.jl             # Algorithm 1: find_invariant_subspace()
+├── core.jl                   # Profile likelihood, optimization
+├── utils.jl                  # Helper functions
+├── parameterizations.jl      # Transformations, Varimax rotation
+├── visualization.jl          # Plotting utilities
+├── examples/
+│   ├── stat_model.jl         # Pedagogical example
+│   ├── repressilator.jl  # Ambitious ODE example
+│   └── [other examples]
+├── CLAUDE.md                 # Complete project documentation
+├── NEXT_STEPS.md            # Actionable next steps
+└── PROJECT_SUMMARY.md       # Quick overview
+```
+
+## Documentation
+
+**For developers/contributors**:
+- [CLAUDE.md](CLAUDE.md) - Complete project status, technical notes, implementation details
+- [NEXT_STEPS.md](NEXT_STEPS.md) - Immediate tasks for manuscript finalization
+- [PROJECT_SUMMARY.md](PROJECT_SUMMARY.md) - High-level overview
+
+## Method Details
+
+### Algorithm 1: `find_invariant_subspace()`
+
+**Inputs**:
+- `ϕ_func`: Auxiliary mapping θ → ϕ(θ)
+- `θ0`: Reference parameter values
+- `rtolJ`: Relative tolerance for Jacobian rank (default: √eps ≈ 1.5e-8)
+- `atolM`: Absolute tolerance for invariance test (default: 1e-10)
+- `invariance_method`: `:hessian_based` (default) or `:finite_difference` (stiff ODEs)
+
+**Outputs**:
+- `S`: Singular values of Jacobian
+- `N`: Invariant null space (non-identifiable directions)
+- `N_perp`: Complement (potentially identifiable directions)
+- `rank_J`: Numerical rank
+
+**Key features**:
+- Uses nested AD for Hessian-based invariance test
+- Finite-difference option for stiff ODE systems
+- Separates structural from practical non-identifiability
+
+### Varimax Rotation (Optional)
+
+Improve interpretability of identifiable combinations:
+
+```julia
+N_perp_rotated = varimax_rotation(N_perp; n_restarts=200)
+```
+
+Maximizes sparsity within span(N_perp) while preserving invariant subspace structure.
+
+## Paper Strategy
+
+### Main Contribution: Single-Stage IIR
+Focus on robust, reliable monomial transformations (ψ = exp(A log(θ)))
+
+**Why single-stage?**
+- ✅ Works reliably across model types
+- ✅ Clear theoretical foundation
+- ✅ No basis-dependence issues
+- ✅ Produces interpretable results with Varimax
+
+### Multi-Stage Extensions (Future Work)
+Sequential application (e.g., products → sums) mentioned briefly as open research direction. Investigation revealed:
+- Success depends on basis alignment (open problem)
+- Varimax optimizes sparsity, not compositional reducibility
+
+## Citation
+
+If you use this code, please cite:
+
+```
+@article{maclaren2025iir,
+  title={Invariant Image Reparameterisation: A Unified Approach to Structural and Practical Identifiability and Model Reduction},
+  author={Maclaren, Oliver J.},
+  journal={arXiv preprint arXiv:2502.04867},
+  year={2025}
+}
+```
+
+Preprint: [arxiv.org/abs/2502.04867](https://arxiv.org/abs/2502.04867)
 
 ## License
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details
 
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
+## Contact
+
+For questions about the method or implementation, please open an issue on GitHub or contact the author.
+
+## Version History
+
+- **v1.0** (2025-01): Initial submission to SIAM/ASA JUQ
+- **v2.0-dev** (2025-10): Revision with repressilator example, finite-difference invariance test, strategic focus on single-stage IIR

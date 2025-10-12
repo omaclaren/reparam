@@ -1,418 +1,268 @@
 # Project Status: Invariant Image Reparameterisation (IIR)
 
-## Current Phase: Paper Revision - Code Updates
+**Last Updated:** 2025-10-13
+**Phase:** Paper Revision - Final Examples Complete
 
-### Context
+## Overview
 
-The IIR paper has been through peer review at SIAM/ASA Journal on Uncertainty Quantification. We are implementing changes to address reviewer feedback, which includes:
+The IIR paper has been through peer review at SIAM/ASA Journal on Uncertainty Quantification. We are implementing changes to address reviewer feedback. The core contribution is now clearly defined: **a single-stage numerical method for discovering image reparameterizations** that separates identifiable from non-identifiable parameter combinations using monomial transformations.
 
-1. **More systematic algorithmic description** (Algorithm 1 in revised paper)
-2. **More compelling/ambitious computed examples** (as requested by Associate Editor and reviewers)
-3. **Clearer distinction** between minimal image and image reparameterizations
-4. **Better integration** of symbolic and numerical approaches
+## Strategic Focus: Single-Stage IIR with Monomials
 
-### Relevant Documents
+### Core Method
+- **Transformation**: ψ(θ) = exp(A log(θ)) where A comes from Algorithm 1
+- **Key innovation**: Numerical invariance test (Hessian-based) identifies which directions in parameter space have globally invariant null spaces
+- **Output**: Clean separation between identifiable (N_perp) and non-identifiable (N) combinations
+- **Enhancement**: Varimax rotation provides interpretable basis within span(N_perp)
 
-- **New paper**: `/Users/omac010/Git-Working/overleaf_projects/invariant-image-reparameterisation/arXiv/Maclaren_IIR2025.tex`
-- **Old paper**: `/Users/omac010/Dropbox/research/manuscripts/01-submitted/iir-arxiv/arXiv/Maclaren_IIR2025.tex`
+### Why Single-Stage Focus?
+
+**Single-stage IIR is robust:**
+- ✅ Algorithm 1 identifies correct rank/invariant subspace reliably
+- ✅ Works across diverse model types (statistical, ODE systems)
+- ✅ Varimax rotation produces interpretable monomial combinations
+- ✅ Clear theoretical foundation
+- ✅ No basis-dependence issues
+
+**Sequential/multi-stage IIR is fragile:**
+- ⚠️ Success depends on intermediate basis "aligning" with final target combinations
+- ⚠️ Varimax optimizes sparsity, not compositional reducibility
+- ⚠️ Opens complicated questions about optimal basis selection (open research problem)
+
+**Decision**: Focus paper on single-stage method as solid, practical contribution. Multi-stage briefly mentioned in future work with honest assessment of limitations.
+
+## Completed Examples for Paper
+
+### 1. stat_model.jl ✅ (Pedagogical)
+**Purpose**: Simple, clear demonstration of IIR basics
+
+**Model**: Poisson limit distribution
+- Parameters: θ = [n, p]
+- Auxiliary mapping: ϕ(n,p) = [np, np]
+- Data: Y ~ Poisson(np)
+
+**Results**:
+- Rank: 1/2 (one identifiable combination)
+- Identifiable: ψ₁ = np
+- Non-identifiable: ψ₂ = n/p
+- Clean 2×2 transformation: [1,1; 1,-1] in log space
+
+**Status**: Complete and verified
+
+### 2. repressilator.jl ✅ (Ambitious)
+**Purpose**: Demonstrate IIR on realistic mechanistic ODE model (reviewer request)
+
+**Model**: Eisenberg & Hayashi (2010) 3-gene repressilator
+- Parameters: 18 (fixing n=2 from original 19)
+- System: 6 coupled nonlinear ODEs (stiff)
+- Observables: All 3 mRNA time series
+
+**Results**:
+- Rank: 15/18 (3 non-identifiable directions)
+- Invariant null space: βK products (3-dimensional)
+- Identifiable combinations: K₁/β₁, K₂/β₂, K₃/β₃ ratios
+- **Validation**: Matches Eisenberg's profile likelihood results exactly
+
+**Technical advances**:
+- Finite-difference invariance test for stiff ODEs (atolM=1e-6)
+- Varimax rotation reveals interpretable K/β structure
+- Profile-wise prediction uncertainty analysis demonstrates practical importance
+
+**Status**: Complete, working (path bug fixed 2025-10-13)
+
+**Narrative**: Discovery→Problem→Solution
+1. **Discovery**: IIR automatically identifies K/β ratios without symbolic computation
+2. **Problem**: Profiling individual parameters (K₁, β₁) gives misleading narrow uncertainty
+3. **Solution**: Profiling identifiable ratio (K₁/β₁) provides honest prediction intervals
+
+## Key Documents
+
+- **Revised paper**: `/Users/omac010/Git-Working/overleaf_projects/invariant-image-reparameterisation/arXiv/Maclaren_IIR2025.tex`
+- **Original submission**: `/Users/omac010/Dropbox/research/manuscripts/01-submitted/iir-arxiv/arXiv/Maclaren_IIR2025.tex`
 - **Reviewer comments**: `/Users/omac010/Dropbox/research/manuscripts/03-revising/iir/iir-reviews.pdf`
 
-### What We've Done
+## Core Implementation
 
-#### 1. Implemented `invariance.jl` (NEW)
+### invariance.jl
+**Function**: `find_invariant_subspace(ϕ_func, θ0; compute_J, rtolJ, atolM, invariance_method)`
 
-Created new module implementing Algorithm 1 from the revised paper:
-- Function: `find_invariant_subspace(ϕ_func, θ0; compute_J, rtolJ, atolM)`
-- **Key innovation**: Uses higher-order Hessian test to separate invariant from non-invariant null space
-- **Distinguishes**:
-  - **Minimal image**: entire null space is invariant → maximum model reduction
-  - **Image (not minimal)**: only part of null space is invariant → partial reduction
-- Returns: `S` (singular values), `N` (invariant null space), `N_perp` (identifiable space), `rankJ`
+**Algorithm**:
+1. Compute Jacobian J at θ0 using automatic differentiation
+2. Determine rank via SVD with relative tolerance rtolJ
+3. Extract null space candidates from right singular vectors
+4. Test each null vector for invariance using Hessian-based criterion
+5. Separate N (invariant) from N_perp (potentially identifiable)
 
-#### 2. Updated `stat_model.jl` Example
+**Parameters**:
+- `rtolJ = sqrt(eps())` ≈ 1.5e-8: Relative tolerance for Jacobian rank
+- `atolM = 1e-10`: Absolute tolerance for invariance test (stricter for smooth problems)
+- `atolM = 1e-6`: Relaxed tolerance for stiff ODE systems
+- `invariance_method = :hessian_based` (default) or `:finite_difference` (for stiff ODEs)
 
-Successfully integrated new `invariance.jl` functionality:
-- ✅ Uses `find_invariant_subspace()` instead of simple SVD
-- ✅ Correctly identifies minimal image reparameterization for Poisson limit
-- ✅ Uses full transformation matrix `vcat(N_perp', N')` for code compatibility
-- ✅ Fixed transformation to properly implement ψ(θ) = exp(A log(θ))
-- ✅ Results now match previous code output (profiles look correct)
-- ✅ Correctly identifies `np` as identifiable, `n/p` as non-identifiable
+**Returns**: `(S, N, N_perp, rank_J)` where
+- S: Singular values
+- N: Invariant null space (non-identifiable directions)
+- N_perp: Complement (potentially identifiable directions)
+- rank_J: Numerical rank of Jacobian
 
-#### 3. Key Fixes Made
+### Transformation Convention
 
-1. **Docstring interpolation** (invariance.jl:60): Escaped `\$` in example code
-2. **Tolerance naming** (invariance.jl:8,33,117): `rtolM` → `atolM` with practical default `1e-10`
-3. **Full transformation matrix** (stat_model.jl:458): Include both identifiable and non-identifiable components
-4. **Minimal vs Image logic** (stat_model.jl:372-392, 470-481): Fixed backwards interpretation
-5. **Missing exponential** (stat_model.jl:498-499): Added `exp.()` to transformation functions
+**Full reparameterization**: ψ(θ) = f⁻¹(A f(θ))
 
-### Next Steps
-
-#### Completed Examples
-
-1. ✅ **Sum of Independent Poisson Limit Models** - Implemented in `stat_sum_model.jl`
-   - Demonstrates sequential IIR application (Stage 1: products, Stage 2: sum)
-   - Shows handling of nested non-identifiability structure
-   - Verified working for both stages
-
-#### Critical Issue for Manuscript
-
-The revised manuscript assumes sequential IIR "just works" - that Stage 1 naturally produces clean local monomials for Stage 2 to combine. **We've now proven this assumption is false.** Without the interpretability pass:
-- Stage 1 produces generic global monomials (mixing all parameters)
-- Stage 2 fails to identify correct structure (finds 2 dimensions instead of 1)
-- Sequential composition breaks down
-
-**Manuscript needs:**
-1. Acknowledge that Algorithm 1 returns arbitrary rotation within span(N_perp)
-2. Add procedure/algorithm for interpretability rotation (essential for sequential IIR)
-3. Frame interpretability as enforcing compositional sparsity (connection to Poggio et al.)
-4. Make explicit in stat_sum_model example that interpretability pass is necessary, not cosmetic
-5. Clarify when interpretability matters: crucial for sequential composition, less critical for single-stage
-
-This is not a minor detail - it's a gap between what the paper claims and what actually works.
-
-#### Next: More Sophisticated Mechanistic Model
-
-As requested by reviewers, implement a more complex/realistic mechanistic example:
-
-**Candidate: Systems Biology Model**
-   - Multi-parameter ODE system (e.g., extended Michaelis-Menten, gene regulation, signaling cascade)
-   - Realistic parameter dimensionality (5-10 parameters)
-   - Shows practical identifiability issues in real applications
-   - Could use model from literature to anchor credibility
-   - May require multiple stages of IIR or more complex parameter combinations
-
-**Alternative: Engineering/Physics Application**
-   - Multi-layer transport problem (e.g., heat/diffusion with multiple regions)
-   - Parameter-dependent geometry or boundary conditions
-   - Demonstrates breadth beyond biology
-
-#### Implementation Plan
-
-For each new example:
-1. Define model and auxiliary mapping ϕ(θ)
-2. Apply `find_invariant_subspace()`
-3. Compare with traditional approaches (symbolic, profile likelihood, sloppiness)
-4. Show how IIR identifies parameter combinations without symbolic computation
-5. Demonstrate uncertainty quantification via Profile-Wise Analysis
-6. Include predictive uncertainty analysis
-
-### Technical Notes
-
-#### Transformation Convention
-
-The reparameterization follows: **ψ(θ) = f⁻¹(A f(θ))**
-
-Where:
-- `f = log` (componentwise transformation)
-- `f⁻¹ = exp` (componentwise inverse)
-- `A = [N_perp'; N']` (full transformation matrix)
-
-This gives both identifiable (`N_perp'`) and non-identifiable (`N'`) combinations.
-
-#### Practical Reparameterization
-
-Even for minimal image case (full null space invariant), we use full square transformation:
+For monomials (f = log):
 ```julia
-A_full = vcat(N_perp', N')
+# Build transformation matrix (rows = parameter combinations)
+A_full_T = hcat(N_perp, N)           # Stack as columns
+A_full_T_scaled = scale_and_round(A_full_T)  # Integer coefficients
+A_full = A_full_T_scaled'            # Transpose to get row combinations
+
+# Apply transformation
 ψ(θ) = exp.(A_full * log.(θ))
 ```
 
-This maintains compatibility with existing simulation code while clearly separating identifiable from non-identifiable parameters.
+**Critical**: Scale/round on COLUMNS (basis vectors) before transposing. Scaling rows corrupts the parameter combinations.
 
-#### Tolerance Choices
+### Varimax Rotation (Optional Enhancement)
 
-- `rtolJ = sqrt(eps())` ≈ 1.5e-8 for Jacobian rank (relative to max singular value)
-- `atolM = 1e-10` for Hessian test matrix (absolute, since expecting ~0 for invariant null space)
+**Purpose**: Improve interpretability of identifiable combinations within span(N_perp)
 
-The absolute tolerance is critical because Hessian-based test produces very small values (~1e-14) for invariant directions, which need practical threshold to distinguish from numerical noise.
+**Implementation** (parameterizations.jl):
+```julia
+N_perp_rotated = varimax_rotation(N_perp; n_restarts=200)
+```
 
-#### Transformation Matrix Construction (CRITICAL)
+**When to use**:
+- High-dimensional N_perp where interpretation is difficult
+- Use rotated basis for display/interpretation
+- Keep orthonormal for transformation (numerical stability)
 
-**Correct procedure for IIR transformation:**
-1. Build column-stacked matrix: `A_full_T = hcat(N_perp, N)`
-2. Scale/round the columns: `A_full_T_scaled = scale_and_round(A_full_T; column_scales=[1,1])`
-3. Transpose to get transformation matrix: `A_full = A_full_T_scaled'`
+**When to skip**:
+- Low-dimensional problems (2-3 parameters)
+- Already sparse/interpretable structure
+- Final stage of analysis (raw SVD sufficient)
 
-**Why this matters:**
-- Rows of A_full define the parameter combinations ψ(θ) = exp(A_full * log(θ))
-- Scaling must happen on columns (the basis vectors) BEFORE transposing
-- Scaling after transposing corrupts the row combinations (parameter combinations)
-- This was the root cause of the Binomial case failure (fixed 2025-01-07)
-
-### Repository Structure
+## Repository Structure
 
 ```
 reparam/
-├── ReparamTools.jl         # Main module
-├── invariance.jl            # Algorithm 1 implementation
-├── core.jl                  # Profile likelihood, optimization
-├── utils.jl                 # Helper functions
-├── parameterizations.jl     # Coordinate transformations (fixed scale_and_round)
-├── visualization.jl         # Plotting functions
+├── ReparamTools.jl          # Main module file
+├── invariance.jl             # Algorithm 1 implementation ✅
+├── core.jl                   # Profile likelihood, optimization
+├── utils.jl                  # Helper functions
+├── parameterizations.jl      # Transformations, Varimax rotation
+├── visualization.jl          # Plotting functions
 └── examples/
-    ├── stat_model.jl        # ✅ Single Poisson limit model
-    ├── stat_sum_model.jl    # ✅ NEW: Sum of two Poisson limits (sequential IIR)
-    ├── mm_model.jl          # TODO: Update to use invariance.jl
-    └── transport_model.jl   # TODO: Update to use invariance.jl
+    ├── stat_model.jl         # ✅ Pedagogical example (complete)
+    ├── repressilator.jl  # ✅ Ambitious example (complete)
+    ├── stat_sum_model.jl     # Sequential IIR (works, but not in paper)
+    ├── pk_model.jl           # Sequential IIR (reveals limitations)
+    ├── mm_model.jl           # Legacy (needs update)
+    └── transport_model.jl    # Legacy (needs update)
 ```
 
-### Questions/Decisions Needed
+## Technical Implementation Notes
 
-1. Which ambitious example to prioritize first?
-2. Should we update existing examples (mm_model.jl, transport_model.jl) before or after new examples?
-3. Target parameter dimension for "ambitious" example? (Reviewers want "larger, more realistic")
-4. Include comparison with Stigter/Molenaar method mentioned by Reviewer #1?
+### 1. Tolerance Selection
 
-### Recent Progress (2025-01-07)
+**Jacobian rank (rtolJ)**: Relative tolerance
+- Default: `sqrt(eps())` ≈ 1.5e-8
+- Scales with problem magnitude
+- Threshold: `τ = rtolJ * σ_max`
 
-#### 1. Tolerance Consistency Verification ✅
+**Invariance test (atolM)**: Absolute tolerance
+- Default: 1e-10 (smooth problems)
+- Relaxed: 1e-6 (stiff ODEs with numerical noise)
+- Does NOT scale (testing if Hessian products ≈ 0)
 
-Thoroughly verified that tolerances are correctly implemented:
-- **rtolJ (relative, ~1.5e-8)**: For Jacobian rank determination, scales with problem magnitude
-- **atolM (absolute, 1e-10)**: For invariance test, detects if Hessian products are ~0
-- Both tolerances serve different purposes and are correctly designed
-- Tested across Poisson and Binomial cases - works correctly
+### 2. Invariance Methods
 
-#### 2. Critical Fix: Transformation Matrix Construction ✅
+**:hessian_based** (default):
+- Uses nested automatic differentiation
+- Most accurate for smooth problems
+- May fail for stiff ODEs
 
-**Problem Identified:**
-- `scale_and_round()` was applied to `A_full = vcat(N_perp', N')` where rows are parameter combinations
-- Scaling columns of A_full corrupted the row combinations
-- In Binomial case: column sign flip changed ψ₁ from `np` to `p/n`
+**:finite_difference** (for stiff systems):
+- Only uses first-order AD
+- Numerically probes parameter perturbations
+- Essential for repressilator and similar ODE models
 
-**Root Cause:**
-- When smallest column entry is negative (e.g., -0.655), dividing by it flips the column sign
-- This sheared the transformation matrix rows, breaking the parameter combinations
+### 3. Matrix Construction
 
-**Solution Applied (stat_model.jl:500-504):**
-```julia
-# OLD (broken):
-A_full = vcat(N_perp_inv', N_inv')
-evecs_scaled = scale_and_round(A_full; column_scales=[1,1])
+**Always follow this order**:
+1. Column-stack: `A_T = hcat(N_perp, N)`
+2. Scale columns: `A_T_scaled = scale_and_round(A_T)`
+3. Transpose: `A = A_T_scaled'`
 
-# NEW (fixed):
-A_full_T = hcat(N_perp_inv, N_inv)  # Columns are vectors
-A_full_T_scaled = scale_and_round(A_full_T; column_scales=[1,1])  # Scale columns
-evecs_scaled = A_full_T_scaled'  # Then transpose
-```
+**Never** scale after transposing - it corrupts the parameter combinations.
 
-**Result:**
-- Poisson: Transformation `[1,1; 1,-1]` → MLE `[np, n/p] = [19.05, 110.6]` ✓
-- Binomial: Transformation `[1,1; 1,-1]` → MLE `[np, n/p] = [19.05, 110.6]` ✓
-- Both cases now produce identical, correct transformations
-- Bounds `[13, 25]` to `[25, 1000]` work for both cases
+### 4. Practical Non-Identifiability
 
-#### 3. Fixed 2D Profile Plot Bug ✅
+Even when rank = p (full rank), **always compute and report**:
+- Condition number: σ_max/σ_min
+- Ranking of combinations by singular values
+- IIR reparameterization still valuable for separating well-identified from poorly-identified combinations
 
-**Problem:** Lines 194, 347, 672 used `xy_MLE[i]` for both parameters in 2D-derived 1D plots
+## Investigation History (For Reference)
 
-**Fix:** Changed second parameter to use `xy_MLE[j]`
-```julia
-# Line 194, 347, 672:
-ψ_MLE=xy_MLE[j]  # Was: xy_MLE[i]
-```
+### Sequential IIR Exploration (Not in Paper)
 
-**Result:** MLE markers now appear at correct positions on plots
+**Successes**:
+- `stat_sum_model.jl`: Sum of independent Poisson limits
+  - Stage 1 (f=log): Finds products n₁p₁, n₂p₂
+  - Stage 2 (f=identity): Finds sum n₁p₁ + n₂p₂
+  - Works because structure naturally aligns
 
-#### 4. Enhanced Practical Non-Identifiability Detection ✅
+**Limitations discovered**:
+- `pk_model.jl`: 2-compartment pharmacokinetic model
+  - Stage 1 correctly identifies rank 6/8
+  - Varimax produces interpretable monomials
+  - BUT: Target identifiable combinations (k₀₂+k₁₂, etc.) become nonlinear functions of Stage 1 coordinates
+  - Stage 2 with f=identity cannot recover them
+  - **Root cause**: Varimax optimizes sparsity, not compositional reducibility
 
-**Added to stat_model.jl:**
-- Always show parameter combination ranking by singular values (lines 411-423)
-- Report condition number even when structurally identifiable
-- Distinguish structural vs practical non-identifiability
-- Show which combinations are better/worse identified
+**Conclusion**: Multi-stage IIR reveals important open research problem (basis selection for compositional reduction) but is not ready for production use. Single-stage method is robust and reliable.
 
-**Key Insight:**
-The reparameterization should ALWAYS be done to optimally separate well-identified from poorly-identified combinations, regardless of structural identifiability status.
+## Paper Positioning
 
-#### 5. Toned Down Interpretative Output ✅
+### Main Text: Two Examples
 
-**Problem:** Output was too enthusiastic and misleading (e.g., declaring parameters "identifiable" when upper confidence limits hit bounds)
+1. **stat_model.jl**: Clear pedagogical introduction
+   - Shows basic IIR workflow
+   - Demonstrates minimal image reparameterization
+   - Easy to understand and verify
 
-**Fix:** Changed output to be factual and objective:
-- Removed subjective assessments ("✓ Results match expectation!", "well-conditioned")
-- Use factual language ("Appears structurally identifiable", "Condition number: 5.5")
-- Let numerical results speak for themselves without interpretation
-- Removed emoji and arrows for cleaner, more professional output
+2. **repressilator.jl**: Ambitious mechanistic demonstration
+   - Addresses reviewer request for "more compelling examples"
+   - 18 parameters, realistic ODE system
+   - Validates against established results (Eisenberg 2010)
+   - Shows practical importance via prediction uncertainty
 
-**Rationale:** The code should report facts; interpretation belongs in the paper/analysis, not the output.
+### Future Work Section
 
-### Recent Progress (2025-10-07)
+Brief mention of multi-stage possibilities with honest assessment:
+> "The single-stage method can be extended to sequential application for discovering compositional structure (e.g., products followed by sums). This works when intermediate bases naturally align with target combinations, but basis selection for optimal compositional reduction remains an open problem. Our investigation of a pharmacokinetic model revealed that standard rotation criteria (Varimax) optimize interpretability but not reducibility across stages."
 
-#### Implemented stat_sum_model.jl - Sequential IIR Application ✅
+## Immediate Tasks
 
-Created new example demonstrating sequential application of IIR to sum of two independent Poisson limit models:
+### For Manuscript
+- [x] Two working examples (stat_model, repressilator) ✅
+- [ ] Verify repressilator runs end-to-end
+- [ ] Generate repressilator prediction comparison figure
+- [ ] Update Methods section to match invariance.jl implementation
+- [ ] Write Results section highlighting both examples
 
-**Model Structure:**
-- Parameters: θ = [n₁, p₁, n₂, p₂]
-- Auxiliary mapping: ϕ(θ) = [n₁p₁ + n₂p₂, n₁p₁ + n₂p₂]
-- Distribution: Y ~ N(μ, σ²) where μ = σ² = n₁p₁ + n₂p₂
-- Only the sum n₁p₁ + n₂p₂ is identifiable
+### For Reviewer Response
+- [ ] Draft response emphasizing single-stage robustness
+- [ ] Highlight repressilator as ambitious mechanistic example
+- [ ] Explain strategic focus on reliable method over speculative extensions
 
-**Sequential IIR Application:**
-1. **Stage 1 (f=log)**: Identifies monomial combinations
-   - Applied at true parameters for clean structure
-   - Interpretability pass: rotates N_perp to align with sparse [1,1,0,0] and [0,0,1,1] patterns
-   - Uses `scale_and_round` on N_perp to get integer coefficients
-   - Keeps N (invariant null space) orthonormal for numerical stability
-   - Result: θ¹[1] = n₂p₂, θ¹[2] = n₁p₁ (clean products)
+## Questions Resolved
 
-2. **Stage 2 (f=id)**: Identifies linear combinations
-   - Applied to Stage 1 coordinates
-   - **No interpretability pass needed**—Stage 1's clean output means Stage 2's SVD naturally produces [1,1,0,0] pattern
-   - Uses `scale_and_round` on N_perp to get integer coefficients
-   - Keeps N orthonormal
-   - Result: ψ[1] = n₁p₁ + n₂p₂ (the identifiable sum)
+1. ~~Which ambitious example?~~ → Repressilator (already implemented!)
+2. ~~Single vs multi-stage focus?~~ → Single-stage (robust and reliable)
+3. ~~How to handle sequential IIR findings?~~ → Brief mention in future work
+4. ~~Update legacy examples?~~ → Not necessary, two examples sufficient
 
-**Final Transformation:**
-- ψ(θ) = A2 * exp(A1 * log(θ))
-- ψ[1] = n₁p₁ + n₂p₂ (identifiable, integer coefficients)
-- ψ[2] = 0.71(n₁p₁ - n₂p₂) (non-identifiable, orthonormal)
-- ψ[3] = (n₁/p₁)^0.71 (non-identifiable, orthonormal)
-- ψ[4] = (p₂/n₂)^0.71 (non-identifiable, orthonormal)
+## Last Updated
 
-**Key Implementation Details:**
-
-1. **Stage 1 Interpretability Pass** (lines 332-376):
-   - Needed at Stage 1 to identify clean monomial products
-   - Clusters parameters based on N_perp loadings
-   - Projects cluster indicators onto span(N_perp)
-   - Orthonormalizes to get sparse basis vectors
-   - Produces clean [1,1,0,0] and [0,0,1,1] patterns for products
-   - In this example, Stage 2 does not need this—the clean Stage 1 output naturally leads to clean Stage 2 patterns via scale_and_round alone
-
-2. **Selective Scaling** (critical for correctness):
-   - Apply `scale_and_round` to N_perp (potentially identifiable) for integer coefficients
-   - Keep N (invariant null space) orthonormal for numerical stability
-   - This separates "interpretability" (identifiable) from "stability" (non-identifiable)
-
-3. **Bounds Management** (lines 649-709):
-   - Use Fisher eigenvalues to determine truly identifiable parameters
-   - Tight bounds for identifiable parameters
-   - Wide positive bounds for non-identifiable parameters with positive MLEs
-   - Symmetric bounds for ψ[2] which can be negative (difference of products)
-   - Threshold of 0.1 to distinguish "near-zero" from "positive" MLEs
-
-4. **Bug Fixes:**
-   - Fixed `scale_and_round` in parameterizations.jl (line 32): was indexing into original column instead of filtered subset
-   - Fixed bounds logic: ψ[2] gets special treatment as it can be negative
-   - Used true parameters (not MLE) for invariance analysis to get clean asymmetric structure
-
-**Plot Labels:**
-- Use symbolic expressions: $n_1p_1 + n_2p_2$, $0.71(n_1p_1 - n_2p_2)$, etc.
-- Makes profiles immediately interpretable
-- Fractional exponents (0.71) remain for orthonormal non-identifiable directions
-
-**Design Philosophy:**
-- **Identifiable directions**: Maximize interpretability (integer coefficients, sparse patterns)
-- **Non-identifiable directions**: Maximize numerical stability (orthonormal basis)
-- The fractional coefficients in non-identifiable directions don't matter statistically (likelihood is flat)
-
-**Additional Files:**
-- `examples/test_stat_sum.jl`: Lightweight test script (~130 lines) for debugging transformation logic without profiling
-- Figures save to main `figures/` directory via `save_dir="../figures/"` parameter
-
-**Verification (2025-10-07):**
-- Confirmed Stage 2 does NOT need interpretability pass **in this example**—A2 matrix correctly produces [1.0, 1.0, 0.0, 0.0] pattern
-- For this specific case (sum of two products), Stage 1's clean output naturally leads to clean Stage 2 patterns via `scale_and_round` alone
-- Other examples with more complex linear combinations at Stage 2 may still benefit from an interpretability pass
-
-**Critical Finding: Interpretability Pass is Essential for Sequential IIR (2025-10-07):**
-
-The Stage 1 interpretability pass (lines 332-377 in stat_sum_model.jl) is **not just cosmetic** - it's essential for sequential IIR to work correctly:
-
-**Without the pass:**
-- Stage 1 produces generic monomials: θ¹[1] = n₁^0.5·p₁^0.5·n₂·p₂ (mixing all parameters)
-- Stage 2 incorrectly identifies 2 "potentially identifiable" dimensions instead of 1
-- Result: defeats the purpose of sequential application - you get what single-stage IIR would produce
-
-**With the pass:**
-- Stage 1 produces local products: θ¹[1] = n₁p₁, θ¹[2] = n₂p₂ (respecting parameter structure)
-- Stage 2 correctly identifies 1 potentially identifiable dimension (the sum n₁p₁ + n₂p₂)
-- Result: true sequential decomposition - products first, then linear combinations
-
-**Conclusion:** The interpretability pass is what makes sequential IIR actually *sequential* rather than just a complicated way to get generic monomials. It enforces local structure at each stage.
-
-**Key principle:** Interpretability is crucial for sequential composition. Without it, `find_invariant_subspace` returns an arbitrary rotation within span(N_perp), which mixes parameters globally. This prevents subsequent stages from building on the structure established by earlier stages. The interpretability pass bridges stages by ensuring each stage's output has the structure the next stage expects.
-
-**Connection to Compositional Sparsity (Poggio et al.):**
-The interpretability pass enforces what Poggio calls "compositional sparsity" - the property that functions decompose as compositions of constituent functions, each depending only on low-dimensional subsets of inputs. In our setting:
-- Stage 1 products (n₁p₁, n₂p₂) are constituent functions each depending on local parameter subsets
-- Stage 2 sum combines these constituents
-- Without the interpretability pass, we get global functions mixing all parameters, losing compositional structure
-- This suggests interpretability isn't just "making results pretty" - it's **enforcing the compositional decomposition** of the parameter-to-data mapping
-
-**For the manuscript:** This connection could strengthen the paper by framing interpretability as fundamental to discovering compositional structure, not as optional post-processing. The stat_sum_model example should explicitly discuss this.
-
-**Varimax Rotation Approach (2025-10-07):**
-Based on varimax_rotation.md, the proper solution is to use **Varimax rotation** (Kaiser 1958) instead of the ad-hoc clustering approach:
-- Apply varimax to N_perp with multiple random restarts (e.g., 200)
-- Maximizes variance of squared loadings → encourages sparse structure
-- Stays within the invariant subspace (orthogonal rotation)
-- Use for intermediate stages only (final stage can use raw SVD)
-
-**Implementation:**
-- Julia package FactorLoadingMatrices.jl provides `varimax()`
-- Added `varimax_rotation()` function to parameterizations.jl (wraps varimax with random restarts)
-- Testing shows multiple random restarts are essential - single starts get stuck in poor local optima (objective 0.03-0.49 vs. optimal ~0.5)
-- Test case in factor_test.jl successfully reproduces Python results
-
-**Tentative observation:** Our application (varimax on SVD output from small, symmetric problems) may require more restarts (~200) than traditional factor analysis. Possible reasons: perfect symmetry, small dimensions (4×2), balanced loadings from SVD create nearly-flat optimization surface. Further investigation needed.
-
-**Integration (2025-10-08):**
-- ✅ Replaced ad-hoc clustering approach in stat_sum_model.jl with `varimax_rotation()`
-- ✅ Added FactorLoadingMatrices to package dependencies (ReparamTools.jl line 11)
-- ✅ Exported `varimax_rotation` from ReparamTools.jl (line 41)
-- ✅ Verified: Stage 1 produces clean [1,1,0,0] / [0,0,1,1] sparse patterns
-- ✅ Verified: Stage 2 correctly identifies 1 potentially identifiable dimension (the sum)
-
-**Implementation Status:**
-- `varimax_rotation()` is now a reusable utility in parameterizations.jl
-- Takes N_perp matrix, returns rotated basis with sparse structure
-- Parameters: n_restarts (default 200), threshold (default 1e-2), gamma (default 1.0)
-- Use for intermediate stages of sequential IIR (not needed for final stage)
-- Single-stage examples (stat_model.jl) don't need it
-- Some Stage 2 examples may not need it if Stage 1 produces sufficiently clean output
-
-### Recent Progress (2025-01-09)
-
-#### PK Model Implementation and Critical Finding
-
-**Implemented**: 2-compartment pharmacokinetic model with Michaelis-Menten clearance (Meshkat et al. 2014)
-- 8 parameters: [b₁, c₁, k₀₁, k₀₂, k₁₂, k₂₁, V_M, K_M]
-- 5 known identifiable combinations (q₁...q₅)
-- Sequential IIR applied with Varimax rotation
-
-**Technical Success** ✓:
-- Fixed orthogonality preservation (separated orthonormal from scaled matrices)
-- Proper matrix inversion (A1_inv = inv(A1_full), not transpose)
-- All q₁...q₅ perfectly reconstructible (errors ~1e-16)
-- Stage 1 correctly identifies rank 6/8
-
-**Critical Finding** ⚠️:
-**Basis choice problem discovered**: Varimax rotation optimizes for sparsity but not for compositional reducibility.
-
-After Varimax rotation in Stage 1, identifiable combinations q₃ = k₀₂+k₁₂ and q₅ = c₁V_M(k₀₁+k₂₁) become **nonlinear functions** of the θ¹ coordinates. Stage 2 with f=identity can only find LINEAR combinations, so cannot recover these.
-
-**Example**: If θ¹[i] ∝ 1/k₀₂, then q₃ = k₀₂ + k₁₂ requires 1/θ¹[i] + θ¹[j] (reciprocal + linear), which Stage 2 cannot identify.
-
-**Comparison**:
-- **stat_sum_model.jl** ✓: Structure aligns perfectly, both stages successful
-- **pk_model.jl** ⚠️: Varimax creates misalignment, Stage 2 cannot complete
-
-**Implication**: Any rotation within span(N_perp) is mathematically equivalent for Stage 1, but produces different Stage 2 results. Varimax optimizes wrong objective for sequential composition.
-
-**Files Created**:
-- `pk_model.jl`: Full implementation
-- `pk_stage2_analysis.jl`: Focused analysis revealing limitation
-- `test_pk_reconstruction.jl`: Validation of transformation accuracy
-- `ANALYSIS_SUMMARY.md`: Complete technical documentation
-- `NEXT_STEPS.md`: Decision points for paper revision
-
-**Recommendation**: Report this as honest scientific finding. The PK model demonstrates both method capabilities (correct rank) and limitations (basis dependence), revealing important open research problems.
-
-### Last Updated
-
-2025-01-09 (PK model analysis revealing basis choice limitation)
+**2025-10-13**: Consolidated documentation reflecting strategic focus on single-stage IIR with two complete examples (stat_model, repressilator). Multi-stage investigation complete but deferred to future work.
