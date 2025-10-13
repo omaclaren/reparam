@@ -195,6 +195,14 @@ k_degp₃_true = 0.004982
 # Hill coefficient (fixed at 2.0 in model)
 n_true = 2.0
 
+# Parameter names
+param_names = ["α₀₁", "α₀₂", "α₀₃",
+               "α₁", "α₂", "α₃",
+               "β₁", "β₂", "β₃",
+               "K₁", "K₂", "K₃",
+               "k_degm₁", "k_degm₂", "k_degm₃",
+               "k_degp₁", "k_degp₂", "k_degp₃"]
+
 # Parameter vector (18 parameters, n not included since it's fixed)
 θ_true = [α₀₁_true, α₀₂_true, α₀₃_true,
           α₁_true, α₂_true, α₃_true,
@@ -202,11 +210,6 @@ n_true = 2.0
           K₁_true, K₂_true, K₃_true,
           k_degm₁_true, k_degm₂_true, k_degm₃_true,
           k_degp₁_true, k_degp₂_true, k_degp₃_true]
-
-param_names = ["α₀₁", "α₀₂", "α₀₃", "α₁", "α₂", "α₃",
-               "β₁", "β₂", "β₃", "K₁", "K₂", "K₃",
-               "k_degm₁", "k_degm₂", "k_degm₃",
-               "k_degp₁", "k_degp₂", "k_degp₃"]
 
 println("\nTrue parameter values (18 total, n=2 fixed):")
 for (i, (name, val)) in enumerate(zip(param_names, θ_true))
@@ -848,20 +851,42 @@ function lnlike_θ(θ)
     end
 end
 
-# Find MLE (use true params as initial guess)
-θ_MLE = copy(θ_true)  # For now, assume MLE ≈ true params
-lnlike_MLE = lnlike_θ(θ_MLE)
+# Find MLE by optimization
+println("\nFinding MLE...")
 
-println("\nLog-likelihood at MLE: $(round(lnlike_MLE, digits=2))")
-
-# Bounds for profiling (log scale for positivity)
+# Bounds for optimization (log scale for positivity)
 # Tighter bounds to avoid unstable ODE regions
 θ_log_lower = log.(θ_true .* 0.7)  # 30% smaller (tighter than before)
 θ_log_upper = log.(θ_true .* 1.5)  # 50% larger (tighter than before)
-θ_log_MLE = log.(θ_MLE)
+θ_log_initial = log.(θ_true)  # Start from true parameters
 
 # Log-likelihood in log-parameter space
 lnlike_θ_log = θ_log -> lnlike_θ(exp.(θ_log))
+
+# Optimize to find MLE (empty target_indices means find MLE)
+target_indices = Int[]  # Empty for MLE
+n_guesses_mle = 3
+grid_steps_mle = Int[]  # Empty for MLE
+
+# Generate multiple initial guesses
+nuisance_guesses_mle = generate_initial_guesses(θ_log_lower, θ_log_upper, n_guesses_mle)
+
+θ_log_MLE, lnlike_MLE = profile_target(
+    lnlike_θ_log, target_indices,
+    θ_log_lower, θ_log_upper,
+    θ_log_initial;
+    grid_steps=grid_steps_mle,
+    ω_initial_extras=nuisance_guesses_mle,
+    method=:LN_BOBYQA,
+    optmaxtime=30.0)
+
+θ_MLE = exp.(θ_log_MLE)
+
+println("Log-likelihood at MLE: $(round(lnlike_MLE, digits=2))")
+println("MLE parameter values:")
+for (i, (name, val)) in enumerate(zip(param_names, θ_MLE))
+    println("  $name = $(round(val, sigdigits=4)) (true: $(round(θ_true[i], sigdigits=4)))")
+end
 
 # Profile K₁ (parameter index 10)
 println("\n1. Profiling K₁ (parameter 10, non-identifiable)...")
