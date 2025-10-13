@@ -347,10 +347,20 @@ nuisance_guesses_mle = generate_initial_guesses(θ_log_lower, θ_log_upper, n_gu
 
 θ_MLE = exp.(θ_log_MLE)
 
-println("Log-likelihood at MLE: $(round(lnlike_MLE, digits=2))")
-println("MLE parameter values:")
+# Verify MLE is better than true parameters
+lnlike_true = lnlike_θ(θ_true)
+println("\nMLE verification:")
+println("  Log-likelihood at true parameters: $(round(lnlike_true, digits=2))")
+println("  Log-likelihood at MLE: $(round(lnlike_MLE, digits=2))")
+println("  Improvement: $(round(lnlike_MLE - lnlike_true, digits=2))")
+if lnlike_MLE < lnlike_true
+    @warn "MLE has worse likelihood than true parameters! Optimization may have failed."
+end
+
+println("\nMLE parameter values:")
 for (i, (name, val)) in enumerate(zip(param_names, θ_MLE))
-    println("  $name = $(round(val, sigdigits=4)) (true: $(round(θ_true[i], sigdigits=4)))")
+    rel_error = abs(val - θ_true[i]) / θ_true[i] * 100
+    println("  $name = $(round(val, sigdigits=4)) (true: $(round(θ_true[i], sigdigits=4)), error: $(round(rel_error, digits=1))%)")
 end
 
 # --------------------------------------------------------
