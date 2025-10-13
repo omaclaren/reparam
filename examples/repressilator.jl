@@ -1049,11 +1049,15 @@ ci_intervals = [
     (lower_ratio_mat[1,:], upper_ratio_mat[1,:], "K₁/β₁ ratio (joint)", :blue)
 ]
 
+# Extract actual noisy data for m₁ (data is flattened in time-major order)
+data_mat = reshape(data, 3, NT)'  # NT×3
+data_m1 = data_mat[:, 1]  # m₁ values at measurement times
+
 plot_profile_wise_CI_comparison(
     t_pred, mle_mat[1,:],
     ci_intervals,
     "repressilator", "m₁ concentration", "Time", "t";
-    data_indep=t, data_dep=vec(data_mRNA[1,:]),
+    data_indep=t, data_dep=data_m1,
     title="Repressilator: Individual vs Ratio Prediction Intervals",
     save_dir=joinpath(@__DIR__, "..", "figures") * "/"
 )
