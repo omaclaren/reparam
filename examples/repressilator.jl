@@ -22,7 +22,7 @@ Random.seed!(42)
 # CONFIGURATION: Profiling Settings
 # ========================================================================
 # Three modes: "test" (~1 min), "paper" (~4 min), "full" (~60 min)
-const PROFILE_MODE = "paper"  # Change to "test" or "full" as needed
+const PROFILE_MODE = "test"  # Change to "test" or "full" as needed
 
 # Mode configurations
 const PROFILE_CONFIGS = Dict(
@@ -387,7 +387,7 @@ t_mle_start = time()
     θ_log_initial;
     grid_steps=grid_steps_mle,
     ω_initial_extras=nuisance_guesses_mle,
-    method=:LD_LBFGS,
+    method=:LN_BOBYQA,
     optmaxtime=30.0)
 t_mle_elapsed = time() - t_mle_start
 
@@ -682,6 +682,63 @@ if size(N, 2) > 0
 
     println("\nVarimax-based transformation matrix A_varimax:")
     println("  Dimensions: ", size(A_varimax))
+
+    # ======================================================================
+    # CREATE IIR TRANSFORMATIONS FOR PROFILING
+    # ======================================================================
+    println("\n" * repeat("=", 70))
+    println("CREATING IIR TRANSFORMATIONS FOR PROFILING")
+    println(repeat("=", 70))
+
+    # Create forward and inverse transformations: ψ = exp(A * log(θ))
+    θ_to_ψ, ψ_to_θ = reparam(A_varimax)
+
+    # Transform MLE to ψ space
+    ψ_MLE = θ_to_ψ(θ_MLE)
+    println("\nMLE in ψ coordinates:")
+    for i in 1:min(5, length(ψ_MLE))
+        println("  ψ[$i] = $(round(ψ_MLE[i], digits=4))")
+    end
+
+    # Create likelihood in ψ space
+    function lnlike_ψ(ψ)
+        θ = ψ_to_θ(ψ)
+        return lnlike_θ(θ)
+    end
+
+    lnlike_ψ_log(ψ_log) = lnlike_ψ(exp.(ψ_log))
+
+    println("\nLikelihood in ψ space created")
+    println("  lnlike_ψ(ψ_MLE) = $(round(lnlike_ψ(ψ_MLE), digits=4))")
+    println("  lnlike_θ(θ_MLE) = $(round(lnlike_θ(θ_MLE), digits=4))")
+    println("  Match: $(isapprox(lnlike_ψ(ψ_MLE), lnlike_θ(θ_MLE), atol=1e-6))")
+
+    # Identify which ψ index corresponds to K₁/β₁ ratio
+    # From ratio_directions (computed earlier): find entry where i==1
+    K1_β1_ratio_column = nothing
+    for (j, i, beta_coef, K_coef) in ratio_directions
+        if i == 1  # K₁/β₁ ratio
+            K1_β1_ratio_column = j
+            println("\n Found K₁/β₁ ratio at N_perp column $j")
+            break
+        end
+    end
+
+    if isnothing(K1_β1_ratio_column)
+        error("Could not identify K₁/β₁ ratio direction in N_perp!")
+    end
+
+    # The ψ index is the column index in N_perp (since A = [N_perp'; N'])
+    ψ_K1_β1_index = K1_β1_ratio_column
+    println("  K₁/β₁ ratio is ψ[$ψ_K1_β1_index] in IIR coordinates")
+    println("  ψ[$ψ_K1_β1_index](MLE) = $(round(ψ_MLE[ψ_K1_β1_index], digits=4))")
+    println("  True K₁/β₁ = $(round(θ_true[10]/θ_true[7], digits=2))")
+
+    # Create distribution function in ψ space for prediction intervals
+    distrib_fine_ψ(ψ) = distrib_fine_θ(ψ_to_θ(ψ))
+    distrib_fine_ψ_log(ψ_log) = distrib_fine_ψ(exp.(ψ_log))
+
+    println("\nDistribution in ψ space created for predictions")
 
     # Show the non-identifiable combinations from Varimax
     println("\n  Non-identifiable directions (Varimax basis):")
@@ -1045,7 +1102,7 @@ for (i, (name, subscript)) in enumerate(zip(species_names, species_subscripts))
     ci_intervals = [
         (lower_K1_mat[i,:], upper_K1_mat[i,:], "K₁ individual", :red),
         (lower_β1_mat[i,:], upper_β1_mat[i,:], "β₁ individual", :orange),
-        (lower_ratio_mat[i,:], upper_ratio_mat[i,:], "K₁/β₁ ratio (joint)", :blue)
+        (lower_ratio_mat[i,:], upper_ratio_mat[i,:], "K₁/β₁ ratio", :blue)
     ]
 
     plot_profile_wise_CI_comparison(
