@@ -20,15 +20,16 @@ Random.seed!(42)
 # --------------------------------------------------------
 # Model Definition: Repressilator (Eisenberg & Hayashi Setup)
 # --------------------------------------------------------
-# Eisenberg & Hayashi exact parameter setup with 19 parameters
+# Eisenberg & Hayashi exact parameter setup
 #
 # For i=1,2,3 (modulo 3):
 #   ṁᵢ = α₀ᵢ + αᵢ/(1 + (pᵢ₋₁/Kᵢ₋₁)ⁿ) - k_degmᵢ·mᵢ
 #   ṗᵢ = βᵢ·mᵢ - k_degpᵢ·pᵢ
 #   yᵢ = mᵢ
 #
-# 19 parameters total (n is fixed at 2)
-# Rank 16/19 → 3 non-identifiable combinations: K₁/β₁, K₂/β₂, K₃/β₃
+# The ODE system accepts 19 parameters, but we fix n=2 for IIR analysis.
+# This gives 18 free parameters with rank 15/18 (3 non-identifiable).
+# Expected identifiable: K₁/β₁, K₂/β₂, K₃/β₃ ratios.
 
 function repressilator_eisenberg!(dX, X, θ, t)
     """
@@ -101,7 +102,8 @@ end
 
 println(repeat("=", 70))
 println("Repressilator Model (Eisenberg & Hayashi Setup)")
-println("19 Parameters, Rank 16/19, Expected: K₁/β₁, K₂/β₂, K₃/β₃")
+println("18 Free Parameters (n fixed at 2)")
+println("Expected identifiable: K₁/β₁, K₂/β₂, K₃/β₃ ratios")
 println(repeat("=", 70))
 
 # Time grid - dense sampling as in Eisenberg
