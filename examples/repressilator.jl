@@ -269,10 +269,6 @@ distrib_fine_θ = θ -> MvLogNormal(log.(abs.(predict_mRNA(θ, t_pred)) .+ 1e-10
 # Log-space wrapper for profiling (profiles are in log-space)
 distrib_fine_θ_log = θ_log -> distrib_fine_θ(exp.(θ_log))
 
-# MLE prediction for reference (on fine grid)
-mRNA_MLE = predict_mRNA(θ_true, t_pred)
-pred_mean_MLE = mRNA_MLE
-
 println("\nPrediction setup:")
 println("  Parameters: 18 (n=2 fixed in model)")
 println("  Time points: $(length(t_pred)) over [0, $T_end]")
@@ -387,6 +383,9 @@ for (i, (name, val)) in enumerate(zip(param_names, θ_MLE))
     rel_error = abs(val - θ_true[i]) / θ_true[i] * 100
     println("  $name = $(round(val, sigdigits=4)) (true: $(round(θ_true[i], sigdigits=4)), error: $(round(rel_error, digits=1))%)")
 end
+
+# Compute MLE predictions for plotting (on fine grid)
+pred_mean_MLE = predict_mRNA(θ_MLE, t_pred)
 
 # --------------------------------------------------------
 # Apply IIR at MLE (18 parameters)
