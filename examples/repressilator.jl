@@ -326,13 +326,35 @@ function lnlike_θ(θ)
 end
 
 # Find MLE by optimization
-println("\nFinding MLE...")
+println("\n" * repeat("=", 70))
+println("FINDING MLE")
+println(repeat("=", 70))
 
 # Bounds for optimization (log scale for positivity)
 # Tighter bounds to avoid unstable ODE regions
 θ_log_lower = log.(θ_true .* 0.7)  # 30% smaller (tighter than before)
 θ_log_upper = log.(θ_true .* 1.5)  # 50% larger (tighter than before)
 θ_log_initial = log.(θ_true)  # Start from true parameters
+
+println("\nOptimization setup:")
+println("  Method: LN_BOBYQA (gradient-free, bound-constrained)")
+println("  Parameters: 18")
+println("  Initial guesses: 3 (including starting at true parameters)")
+println("  Max time: 30 seconds per guess")
+println("  Bounds: 0.7×θ_true to 1.5×θ_true (log-space)")
+
+# Test initial point
+lnlike_initial = lnlike_θ(θ_true)
+println("\nInitial point evaluation:")
+println("  Starting at: θ_true")
+println("  Log-likelihood: $(round(lnlike_initial, digits=2))")
+if lnlike_initial == -Inf
+    @error "Initial point has -Inf likelihood! Cannot optimize. Check:\n" *
+           "  - ODE solver settings (tolerances, time span)\n" *
+           "  - Parameter bounds\n" *
+           "  - Data generation"
+    error("Cannot proceed with -Inf initial likelihood")
+end
 
 # Log-likelihood in log-parameter space
 lnlike_θ_log = θ_log -> lnlike_θ(exp.(θ_log))
@@ -345,6 +367,10 @@ grid_steps_mle = Int[]  # Empty for MLE
 # Generate multiple initial guesses
 nuisance_guesses_mle = generate_initial_guesses(θ_log_lower, θ_log_upper, n_guesses_mle)
 
+println("\nRunning optimization...")
+println("  (This may take up to 90 seconds with 3 initial guesses)")
+flush(stdout)
+
 θ_log_MLE, lnlike_MLE = profile_target(
     lnlike_θ_log, target_indices,
     θ_log_lower, θ_log_upper,
@@ -353,6 +379,8 @@ nuisance_guesses_mle = generate_initial_guesses(θ_log_lower, θ_log_upper, n_gu
     ω_initial_extras=nuisance_guesses_mle,
     method=:LN_BOBYQA,
     optmaxtime=30.0)
+
+println("Optimization complete!")
 
 θ_MLE = exp.(θ_log_MLE)
 
