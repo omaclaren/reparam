@@ -20,40 +20,41 @@ Random.seed!(42)
 # --------------------------------------------------------
 # Model Definition: Repressilator (Eisenberg & Hayashi Setup)
 # --------------------------------------------------------
-# Eisenberg & Hayashi exact parameter setup
+# Eisenberg & Hayashi exact parameter setup with n=2 (Hill coefficient fixed)
 #
 # For i=1,2,3 (modulo 3):
-#   ṁᵢ = α₀ᵢ + αᵢ/(1 + (pᵢ₋₁/Kᵢ₋₁)ⁿ) - k_degmᵢ·mᵢ
+#   ṁᵢ = α₀ᵢ + αᵢ/(1 + (pᵢ₋₁/Kᵢ₋₁)²) - k_degmᵢ·mᵢ
 #   ṗᵢ = βᵢ·mᵢ - k_degpᵢ·pᵢ
 #   yᵢ = mᵢ
 #
-# The ODE system accepts 19 parameters, but we fix n=2 for IIR analysis.
-# This gives 18 free parameters with rank 15/18 (3 non-identifiable).
+# 18 parameters with rank 15/18 (3 non-identifiable).
 # Expected identifiable: K₁/β₁, K₂/β₂, K₃/β₃ ratios.
 
 function repressilator_eisenberg!(dX, X, θ, t)
     """
-    Repressilator ODE system - Eisenberg & Hayashi formulation.
+    Repressilator ODE system - Eisenberg & Hayashi formulation with n=2 fixed.
 
     State vector X = [m₁, m₂, m₃, p₁, p₂, p₃]
     Parameter vector θ = [α₀₁, α₀₂, α₀₃, α₁, α₂, α₃,
                           β₁, β₂, β₃, K₁, K₂, K₃,
-                          k_degm₁, k_degm₂, k_degm₃, k_degp₁, k_degp₂, k_degp₃, n]
+                          k_degm₁, k_degm₂, k_degm₃, k_degp₁, k_degp₂, k_degp₃]
 
-    19 parameters (though n is typically fixed)
+    18 parameters (Hill coefficient n fixed at 2)
     """
 
     # Unpack state variables
     m₁, m₂, m₃, p₁, p₂, p₃ = X
 
-    # Unpack parameters (19 total)
+    # Unpack parameters (18 total)
     α₀₁, α₀₂, α₀₃ = θ[1:3]      # Basal transcription
     α₁, α₂, α₃ = θ[4:6]          # Regulated transcription
     β₁, β₂, β₃ = θ[7:9]          # Translation
     K₁, K₂, K₃ = θ[10:12]        # Inhibition constants
     k_degm₁, k_degm₂, k_degm₃ = θ[13:15]  # mRNA degradation
     k_degp₁, k_degp₂, k_degp₃ = θ[16:18]  # Protein degradation
-    n = θ[19]                     # Hill coefficient (usually fixed at 2)
+
+    # Hill coefficient fixed at 2
+    n = 2.0
 
     # mRNA dynamics: basal + regulated transcription - degradation
     # Gene i is repressed by protein i-1 (modulo 3)
@@ -151,24 +152,24 @@ k_degp₁_true = 0.001155
 k_degp₂_true = 0.00059
 k_degp₃_true = 0.004982
 
-# Hill coefficient (fixed)
+# Hill coefficient (fixed at 2.0 in model)
 n_true = 2.0
 
-# Full parameter vector (19 parameters)
+# Parameter vector (18 parameters, n not included since it's fixed)
 θ_true = [α₀₁_true, α₀₂_true, α₀₃_true,
           α₁_true, α₂_true, α₃_true,
           β₁_true, β₂_true, β₃_true,
           K₁_true, K₂_true, K₃_true,
           k_degm₁_true, k_degm₂_true, k_degm₃_true,
-          k_degp₁_true, k_degp₂_true, k_degp₃_true,
-          n_true]
+          k_degp₁_true, k_degp₂_true, k_degp₃_true]
 
-println("\nTrue parameter values (19 total):")
-param_names_full = ["α₀₁", "α₀₂", "α₀₃", "α₁", "α₂", "α₃",
-                    "β₁", "β₂", "β₃", "K₁", "K₂", "K₃",
-                    "k_degm₁", "k_degm₂", "k_degm₃",
-                    "k_degp₁", "k_degp₂", "k_degp₃", "n"]
-for (i, (name, val)) in enumerate(zip(param_names_full, θ_true))
+param_names = ["α₀₁", "α₀₂", "α₀₃", "α₁", "α₂", "α₃",
+               "β₁", "β₂", "β₃", "K₁", "K₂", "K₃",
+               "k_degm₁", "k_degm₂", "k_degm₃",
+               "k_degp₁", "k_degp₂", "k_degp₃"]
+
+println("\nTrue parameter values (18 total, n=2 fixed):")
+for (i, (name, val)) in enumerate(zip(param_names, θ_true))
     println("  $name = $val")
 end
 
@@ -193,38 +194,17 @@ println("  Total observations: $N_obs")
 println("  Noise level σ = $σ")
 
 # --------------------------------------------------------
-# Apply IIR with only n fixed (estimate 18 parameters)
+# Apply IIR (18 parameters)
 # --------------------------------------------------------
 
-# Fix only n at 2 (as in Eisenberg)
-# This gives 18 free parameters
-
-function create_ϕ_reduced_fix_n(ϕ_full, n_fixed)
-    """Create reduced ϕ with only n fixed."""
-    function ϕ_red(θ_red)
-        # θ_red has 18 parameters (all except n)
-        T = promote_type(eltype(θ_red), Float64)
-        θ_full = Vector{T}(undef, 19)
-        θ_full[1:18] = θ_red
-        θ_full[19] = n_fixed
-        return ϕ_full(θ_full)
-    end
-    return ϕ_red
-end
-
-ϕ_reduced = create_ϕ_reduced_fix_n(ϕ_func, n_true)
-θ_red_true = θ_true[1:18]
-
-param_names = param_names_full[1:18]
-n_params = 18
-
 println("\n" * repeat("=", 70))
-println("Applying IIR (18 parameters, n fixed)")
+println("Applying IIR (18 parameters)")
 println(repeat("=", 70))
 
 # Wrap in log-space for Stage 1
-ϕ_log(θ_log) = ϕ_reduced(exp.(θ_log))
-θ_log_true = log.(θ_red_true)
+ϕ_log(θ_log) = ϕ_func(exp.(θ_log))
+θ_log_true = log.(θ_true)
+n_params = 18
 
 # Compute Jacobian in log-space
 J_θ_log = compute_ϕ_Jacobian(ϕ_log, θ_log_true)
@@ -770,26 +750,23 @@ t_pred = LinRange(0, T_end, 101)  # Fine grid for smooth prediction bands
 σ_pred = σ
 
 # Define prediction distribution: mRNA trajectories m₁, m₂, m₃
-# IMPORTANT: Work in 18-parameter space (n fixed at 2)
 # Use data grid (t) for likelihood, prediction grid (t_pred) for visualization
-function predict_mRNA_18(θ_red, t_grid=t)
-    # Reconstruct full 19-parameter vector with n=2 fixed
-    θ_full = vcat(θ_red, [n_true])
-    sol_matrix = solve_repressilator(t_grid, θ_full, X0)
+function predict_mRNA(θ, t_grid=t)
+    sol_matrix = solve_repressilator(t_grid, θ, X0)
     mRNA = extract_mrna(sol_matrix)  # 3×NT matrix
     return vec(mRNA')  # Flatten to vector (time-major order)
 end
 
 # Distribution for predictions (mRNA only, not proteins)
 # Use fine grid for smooth prediction bands
-distrib_fine_θ_red = θ_red -> MvLogNormal(log.(abs.(predict_mRNA_18(θ_red, t_pred)) .+ 1e-10), σ_pred^2*I(3*length(t_pred)))
+distrib_fine_θ = θ -> MvLogNormal(log.(abs.(predict_mRNA(θ, t_pred)) .+ 1e-10), σ_pred^2*I(3*length(t_pred)))
 
-# MLE prediction for reference (on fine grid) - use 18-param true values
-mRNA_MLE = predict_mRNA_18(θ_red_true, t_pred)
+# MLE prediction for reference (on fine grid)
+mRNA_MLE = predict_mRNA(θ_true, t_pred)
 pred_mean_MLE = mRNA_MLE
 
 println("\nPrediction setup:")
-println("  Parameters: 18 (n fixed at 2)")
+println("  Parameters: 18 (n=2 fixed in model)")
 println("  Time points: $(length(t_pred)) over [0, $T_end]")
 println("  Observables: 3 mRNA species (m₁, m₂, m₃)")
 println("  Total prediction dimension: $(3*length(t_pred))")
@@ -808,19 +785,19 @@ println(repeat("-", 70))
 # 2. β₁ individually (non-identifiable, βK product in null space)
 # 3. K₁/β₁ ratio (identifiable, in complement space)
 
-# Define log-likelihood for profiling in 18-parameter space
+# Define log-likelihood for profiling
 # We need synthetic "data" first - generate from true parameters
 sol_matrix_data = solve_repressilator(t, θ_true, X0)
 data_mRNA = extract_mrna(sol_matrix_data)  # 3×NT
 data_obs = vec(data_mRNA')  # Flatten (time-major order)
 
-# Log-likelihood function in 18-parameter space
-function lnlike_θ_red(θ_red)
-    if any(θ_red .<= 0)
+# Log-likelihood function
+function lnlike_θ(θ)
+    if any(θ .<= 0)
         return -Inf
     end
     try
-        pred = predict_mRNA_18(θ_red)
+        pred = predict_mRNA(θ)
         if length(pred) != length(data_obs)
             return -Inf  # Solver failed
         end
@@ -831,38 +808,38 @@ function lnlike_θ_red(θ_red)
     end
 end
 
-# Find MLE (use true params as initial guess) - 18 parameters
-θ_red_MLE = copy(θ_red_true)  # For now, assume MLE ≈ true params
-lnlike_MLE = lnlike_θ_red(θ_red_MLE)
+# Find MLE (use true params as initial guess)
+θ_MLE = copy(θ_true)  # For now, assume MLE ≈ true params
+lnlike_MLE = lnlike_θ(θ_MLE)
 
 println("\nLog-likelihood at MLE: $(round(lnlike_MLE, digits=2))")
 
-# Bounds for profiling (log scale for positivity) - 18 parameters
+# Bounds for profiling (log scale for positivity)
 # Tighter bounds to avoid unstable ODE regions
-θ_red_log_lower = log.(θ_red_true .* 0.7)  # 30% smaller (tighter than before)
-θ_red_log_upper = log.(θ_red_true .* 1.5)  # 50% larger (tighter than before)
-θ_red_log_MLE = log.(θ_red_MLE)
+θ_log_lower = log.(θ_true .* 0.7)  # 30% smaller (tighter than before)
+θ_log_upper = log.(θ_true .* 1.5)  # 50% larger (tighter than before)
+θ_log_MLE = log.(θ_MLE)
 
 # Log-likelihood in log-parameter space
-lnlike_θ_red_log = θ_red_log -> lnlike_θ_red(exp.(θ_red_log))
+lnlike_θ_log = θ_log -> lnlike_θ(exp.(θ_log))
 
-# Profile K₁ (parameter index 10 in 18-param space)
+# Profile K₁ (parameter index 10)
 println("\n1. Profiling K₁ (parameter 10, non-identifiable)...")
 K1_index = 10
-n_params_red = 18  # Reduced parameter space (n fixed)
-nuisance_indices_K1 = setdiff(1:n_params_red, K1_index)
-nuisance_guess_K1 = θ_red_log_MLE[nuisance_indices_K1]
+n_params = 18
+nuisance_indices_K1 = setdiff(1:n_params, K1_index)
+nuisance_guess_K1 = θ_log_MLE[nuisance_indices_K1]
 
 # Generate multiple initial guesses
 n_guesses = 2  # Reduced from 3 for speed
 nuisance_extras_K1 = generate_initial_guesses(
-    θ_red_log_lower[nuisance_indices_K1],
-    θ_red_log_upper[nuisance_indices_K1],
+    θ_log_lower[nuisance_indices_K1],
+    θ_log_upper[nuisance_indices_K1],
     n_guesses)
 
 ψK1_values, lnlike_K1_values = profile_target(
-    lnlike_θ_red_log, K1_index,
-    θ_red_log_lower, θ_red_log_upper,
+    lnlike_θ_log, K1_index,
+    θ_log_lower, θ_log_upper,
     nuisance_guess_K1;
     grid_steps=[10],  # FIX: Wrap in array for 1D profile (reduced from 15)
     ω_initial_extras=nuisance_extras_K1,
@@ -873,24 +850,24 @@ K1_profile_vals = [ψ[K1_index] for ψ in ψK1_values]
 println("  Profiled K₁ range: [$(round(exp(minimum(K1_profile_vals)), digits=2)), $(round(exp(maximum(K1_profile_vals)), digits=2))]")
 
 # Prediction intervals from K₁ profile
-distrib_K1 = θ_red_log -> distrib_fine_θ_red(exp.(θ_red_log))
+distrib_K1 = θ_log -> distrib_fine_θ(exp.(θ_log))
 lower_K1, upper_K1, _ = construct_upper_lower_profile_wise_CIs_for_mean(
     distrib_K1, ψK1_values, lnlike_K1_values; l_level=95, df=18)
 
-# Profile β₁ (parameter index 7 in 18-param space)
+# Profile β₁ (parameter index 7)
 println("\n2. Profiling β₁ (parameter 7, non-identifiable)...")
 β1_index = 7
-nuisance_indices_β1 = setdiff(1:n_params_red, β1_index)
-nuisance_guess_β1 = θ_red_log_MLE[nuisance_indices_β1]
+nuisance_indices_β1 = setdiff(1:n_params, β1_index)
+nuisance_guess_β1 = θ_log_MLE[nuisance_indices_β1]
 
 nuisance_extras_β1 = generate_initial_guesses(
-    θ_red_log_lower[nuisance_indices_β1],
-    θ_red_log_upper[nuisance_indices_β1],
+    θ_log_lower[nuisance_indices_β1],
+    θ_log_upper[nuisance_indices_β1],
     n_guesses)
 
 ψβ1_values, lnlike_β1_values = profile_target(
-    lnlike_θ_red_log, β1_index,
-    θ_red_log_lower, θ_red_log_upper,
+    lnlike_θ_log, β1_index,
+    θ_log_lower, θ_log_upper,
     nuisance_guess_β1;
     grid_steps=[10],  # FIX: Wrap in array for 1D profile (reduced from 15)
     ω_initial_extras=nuisance_extras_β1,
@@ -901,7 +878,7 @@ nuisance_extras_β1 = generate_initial_guesses(
 println("  Profiled β₁ range: [$(round(exp(minimum(β1_profile_vals)), digits=4)), $(round(exp(maximum(β1_profile_vals)), digits=4))]")
 
 # Prediction intervals from β₁ profile
-distrib_β1 = θ_red_log -> distrib_fine_θ_red(exp.(θ_red_log))
+distrib_β1 = θ_log -> distrib_fine_θ(exp.(θ_log))
 lower_β1, upper_β1, _ = construct_upper_lower_profile_wise_CIs_for_mean(
     distrib_β1, ψβ1_values, lnlike_β1_values; l_level=95, df=18)
 
@@ -915,18 +892,18 @@ println("\n3. Profiling K₁/β₁ ratio (identifiable)...")
 # In log space: [log K₁, log β₁] → [log K₁ - log β₁, log K₁ + log β₁]
 
 println("  Using 2D joint profile of (β₁, K₁) to extract ratio...")
-target_indices_K1β1 = [β1_index, K1_index]  # [7, 10] in 18-param space
-nuisance_indices_ratio = setdiff(1:n_params_red, target_indices_K1β1)
-nuisance_guess_ratio = θ_red_log_MLE[nuisance_indices_ratio]
+target_indices_K1β1 = [β1_index, K1_index]  # [7, 10]
+nuisance_indices_ratio = setdiff(1:n_params, target_indices_K1β1)
+nuisance_guess_ratio = θ_log_MLE[nuisance_indices_ratio]
 
 nuisance_extras_ratio = generate_initial_guesses(
-    θ_red_log_lower[nuisance_indices_ratio],
-    θ_red_log_upper[nuisance_indices_ratio],
+    θ_log_lower[nuisance_indices_ratio],
+    θ_log_upper[nuisance_indices_ratio],
     n_guesses)
 
 ψK1β1_values, lnlike_K1β1_values = profile_target(
-    lnlike_θ_red_log, target_indices_K1β1,
-    θ_red_log_lower, θ_red_log_upper,
+    lnlike_θ_log, target_indices_K1β1,
+    θ_log_lower, θ_log_upper,
     nuisance_guess_ratio;
     grid_steps=[7, 7],  # FIX: Wrap in array for 2D profile (reduced from 10×10)
     ω_initial_extras=nuisance_extras_ratio,
@@ -936,10 +913,10 @@ nuisance_extras_ratio = generate_initial_guesses(
 # Extract ratio values: log(K₁/β₁) = log(K₁) - log(β₁)
 ratio_values = [ψ[K1_index] - ψ[β1_index] for ψ in ψK1β1_values]
 println("  Profiled ratio range: [$(round(exp(minimum(ratio_values)), digits=2)), $(round(exp(maximum(ratio_values)), digits=2))]")
-println("  True ratio: $(round(θ_red_true[K1_index]/θ_red_true[β1_index], digits=2))")
+println("  True ratio: $(round(θ_true[K1_index]/θ_true[β1_index], digits=2))")
 
 # Prediction intervals from joint (K₁,β₁) profile
-distrib_ratio = θ_red_log -> distrib_fine_θ_red(exp.(θ_red_log))
+distrib_ratio = θ_log -> distrib_fine_θ(exp.(θ_log))
 lower_ratio, upper_ratio, _ = construct_upper_lower_profile_wise_CIs_for_mean(
     distrib_ratio, ψK1β1_values, lnlike_K1β1_values; l_level=95, df=18)
 
