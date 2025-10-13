@@ -266,6 +266,9 @@ end
 # Use fine grid for smooth prediction bands
 distrib_fine_θ = θ -> MvLogNormal(log.(abs.(predict_mRNA(θ, t_pred)) .+ 1e-10), σ_pred^2*I(3*length(t_pred)))
 
+# Log-space wrapper for profiling (profiles are in log-space)
+distrib_fine_θ_log = θ_log -> distrib_fine_θ(exp.(θ_log))
+
 # MLE prediction for reference (on fine grid)
 mRNA_MLE = predict_mRNA(θ_true, t_pred)
 pred_mean_MLE = mRNA_MLE
@@ -862,9 +865,8 @@ K1_profile_vals = [ψ[K1_index] for ψ in ψK1_values]
 println("  Profiled K₁ range: [$(round(exp(minimum(K1_profile_vals)), digits=2)), $(round(exp(maximum(K1_profile_vals)), digits=2))]")
 
 # Prediction intervals from K₁ profile
-distrib_K1 = θ_log -> distrib_fine_θ(exp.(θ_log))
 lower_K1, upper_K1, _ = construct_upper_lower_profile_wise_CIs_for_mean(
-    distrib_K1, ψK1_values, lnlike_K1_values; l_level=95, df=18)
+    distrib_fine_θ_log, ψK1_values, lnlike_K1_values; l_level=95, df=18)
 
 # Profile β₁ (parameter index 7)
 println("\n2. Profiling β₁ (parameter 7, non-identifiable)...")
@@ -890,9 +892,8 @@ nuisance_extras_β1 = generate_initial_guesses(
 println("  Profiled β₁ range: [$(round(exp(minimum(β1_profile_vals)), digits=4)), $(round(exp(maximum(β1_profile_vals)), digits=4))]")
 
 # Prediction intervals from β₁ profile
-distrib_β1 = θ_log -> distrib_fine_θ(exp.(θ_log))
 lower_β1, upper_β1, _ = construct_upper_lower_profile_wise_CIs_for_mean(
-    distrib_β1, ψβ1_values, lnlike_β1_values; l_level=95, df=18)
+    distrib_fine_θ_log, ψβ1_values, lnlike_β1_values; l_level=95, df=18)
 
 # Profile K₁/β₁ ratio (conditional on CONFIG.do_2d)
 if CONFIG.do_2d
@@ -929,9 +930,8 @@ if CONFIG.do_2d
     println("  True ratio: $(round(θ_true[K1_index]/θ_true[β1_index], digits=2))")
 
     # Prediction intervals from joint (K₁,β₁) profile
-    distrib_ratio = θ_log -> distrib_fine_θ(exp.(θ_log))
     lower_ratio, upper_ratio, _ = construct_upper_lower_profile_wise_CIs_for_mean(
-        distrib_ratio, ψK1β1_values, lnlike_K1β1_values; l_level=95, df=18)
+        distrib_fine_θ_log, ψK1β1_values, lnlike_K1β1_values; l_level=95, df=18)
 else
     println("\n3. Skipping 2D profile (CONFIG.do_2d = false)")
     # Create dummy variables for plotting section
