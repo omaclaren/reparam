@@ -768,22 +768,26 @@ t_pred = LinRange(0, T_end, 101)  # Fine grid for smooth prediction bands
 σ_pred = σ
 
 # Define prediction distribution: mRNA trajectories m₁, m₂, m₃
+# IMPORTANT: Work in 18-parameter space (n fixed at 2)
 # Use data grid (t) for likelihood, prediction grid (t_pred) for visualization
-function predict_mRNA(θ, t_grid=t)
-    sol_matrix = solve_repressilator(t_grid, θ, X0)
+function predict_mRNA_18(θ_red, t_grid=t)
+    # Reconstruct full 19-parameter vector with n=2 fixed
+    θ_full = vcat(θ_red, [n_true])
+    sol_matrix = solve_repressilator(t_grid, θ_full, X0)
     mRNA = extract_mrna(sol_matrix)  # 3×NT matrix
     return vec(mRNA')  # Flatten to vector (time-major order)
 end
 
 # Distribution for predictions (mRNA only, not proteins)
 # Use fine grid for smooth prediction bands
-distrib_fine_θ = θ -> MvLogNormal(log.(abs.(predict_mRNA(θ, t_pred)) .+ 1e-10), σ_pred^2*I(3*length(t_pred)))
+distrib_fine_θ_red = θ_red -> MvLogNormal(log.(abs.(predict_mRNA_18(θ_red, t_pred)) .+ 1e-10), σ_pred^2*I(3*length(t_pred)))
 
-# MLE prediction for reference (on fine grid)
-mRNA_MLE = predict_mRNA(θ_true, t_pred)  # Use true params as MLE for now
+# MLE prediction for reference (on fine grid) - use 18-param true values
+mRNA_MLE = predict_mRNA_18(θ_red_true, t_pred)
 pred_mean_MLE = mRNA_MLE
 
 println("\nPrediction setup:")
+println("  Parameters: 18 (n fixed at 2)")
 println("  Time points: $(length(t_pred)) over [0, $T_end]")
 println("  Observables: 3 mRNA species (m₁, m₂, m₃)")
 println("  Total prediction dimension: $(3*length(t_pred))")
@@ -802,19 +806,19 @@ println(repeat("-", 70))
 # 2. β₁ individually (non-identifiable, βK product in null space)
 # 3. K₁/β₁ ratio (identifiable, in complement space)
 
-# Define log-likelihood for profiling
+# Define log-likelihood for profiling in 18-parameter space
 # We need synthetic "data" first - generate from true parameters
 sol_matrix_data = solve_repressilator(t, θ_true, X0)
 data_mRNA = extract_mrna(sol_matrix_data)  # 3×NT
 data_obs = vec(data_mRNA')  # Flatten (time-major order)
 
-# Log-likelihood function in θ space
-function lnlike_θ(θ)
-    if any(θ .<= 0)
+# Log-likelihood function in 18-parameter space
+function lnlike_θ_red(θ_red)
+    if any(θ_red .<= 0)
         return -Inf
     end
     try
-        pred = predict_mRNA(θ)
+        pred = predict_mRNA_18(θ_red)
         if length(pred) != length(data_obs)
             return -Inf  # Solver failed
         end
@@ -825,77 +829,79 @@ function lnlike_θ(θ)
     end
 end
 
-# Find MLE (use true params as initial guess)
-θ_MLE = copy(θ_true)  # For now, assume MLE ≈ true params
-lnlike_MLE = lnlike_θ(θ_MLE)
+# Find MLE (use true params as initial guess) - 18 parameters
+θ_red_MLE = copy(θ_red_true)  # For now, assume MLE ≈ true params
+lnlike_MLE = lnlike_θ_red(θ_red_MLE)
 
 println("\nLog-likelihood at MLE: $(round(lnlike_MLE, digits=2))")
 
-# Bounds for profiling (log scale for positivity)
+# Bounds for profiling (log scale for positivity) - 18 parameters
 # Tighter bounds to avoid unstable ODE regions
-θ_log_lower = log.(θ_true .* 0.5)  # 2x smaller
-θ_log_upper = log.(θ_true .* 2.0)  # 2x larger
-θ_log_MLE = log.(θ_MLE)
+θ_red_log_lower = log.(θ_red_true .* 0.7)  # 30% smaller (tighter than before)
+θ_red_log_upper = log.(θ_red_true .* 1.5)  # 50% larger (tighter than before)
+θ_red_log_MLE = log.(θ_red_MLE)
 
 # Log-likelihood in log-parameter space
-lnlike_θ_log = θ_log -> lnlike_θ(exp.(θ_log))
+lnlike_θ_red_log = θ_red_log -> lnlike_θ_red(exp.(θ_red_log))
 
-# Profile K₁ (parameter index 10)
+# Profile K₁ (parameter index 10 in 18-param space)
 println("\n1. Profiling K₁ (parameter 10, non-identifiable)...")
 K1_index = 10
-n_params_full = 19  # Full parameter vector including n
-nuisance_indices_K1 = setdiff(1:n_params_full, K1_index)
-nuisance_guess_K1 = θ_log_MLE[nuisance_indices_K1]
+n_params_red = 18  # Reduced parameter space (n fixed)
+nuisance_indices_K1 = setdiff(1:n_params_red, K1_index)
+nuisance_guess_K1 = θ_red_log_MLE[nuisance_indices_K1]
 
 # Generate multiple initial guesses
-n_guesses = 3
+n_guesses = 2  # Reduced from 3 for speed
 nuisance_extras_K1 = generate_initial_guesses(
-    θ_log_lower[nuisance_indices_K1],
-    θ_log_upper[nuisance_indices_K1],
+    θ_red_log_lower[nuisance_indices_K1],
+    θ_red_log_upper[nuisance_indices_K1],
     n_guesses)
 
 ψK1_values, lnlike_K1_values = profile_target(
-    lnlike_θ_log, K1_index,
-    θ_log_lower, θ_log_upper,
+    lnlike_θ_red_log, K1_index,
+    θ_red_log_lower, θ_red_log_upper,
     nuisance_guess_K1;
-    grid_steps=15,  # Reduced for faster computation
+    grid_steps=[10],  # FIX: Wrap in array for 1D profile (reduced from 15)
     ω_initial_extras=nuisance_extras_K1,
-    method=:LN_BOBYQA)
+    method=:LN_BOBYQA,
+    optmaxtime=60)  # Reduced from default 120s
 
 K1_profile_vals = [ψ[K1_index] for ψ in ψK1_values]
 println("  Profiled K₁ range: [$(round(exp(minimum(K1_profile_vals)), digits=2)), $(round(exp(maximum(K1_profile_vals)), digits=2))]")
 
 # Prediction intervals from K₁ profile
-distrib_K1 = θ_log -> distrib_fine_θ(exp.(θ_log))
+distrib_K1 = θ_red_log -> distrib_fine_θ_red(exp.(θ_red_log))
 lower_K1, upper_K1, _ = construct_upper_lower_profile_wise_CIs_for_mean(
-    distrib_K1, ψK1_values, lnlike_K1_values; l_level=95, df=19)
+    distrib_K1, ψK1_values, lnlike_K1_values; l_level=95, df=18)
 
-# Profile β₁ (parameter index 7)
+# Profile β₁ (parameter index 7 in 18-param space)
 println("\n2. Profiling β₁ (parameter 7, non-identifiable)...")
 β1_index = 7
-nuisance_indices_β1 = setdiff(1:n_params_full, β1_index)
-nuisance_guess_β1 = θ_log_MLE[nuisance_indices_β1]
+nuisance_indices_β1 = setdiff(1:n_params_red, β1_index)
+nuisance_guess_β1 = θ_red_log_MLE[nuisance_indices_β1]
 
 nuisance_extras_β1 = generate_initial_guesses(
-    θ_log_lower[nuisance_indices_β1],
-    θ_log_upper[nuisance_indices_β1],
+    θ_red_log_lower[nuisance_indices_β1],
+    θ_red_log_upper[nuisance_indices_β1],
     n_guesses)
 
 ψβ1_values, lnlike_β1_values = profile_target(
-    lnlike_θ_log, β1_index,
-    θ_log_lower, θ_log_upper,
+    lnlike_θ_red_log, β1_index,
+    θ_red_log_lower, θ_red_log_upper,
     nuisance_guess_β1;
-    grid_steps=15,  # Reduced for faster computation
+    grid_steps=[10],  # FIX: Wrap in array for 1D profile (reduced from 15)
     ω_initial_extras=nuisance_extras_β1,
-    method=:LN_BOBYQA)
+    method=:LN_BOBYQA,
+    optmaxtime=60)  # Reduced from default 120s
 
 β1_profile_vals = [ψ[β1_index] for ψ in ψβ1_values]
 println("  Profiled β₁ range: [$(round(exp(minimum(β1_profile_vals)), digits=4)), $(round(exp(maximum(β1_profile_vals)), digits=4))]")
 
 # Prediction intervals from β₁ profile
-distrib_β1 = θ_log -> distrib_fine_θ(exp.(θ_log))
+distrib_β1 = θ_red_log -> distrib_fine_θ_red(exp.(θ_red_log))
 lower_β1, upper_β1, _ = construct_upper_lower_profile_wise_CIs_for_mean(
-    distrib_β1, ψβ1_values, lnlike_β1_values; l_level=95, df=19)
+    distrib_β1, ψβ1_values, lnlike_β1_values; l_level=95, df=18)
 
 # Profile K₁/β₁ ratio
 println("\n3. Profiling K₁/β₁ ratio (identifiable)...")
@@ -906,33 +912,34 @@ println("\n3. Profiling K₁/β₁ ratio (identifiable)...")
 # Transformation: [K₁, β₁] → [K₁/β₁, β₁*K₁]
 # In log space: [log K₁, log β₁] → [log K₁ - log β₁, log K₁ + log β₁]
 
-println("  Using 2D joint profile of (K₁, β₁) to extract ratio...")
-target_indices_K1β1 = [β1_index, K1_index]  # [7, 10]
-nuisance_indices_ratio = setdiff(1:n_params_full, target_indices_K1β1)
-nuisance_guess_ratio = θ_log_MLE[nuisance_indices_ratio]
+println("  Using 2D joint profile of (β₁, K₁) to extract ratio...")
+target_indices_K1β1 = [β1_index, K1_index]  # [7, 10] in 18-param space
+nuisance_indices_ratio = setdiff(1:n_params_red, target_indices_K1β1)
+nuisance_guess_ratio = θ_red_log_MLE[nuisance_indices_ratio]
 
 nuisance_extras_ratio = generate_initial_guesses(
-    θ_log_lower[nuisance_indices_ratio],
-    θ_log_upper[nuisance_indices_ratio],
+    θ_red_log_lower[nuisance_indices_ratio],
+    θ_red_log_upper[nuisance_indices_ratio],
     n_guesses)
 
 ψK1β1_values, lnlike_K1β1_values = profile_target(
-    lnlike_θ_log, target_indices_K1β1,
-    θ_log_lower, θ_log_upper,
+    lnlike_θ_red_log, target_indices_K1β1,
+    θ_red_log_lower, θ_red_log_upper,
     nuisance_guess_ratio;
-    grid_steps=10,  # 10×10 grid for faster computation
+    grid_steps=[7, 7],  # FIX: Wrap in array for 2D profile (reduced from 10×10)
     ω_initial_extras=nuisance_extras_ratio,
-    method=:LN_BOBYQA)
+    method=:LN_BOBYQA,
+    optmaxtime=60)  # Reduced from default 120s
 
 # Extract ratio values: log(K₁/β₁) = log(K₁) - log(β₁)
 ratio_values = [ψ[K1_index] - ψ[β1_index] for ψ in ψK1β1_values]
 println("  Profiled ratio range: [$(round(exp(minimum(ratio_values)), digits=2)), $(round(exp(maximum(ratio_values)), digits=2))]")
-println("  True ratio: $(round(θ_true[K1_index]/θ_true[β1_index], digits=2))")
+println("  True ratio: $(round(θ_red_true[K1_index]/θ_red_true[β1_index], digits=2))")
 
 # Prediction intervals from joint (K₁,β₁) profile
-distrib_ratio = θ_log -> distrib_fine_θ(exp.(θ_log))
+distrib_ratio = θ_red_log -> distrib_fine_θ_red(exp.(θ_red_log))
 lower_ratio, upper_ratio, _ = construct_upper_lower_profile_wise_CIs_for_mean(
-    distrib_ratio, ψK1β1_values, lnlike_K1β1_values; l_level=95, df=19)
+    distrib_ratio, ψK1β1_values, lnlike_K1β1_values; l_level=95, df=18)
 
 println("\nPrediction interval widths (mean across time/species):")
 width_K1 = mean(upper_K1 - lower_K1)
