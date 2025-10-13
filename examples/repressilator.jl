@@ -17,6 +17,46 @@ using DifferentialEquations
 # Set random seed for reproducibility
 Random.seed!(42)
 
+# ========================================================================
+# CONFIGURATION: Profiling Settings
+# ========================================================================
+# Three modes: "test" (~1 min), "paper" (~4 min), "full" (~60 min)
+const PROFILE_MODE = "test"  # Change to "paper" or "full" as needed
+
+# Mode configurations
+const PROFILE_CONFIGS = Dict(
+    "test" => (grid_1d=3, grid_2d=[3,3], timeout=10.0, n_guesses=1, do_2d=false),
+    "paper" => (grid_1d=5, grid_2d=[5,5], timeout=10.0, n_guesses=1, do_2d=true),
+    "full" => (grid_1d=10, grid_2d=[7,7], timeout=60.0, n_guesses=2, do_2d=true)
+)
+
+# Parallelization note:
+# Current implementation uses sequential profiling with previous point's solution
+# as initial guess for next point (warm start). This improves convergence but
+# requires sequential execution.
+#
+# ALTERNATIVE: Use MLE as initial guess for all points → enables parallelization
+# - Each optimization becomes independent → can use Julia's @threads or Distributed
+# - Trade-off: potentially slower convergence per point, but massive speedup from parallel
+# - For 18-param ODE: ~6x speedup on 6-core machine could reduce "paper" mode from 4→<1 min
+#
+# To implement: modify profile_target() to accept parallel=true flag and use MLE
+# as ω_initial for all grid points instead of chaining solutions.
+
+const CONFIG = PROFILE_CONFIGS[PROFILE_MODE]
+println("=" ^ 70)
+println("PROFILE MODE: $(PROFILE_MODE)")
+println("  1D grid: $(CONFIG.grid_1d) points")
+println("  2D grid: $(CONFIG.grid_2d) points")
+println("  Timeout: $(CONFIG.timeout)s per optimization")
+println("  Initial guesses: $(CONFIG.n_guesses)")
+println("  2D profiling: $(CONFIG.do_2d)")
+est_time = CONFIG.do_2d ?
+    (2 * CONFIG.grid_1d + prod(CONFIG.grid_2d)) * CONFIG.n_guesses * CONFIG.timeout / 60 :
+    2 * CONFIG.grid_1d * CONFIG.n_guesses * CONFIG.timeout / 60
+println("  Estimated runtime: ~$(round(Int, est_time)) minutes")
+println("=" ^ 70)
+
 # --------------------------------------------------------
 # Model Definition: Repressilator (Eisenberg & Hayashi Setup)
 # --------------------------------------------------------
@@ -831,7 +871,7 @@ nuisance_indices_K1 = setdiff(1:n_params, K1_index)
 nuisance_guess_K1 = θ_log_MLE[nuisance_indices_K1]
 
 # Generate multiple initial guesses
-n_guesses = 2  # Reduced from 3 for speed
+n_guesses = CONFIG.n_guesses
 nuisance_extras_K1 = generate_initial_guesses(
     θ_log_lower[nuisance_indices_K1],
     θ_log_upper[nuisance_indices_K1],
@@ -841,10 +881,10 @@ nuisance_extras_K1 = generate_initial_guesses(
     lnlike_θ_log, K1_index,
     θ_log_lower, θ_log_upper,
     nuisance_guess_K1;
-    grid_steps=[10],  # FIX: Wrap in array for 1D profile (reduced from 15)
+    grid_steps=[CONFIG.grid_1d],
     ω_initial_extras=nuisance_extras_K1,
     method=:LN_BOBYQA,
-    optmaxtime=60)  # Reduced from default 120s
+    optmaxtime=CONFIG.timeout)
 
 K1_profile_vals = [ψ[K1_index] for ψ in ψK1_values]
 println("  Profiled K₁ range: [$(round(exp(minimum(K1_profile_vals)), digits=2)), $(round(exp(maximum(K1_profile_vals)), digits=2))]")
@@ -869,10 +909,10 @@ nuisance_extras_β1 = generate_initial_guesses(
     lnlike_θ_log, β1_index,
     θ_log_lower, θ_log_upper,
     nuisance_guess_β1;
-    grid_steps=[10],  # FIX: Wrap in array for 1D profile (reduced from 15)
+    grid_steps=[CONFIG.grid_1d],
     ω_initial_extras=nuisance_extras_β1,
     method=:LN_BOBYQA,
-    optmaxtime=60)  # Reduced from default 120s
+    optmaxtime=CONFIG.timeout)
 
 β1_profile_vals = [ψ[β1_index] for ψ in ψβ1_values]
 println("  Profiled β₁ range: [$(round(exp(minimum(β1_profile_vals)), digits=4)), $(round(exp(maximum(β1_profile_vals)), digits=4))]")
@@ -882,43 +922,50 @@ distrib_β1 = θ_log -> distrib_fine_θ(exp.(θ_log))
 lower_β1, upper_β1, _ = construct_upper_lower_profile_wise_CIs_for_mean(
     distrib_β1, ψβ1_values, lnlike_β1_values; l_level=95, df=18)
 
-# Profile K₁/β₁ ratio
-println("\n3. Profiling K₁/β₁ ratio (identifiable)...")
-# Need to parameterize as: ψ₁ = log(K₁/β₁), with K₁ = exp(ψ₁) * β₁
-# This requires constrained profiling - implement simplified version
+# Profile K₁/β₁ ratio (conditional on CONFIG.do_2d)
+if CONFIG.do_2d
+    println("\n3. Profiling K₁/β₁ ratio (identifiable)...")
+    # Need to parameterize as: ψ₁ = log(K₁/β₁), with K₁ = exp(ψ₁) * β₁
+    # This requires constrained profiling - implement simplified version
 
-# For now, profile the ratio by fixing the product β₁*K₁ and varying the ratio
-# Transformation: [K₁, β₁] → [K₁/β₁, β₁*K₁]
-# In log space: [log K₁, log β₁] → [log K₁ - log β₁, log K₁ + log β₁]
+    # For now, profile the ratio by fixing the product β₁*K₁ and varying the ratio
+    # Transformation: [K₁, β₁] → [K₁/β₁, β₁*K₁]
+    # In log space: [log K₁, log β₁] → [log K₁ - log β₁, log K₁ + log β₁]
 
-println("  Using 2D joint profile of (β₁, K₁) to extract ratio...")
-target_indices_K1β1 = [β1_index, K1_index]  # [7, 10]
-nuisance_indices_ratio = setdiff(1:n_params, target_indices_K1β1)
-nuisance_guess_ratio = θ_log_MLE[nuisance_indices_ratio]
+    println("  Using 2D joint profile of (β₁, K₁) to extract ratio...")
+    target_indices_K1β1 = [β1_index, K1_index]  # [7, 10]
+    nuisance_indices_ratio = setdiff(1:n_params, target_indices_K1β1)
+    nuisance_guess_ratio = θ_log_MLE[nuisance_indices_ratio]
 
-nuisance_extras_ratio = generate_initial_guesses(
-    θ_log_lower[nuisance_indices_ratio],
-    θ_log_upper[nuisance_indices_ratio],
-    n_guesses)
+    nuisance_extras_ratio = generate_initial_guesses(
+        θ_log_lower[nuisance_indices_ratio],
+        θ_log_upper[nuisance_indices_ratio],
+        n_guesses)
 
-ψK1β1_values, lnlike_K1β1_values = profile_target(
-    lnlike_θ_log, target_indices_K1β1,
-    θ_log_lower, θ_log_upper,
-    nuisance_guess_ratio;
-    grid_steps=[7, 7],  # FIX: Wrap in array for 2D profile (reduced from 10×10)
-    ω_initial_extras=nuisance_extras_ratio,
-    method=:LN_BOBYQA,
-    optmaxtime=60)  # Reduced from default 120s
+    ψK1β1_values, lnlike_K1β1_values = profile_target(
+        lnlike_θ_log, target_indices_K1β1,
+        θ_log_lower, θ_log_upper,
+        nuisance_guess_ratio;
+        grid_steps=CONFIG.grid_2d,
+        ω_initial_extras=nuisance_extras_ratio,
+        method=:LN_BOBYQA,
+        optmaxtime=CONFIG.timeout)
 
-# Extract ratio values: log(K₁/β₁) = log(K₁) - log(β₁)
-ratio_values = [ψ[K1_index] - ψ[β1_index] for ψ in ψK1β1_values]
-println("  Profiled ratio range: [$(round(exp(minimum(ratio_values)), digits=2)), $(round(exp(maximum(ratio_values)), digits=2))]")
-println("  True ratio: $(round(θ_true[K1_index]/θ_true[β1_index], digits=2))")
+    # Extract ratio values: log(K₁/β₁) = log(K₁) - log(β₁)
+    ratio_values = [ψ[K1_index] - ψ[β1_index] for ψ in ψK1β1_values]
+    println("  Profiled ratio range: [$(round(exp(minimum(ratio_values)), digits=2)), $(round(exp(maximum(ratio_values)), digits=2))]")
+    println("  True ratio: $(round(θ_true[K1_index]/θ_true[β1_index], digits=2))")
 
-# Prediction intervals from joint (K₁,β₁) profile
-distrib_ratio = θ_log -> distrib_fine_θ(exp.(θ_log))
-lower_ratio, upper_ratio, _ = construct_upper_lower_profile_wise_CIs_for_mean(
-    distrib_ratio, ψK1β1_values, lnlike_K1β1_values; l_level=95, df=18)
+    # Prediction intervals from joint (K₁,β₁) profile
+    distrib_ratio = θ_log -> distrib_fine_θ(exp.(θ_log))
+    lower_ratio, upper_ratio, _ = construct_upper_lower_profile_wise_CIs_for_mean(
+        distrib_ratio, ψK1β1_values, lnlike_K1β1_values; l_level=95, df=18)
+else
+    println("\n3. Skipping 2D profile (CONFIG.do_2d = false)")
+    # Create dummy variables for plotting section
+    lower_ratio = lower_K1  # Use K1 as placeholder
+    upper_ratio = upper_K1
+end
 
 println("\nPrediction interval widths (mean across time/species):")
 width_K1 = mean(upper_K1 - lower_K1)
