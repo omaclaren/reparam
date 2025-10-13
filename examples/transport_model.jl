@@ -150,10 +150,14 @@ n_guesses = 3
 # Generate multiple initial guesses
 nuisance_guesses = generate_initial_guesses(xy_lower_bounds, xy_upper_bounds, n_guesses)
 
+println("Finding MLE in original coordinates...")
+t_mle1_start = time()
 xy_MLE, lnlike_xy_MLE = profile_target(lnlike_xy, target_indices,
-    xy_lower_bounds, xy_upper_bounds, 
+    xy_lower_bounds, xy_upper_bounds,
     xy_initial; grid_steps=grid_steps, ω_initial_extras=nuisance_guesses,
     method=point_estimation_method)
+t_mle1_elapsed = time() - t_mle1_start
+println("  MLE time: $(round(t_mle1_elapsed, digits=1))s")
 
 # Quadratic approximation at MLE
 lnlike_xy_ellipse, H_xy_ellipse = construct_ellipse_lnlike_approx(lnlike_xy, xy_MLE)
@@ -370,11 +374,15 @@ target_indices = []  # empty for MLE
 n_guesses = 3
 nuisance_guesses = generate_initial_guesses(XY_log_lower_bounds, XY_log_upper_bounds, n_guesses)
 
+println("Finding MLE in log coordinates...")
+t_mle2_start = time()
 XY_log_MLE, lnlike_XY_log_MLE = profile_target(lnlike_XY_log, target_indices,
-    XY_log_lower_bounds, XY_log_upper_bounds, 
+    XY_log_lower_bounds, XY_log_upper_bounds,
     XY_log_initial; grid_steps=grid_steps,
     ω_initial_extras=nuisance_guesses,
     method=point_estimation_method)
+t_mle2_elapsed = time() - t_mle2_start
+println("  MLE time: $(round(t_mle2_elapsed, digits=1))s")
 
 # Quadratic approximation at MLE
 lnlike_XY_log_ellipse, H_XY_log_ellipse = construct_ellipse_lnlike_approx(lnlike_XY_log, XY_log_MLE)
@@ -613,11 +621,15 @@ n_guesses = 3
 # Generate multiple initial guesses
 nuisance_guesses = generate_initial_guesses(XY_iir_lower_bounds, XY_iir_upper_bounds, n_guesses)
 
+println("Finding MLE in IIR coordinates...")
+t_mle3_start = time()
 XY_iir_MLE, lnlike_XY_iir_MLE = profile_target(lnlike_XY_iir, target_indices,
-    XY_iir_lower_bounds, XY_iir_upper_bounds, 
+    XY_iir_lower_bounds, XY_iir_upper_bounds,
     XY_iir_initial; grid_steps=grid_steps,
     ω_initial_extras=nuisance_guesses,
     method=point_estimation_method)
+t_mle3_elapsed = time() - t_mle3_start
+println("  MLE time: $(round(t_mle3_elapsed, digits=1))s")
 
 # Quadratic approximation at MLE
 lnlike_XY_iir_ellipse, H_XY_iir_ellipse = construct_ellipse_lnlike_approx(lnlike_XY_iir, XY_iir_MLE)

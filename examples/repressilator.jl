@@ -380,6 +380,7 @@ println("\nRunning optimization...")
 println("  (This may take up to 90 seconds with 3 initial guesses)")
 flush(stdout)
 
+t_mle_start = time()
 θ_log_MLE, lnlike_MLE = profile_target(
     lnlike_θ_log, target_indices,
     θ_log_lower, θ_log_upper,
@@ -388,8 +389,10 @@ flush(stdout)
     ω_initial_extras=nuisance_guesses_mle,
     method=:LN_BOBYQA,
     optmaxtime=30.0)
+t_mle_elapsed = time() - t_mle_start
 
 println("Optimization complete!")
+println("  Time: $(round(t_mle_elapsed, digits=1)) seconds")
 
 θ_MLE = exp.(θ_log_MLE)
 
@@ -447,6 +450,7 @@ println("\n" * repeat("=", 70))
 println("Applying IIR with finite-difference invariance test...")
 println(repeat("=", 70))
 
+t_iir_start = time()
 S, N, N_perp, rank_J = find_invariant_subspace(
     ϕ_log, θ_log_MLE;  # ✓ CORRECT - using MLE
     invariance_method=:finite_difference,
@@ -454,6 +458,8 @@ S, N, N_perp, rank_J = find_invariant_subspace(
     fd_n_probes=5,
     atolM=1e-6  # Relaxed tolerance for approximate invariance
 )
+t_iir_elapsed = time() - t_iir_start
+println("\nIIR analysis time: $(round(t_iir_elapsed, digits=1)) seconds")
 
 println("\nSingular values of Jacobian (in log-space):")
 for (i, s) in enumerate(S)
