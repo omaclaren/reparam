@@ -332,22 +332,30 @@ println(repeat("=", 70))
 
 # Bounds for optimization (log scale for positivity)
 # Tighter bounds to avoid unstable ODE regions
-θ_log_lower = log.(θ_true .* 0.7)  # 30% smaller (tighter than before)
-θ_log_upper = log.(θ_true .* 1.5)  # 50% larger (tighter than before)
-θ_log_initial = log.(θ_true)  # Start from true parameters
+θ_log_lower = log.(θ_true .* 0.7)  # 30% smaller
+θ_log_upper = log.(θ_true .* 1.5)  # 50% larger
+# Start from midpoint of bounds (NOT true parameters - we don't know those in real data!)
+θ_log_initial = 0.5 * (θ_log_lower + θ_log_upper)
+θ_initial = exp.(θ_log_initial)
 
 println("\nOptimization setup:")
 println("  Method: LN_BOBYQA (gradient-free, bound-constrained)")
 println("  Parameters: 18")
-println("  Initial guesses: 3 (including starting at true parameters)")
+println("  Initial guesses: 3 (from midpoint and random)")
 println("  Max time: 30 seconds per guess")
 println("  Bounds: 0.7×θ_true to 1.5×θ_true (log-space)")
+println("  Starting point: midpoint = (0.7 + 1.5)/2 ≈ 1.1×θ_true")
 
 # Test initial point
-lnlike_initial = lnlike_θ(θ_true)
+lnlike_initial = lnlike_θ(θ_initial)
+lnlike_true_start = lnlike_θ(θ_true)
+
 println("\nInitial point evaluation:")
-println("  Starting at: θ_true")
-println("  Log-likelihood: $(round(lnlike_initial, digits=2))")
+println("  Starting from: 1.1×θ_true (midpoint of bounds)")
+println("  Log-likelihood at start: $(round(lnlike_initial, digits=2))")
+println("  Log-likelihood at truth: $(round(lnlike_true_start, digits=2))")
+println("  Gap to close: $(round(lnlike_true_start - lnlike_initial, digits=2))")
+
 if lnlike_initial == -Inf
     @error "Initial point has -Inf likelihood! Cannot optimize. Check:\n" *
            "  - ODE solver settings (tolerances, time span)\n" *
