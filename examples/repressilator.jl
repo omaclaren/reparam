@@ -1,3 +1,11 @@
+# Load required packages first
+using Plots
+using Distributions
+using LinearAlgebra
+using Random
+using DifferentialEquations
+using ForwardDiff
+
 # Include ReparamTools.jl code if not already loaded
 if !@isdefined(ReparamTools)
     include("../ReparamTools.jl")
@@ -6,14 +14,7 @@ else
     println("✓ ReparamTools module already included")
 end
 
-# Load required packages
 using .ReparamTools
-using Plots
-using Distributions
-using LinearAlgebra
-using Random
-using DifferentialEquations
-using ForwardDiff
 
 # Set random seed for reproducibility
 Random.seed!(42)
