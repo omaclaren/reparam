@@ -1,0 +1,77 @@
+The latest version of Julia in the `release` channel is 1.11.7+0.aarch64.apple.darwin14. You currently have `1.11.2+0.aarch64.apple.darwin14` installed. Run:
+
+  juliaup update
+
+in your terminal shell to install Julia 1.11.7+0.aarch64.apple.darwin14 and update the `release` channel to that version.
+✓ ReparamTools module included
+
+============================================================
+Sum of Two Independent Poisson Limit Models
+============================================================
+Parameters: θ = [n₁, p₁, n₂, p₂]
+Auxiliary mapping: ϕ(θ) = [n₁p₁ + n₂p₂, n₁p₁ + n₂p₂]
+Distribution: Y ~ N(μ, σ²) where μ = σ² = n₁p₁ + n₂p₂
+============================================================
+
+True parameters:
+  n₁ = 80.0, p₁ = 0.1 → n₁p₁ = 8.0
+  n₂ = 40.0, p₂ = 0.3 → n₂p₂ = 12.0
+  Sum: n₁p₁ + n₂p₂ = 20.0
+
+Generated 10 observations
+Sample mean: 18.98
+Sample variance: 8.44
+
+============================================================
+Original Parameterization: [n₁, p₁, n₂, p₂]
+============================================================
+
+MLE in original coordinates:
+  n₁ = 50.0
+  p₁ = 0.1868
+  n₂ = 50.0
+  p₂ = 0.1868
+  n₁p₁ = 9.34
+  n₂p₂ = 9.34
+  Sum = 18.68
+
+Fisher Information eigenvalues:
+  λ1 = 2748.111921
+  λ2 = 0.0
+  λ3 = 0.0
+  λ4 = -0.0
+
+SVD of Jacobian in original coordinates:
+  Jacobian size: (2, 4)
+  Singular values: [99.999266, 0.0]
+  Expected rank: 1 (only sum is identifiable)
+  Null space dimension: 3
+
+Computing 1D profiles for all 4 parameters...
+ERROR: LoadError: SystemError: opening file "/Users/omac010/Git-Working/reparam/examples/figures/stat_sum_model_xy_n1_profile.png": No such file or directory
+Stacktrace:
+  [1] systemerror(p::String, errno::Int32; extrainfo::Nothing)
+    @ Base ./error.jl:176
+  [2] systemerror
+    @ ./error.jl:175 [inlined]
+  [3] open(fname::String; lock::Bool, read::Nothing, write::Nothing, create::Nothing, truncate::Bool, append::Nothing)
+    @ Base ./iostream.jl:295
+  [4] open
+    @ ./iostream.jl:277 [inlined]
+  [5] open(fname::String, mode::String; lock::Bool)
+    @ Base ./iostream.jl:358
+  [6] open(fname::String, mode::String)
+    @ Base ./iostream.jl:357
+  [7] open(::Plots.var"#346#347"{Plots.Plot{Plots.GRBackend}}, ::String, ::Vararg{String}; kwargs::@Kwargs{})
+    @ Base ./io.jl:408
+  [8] open
+    @ ./io.jl:407 [inlined]
+  [9] png(plt::Plots.Plot{Plots.GRBackend}, fn::String)
+    @ Plots ~/.julia/packages/Plots/Ec1L1/src/output.jl:6
+ [10] savefig(plt::Plots.Plot{Plots.GRBackend}, fn::String)
+    @ Plots ~/.julia/packages/Plots/Ec1L1/src/output.jl:149
+ [11] plot_1D_profile(model_name::String, ψ_values::Vector{Float64}, lnlike_ψ_values::Vector{Float64}, varname::String; varname_save::String, ψ_true::Float64, ψ_MLE::Float64, save_dir::String, fmt::Symbol, dpi::Int64, l_level::Int64)
+    @ Main.ReparamTools ~/Git-Working/reparam/visualization.jl:69
+ [12] top-level scope
+    @ ~/Git-Working/reparam/examples/stat_sum_model.jl:155
+in expression starting at /Users/omac010/Git-Working/reparam/examples/stat_sum_model.jl:141

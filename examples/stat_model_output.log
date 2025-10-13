@@ -1,0 +1,112 @@
+✓ ReparamTools module included
+Eigenvectors and eigenvalues for stat_model_xy
+Eigenvalues: [1893.6516136553291, 0.0011904850718637055]
+Eigenvectors: [0.009064534429726892 -0.9999589162638494; 0.9999589162638494 0.009064534429726892]
+
+SVD analysis in original coordinates:
+Singular values: [46.56673330700247, 0.1695974666692013]
+Right singular vectors (V): 
+2×2 adjoint(::Matrix{Float64}) with eltype Float64:
+ -0.00965669   0.999953
+ -0.999953    -0.00965669
+Variable: n
+Variable: p
+Eigenvectors and eigenvalues for stat_model_log
+value: 654.8825702509735
+vector: [-0.7095776276906909, -0.7046272704635063]
+value: 1.2479422625497543
+vector: [0.7046272704635063, -0.7095776276906909]
+Computing and returning SVD of Jacobian of φ mapping
+
+SVD analysis in log coordinates:
+Singular values: [28.854229168793243, 5.211378308543777]
+Right singular vectors (V): 
+2×2 adjoint(::Matrix{Float64}) with eltype Float64:
+ -0.75534    0.655333
+ -0.655333  -0.75534
+
+Comparison of eigenvectors (1) and singular vectors (2):
+2×2 Matrix{Float64}:
+ -0.709578   0.704627
+ -0.704627  -0.709578
+2×2 adjoint(::Matrix{Float64}) with eltype Float64:
+ -0.75534    0.655333
+ -0.655333  -0.75534
+Variable: \ln\ n
+Variable: \ln\ p
+
+============================================================
+Invariant Subspace Analysis (Algorithm 1 from Paper)
+============================================================
+
+Jacobian Analysis:
+  Singular values: [28.854229168793243, 5.211378308543777]
+  Numerical rank: 2
+  Dimension of invariant null space (N): 0
+  Dimension of identifiable space (N_perp): 2
+
+No null space detected
+  Type: Appears structurally identifiable
+
+Identifiable space basis N_perp (columns):
+2×2 Matrix{Float64}:
+ -0.75534    0.655333
+ -0.655333  -0.75534
+
+Reparameterization matrix A = N_perp^T:
+2×2 adjoint(::Matrix{Float64}) with eltype Float64:
+ -0.75534   -0.655333
+  0.655333  -0.75534
+
+Parameter Combination Ranking by Identifiability:
+------------------------------------------------------------
+Combination 1 (σ = 28.854):
+  Direction in log space: [-0.755, -0.655]
+  → Best identified combination
+Combination 2 (σ = 5.211):
+  Direction in log space: [0.655, -0.755]
+  → Least identified combination
+
+============================================================
+Model-Specific Notes
+============================================================
+
+Binomial case: ϕ(n,p) = [np, np(1-p)]
+  Appears structurally identifiable (no invariant null space)
+  Condition number: 5.5
+
+============================================================
+IIR Parameterization: stat_model_iir
+============================================================
+
+Using invariant subspace analysis (Algorithm 1 from paper)
+
+Scaled and rounded reparameterization matrix:
+2×2 adjoint(::Matrix{Float64}) with eltype Float64:
+ 1.0   1.0
+ 1.0  -1.0
+
+Transformation matrices:
+Forward (original → IIR):
+2×2 adjoint(::Matrix{Float64}) with eltype Float64:
+ 1.0   1.0
+ 1.0  -1.0
+
+Inverse (IIR → original):
+2×2 adjoint(::Matrix{Float64}) with eltype Float64:
+ 0.5   0.5
+ 0.5  -0.5
+Eigenvectors and eigenvalues for stat_model_iir
+Eigenvalues: [0.9032217637744697, 5.095050842403003e-5]
+Eigenvectors: [0.9999998193145139 -0.0006011413641572758; 0.0006011413641572753 0.9999998193145139]
+Computing and returning SVD of Jacobian of φ mapping
+
+Comparison of eigenvectors (1) and singular vectors (2):
+2×2 Matrix{Float64}:
+ 1.0          -0.000601141
+ 0.000601141   1.0
+2×2 Matrix{Float64}:
+ -0.99993   -0.011808
+ -0.011808   0.99993
+Variable: np
+Variable: \frac{n}{p}

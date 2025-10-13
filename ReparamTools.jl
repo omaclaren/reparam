@@ -36,6 +36,7 @@ export
     plot_2D_contour,
     plot_2D_contour_comparison,
     plot_profile_wise_CI_for_mean,
+    plot_profile_wise_CI_comparison,
 
     # Utility functions
     scale_and_round,

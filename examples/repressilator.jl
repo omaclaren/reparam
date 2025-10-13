@@ -959,33 +959,21 @@ lower_ratio_mat = reshape_pred(lower_ratio)
 upper_ratio_mat = reshape_pred(upper_ratio)
 mle_mat = reshape_pred(pred_mean_MLE)
 
-# Plot m₁ predictions for comparison
-using Plots
-p = plot(xlabel="Time", ylabel="m₁ concentration",
-         title="Repressilator: Individual vs Ratio Prediction Intervals",
-         legend=:topright, size=(800, 500))
+# Plot m₁ predictions for comparison using library function
+ci_intervals = [
+    (lower_K1_mat[1,:], upper_K1_mat[1,:], "K₁ individual", :red),
+    (lower_β1_mat[1,:], upper_β1_mat[1,:], "β₁ individual", :orange),
+    (lower_ratio_mat[1,:], upper_ratio_mat[1,:], "K₁/β₁ ratio (joint)", :blue)
+]
 
-# MLE trajectory
-plot!(p, t_pred, mle_mat[1,:], label="MLE", color=:black, lw=2)
-
-# K₁ individual (narrow, misleading)
-plot!(p, t_pred, lower_K1_mat[1,:], fillrange=upper_K1_mat[1,:],
-      fillalpha=0.3, label="K₁ individual", color=:red, lw=0)
-
-# β₁ individual (narrow, misleading)
-plot!(p, t_pred, lower_β1_mat[1,:], fillrange=upper_β1_mat[1,:],
-      fillalpha=0.3, label="β₁ individual", color=:orange, lw=0)
-
-# K₁/β₁ ratio (wide, honest)
-plot!(p, t_pred, lower_ratio_mat[1,:], fillrange=upper_ratio_mat[1,:],
-      fillalpha=0.3, label="K₁/β₁ ratio (joint)", color=:blue, lw=0)
-
-# Data points
-scatter!(p, t, vec(data_mRNA[1,:]), label="Data", color=:black, ms=4)
-
-fig_path = joinpath(@__DIR__, "..", "figures", "repressilator_prediction_comparison.png")
-savefig(p, fig_path)
-println("\nSaved prediction comparison to: $fig_path")
+plot_profile_wise_CI_comparison(
+    t_pred, mle_mat[1,:],
+    ci_intervals,
+    "repressilator", "m₁ concentration", "Time", "t";
+    data_indep=t, data_dep=vec(data_mRNA[1,:]),
+    title="Repressilator: Individual vs Ratio Prediction Intervals",
+    save_dir=joinpath(@__DIR__, "..", "figures") * "/"
+)
 
 println("\n" * repeat("=", 70))
 println("Analysis Complete")

@@ -1,0 +1,3 @@
+# Basis rotations in Stage 1 / Stage 2
+
+Let `θ ∈ R^p`. Stage 1 applies the map `θ ↦ x¹ = A₁ log θ`, with inverse `θ = exp(A₁ᵀ x¹)`; Stage 2 outputs `x² = A₂ x¹`, so the composed result is `x² = A₂ A₁ log θ` and we finally have `θ² = exp(x²) = exp(A₂ A₁ log θ)`. Any orthogonal Q inserted between Stage 1 and Stage 2 (i.e. replacing `A₂` by `Q A₂`) just rotates the Stage 2 basis—it does not change the invariant subspaces. Likewise, Varimax or any other dictionary rotation is applied after Stage 2 so that the rows of `A₂ A₁` read as `(n₁p₁) ± (n₂p₂)` etc., but the invariant space was already determined by the SVD. Thus, the “nice” basis can appear at the end, without affecting the sequential steps themselves.

@@ -359,3 +359,71 @@ function plot_profile_wise_CI_for_mean(indep_var, lower, upper, mle,
     savefig(plt, save_dir*model_name*"_mean_vs_"*indep_varname_save*"_"*target_save*"_profile"*".$fmt")
 
 end
+
+function plot_profile_wise_CI_comparison(indep_var, mle,
+                 ci_intervals,
+                 model_name, dep_varname,
+                 indep_varname, indep_varname_save;
+                 data_indep=nothing, data_dep=nothing,
+                 title="", save_dir="./figures/", fmt=:png, dpi=600)
+    """
+    Compare confidence intervals for mean function from multiple profiles.
+
+    Parameters:
+    - indep_var: Independent variable values (e.g., time grid)
+    - mle: Maximum likelihood estimate of mean
+    - ci_intervals: Vector of tuples (lower, upper, label, color) for each CI
+    - model_name: Name for saving plot
+    - dep_varname: Name of dependent variable for plotting
+    - indep_varname: Name of independent variable for plotting
+    - indep_varname_save: Name of independent variable for saving
+    - data_indep: Independent variable data points to overlay (optional)
+    - data_dep: Dependent variable data points to overlay (optional)
+    - title: Plot title (optional)
+    - save_dir: Directory for saving plot (default: "./figures/")
+    - fmt: File type for saving (default: :png)
+    - dpi: Resolution for saved plot (default: 600)
+
+    Example:
+        ci_intervals = [
+            (lower_K1, upper_K1, "K₁ individual", :red),
+            (lower_β1, upper_β1, "β₁ individual", :orange),
+            (lower_ratio, upper_ratio, "K₁/β₁ ratio", :blue)
+        ]
+    """
+    # Create base plot
+    plt = plot(xlabel=latexstring(indep_varname),
+              ylabel=latexstring(dep_varname),
+              title=title,
+              xlims=(indep_var[1], indep_var[end]),
+              legend=:topright,
+              grid=false,
+              size=(800, 500))
+
+    # Plot MLE trajectory first (so it's on top)
+    plot!(plt, indep_var, mle, label="MLE", color=:black, lw=2)
+
+    # Plot each CI interval
+    for (lower, upper, label, color) in ci_intervals
+        plot!(plt, indep_var, lower,
+              fillrange=upper,
+              fillalpha=0.3,
+              label=label,
+              color=color,
+              lw=0)
+    end
+
+    # Add data points if provided
+    if !isnothing(data_indep) && !isnothing(data_dep)
+        scatter!(plt, data_indep, data_dep,
+                label="Data",
+                color=:black,
+                ms=4,
+                markershape=:circle)
+    end
+
+    display(plt)
+    gr(fmt=fmt, dpi=dpi)
+    savefig(plt, save_dir*model_name*"_mean_vs_"*indep_varname_save*"_comparison"*".$fmt")
+
+end

@@ -1,0 +1,308 @@
+✓ ReparamTools module included
+
+============================================================
+Known Identifiable Combinations (Meshkat et al. 2014)
+============================================================
+q₁ = b₁c₁             = 3.0
+q₂ = c₁K_M            = 3.0
+q₃ = k₀₂ + k₁₂        = 0.4
+q₄ = c₁V_M k₁₂k₂₁     = 0.11249999999999999
+q₅ = c₁V_M(k₀₁ + k₂₁) = 0.675
+============================================================
+
+
+============================================================
+SEQUENTIAL IIR ANALYSIS
+============================================================
+
+--- STAGE 1: Log transformation (monomials) ---
+Expected to find combinations: q₁, q₂, q₄
+These are products: b₁c₁, c₁K_M, c₁V_M k₁₂k₂₁
+
+Stage 1 Results:
+  Rank of Jacobian: 6
+  Dimension of invariant null space: 1
+  Dimension of potentially identifiable subspace: 7
+
+  Singular values:
+8-element Vector{Float64}:
+ 1.0520481729108253
+ 0.2819292330735839
+ 0.057706907737752465
+ 0.02127129648637054
+ 0.0011781548669421514
+ 7.961480272858723e-6
+ 1.9533542668403696e-16
+ 2.843237748592531e-17
+
+  N_perp (potentially identifiable in log-space):
+8×7 Matrix{Float64}:
+ -0.678627    0.202743    0.00818346   0.0136855   0.40737    -0.286629  -2.27955e-12
+ -0.667616    0.225582    0.0536336   -0.0322342  -0.409072    0.286612   2.27951e-12
+  0.0854423   0.265728   -0.0110562   -0.0577889  -0.474711   -0.692091   0.46291
+  0.0043984   0.0405445  -0.311605    -0.40151    -0.214326   -0.314413  -0.771517
+  0.0933499   0.160393    0.923648     0.0098737  -0.0323487  -0.126698  -0.308607
+ -0.0238176  -0.136838    0.16122     -0.907217    0.143902    0.125407   0.308607
+  0.201838    0.640324   -0.0764879   -0.0937725  -0.266129    0.462362  -2.91168e-12
+ -0.190827   -0.617485    0.121938     0.0478528  -0.550313    0.110879  -2.62333e-12
+
+  N (invariant null space in log-space):
+8×1 Matrix{Float64}:
+  0.4999999999968517
+ -0.4999999999968514
+ -5.45798229075112e-12
+ -7.435673955251504e-12
+ -2.977266162458208e-12
+  2.974644704949508e-12
+  0.5000000000051306
+  0.5000000000011663
+
+  Applying Varimax rotation to N_perp for sparse structure...
+
+  Rotated N_perp (orthonormal, after Varimax):
+8×7 Matrix{Float64}:
+  0.0  -0.166666   0.0  0.0   0.833334  -0.166666  0.0
+  0.0  -0.833334   0.0  0.0   0.166666   0.166666  0.0
+  0.0   0.0        0.0  0.0   0.0        0.0       1.0
+ -1.0   0.0        0.0  0.0   0.0        0.0       0.0
+  0.0   0.0        0.0  1.0   0.0        0.0       0.0
+  0.0   0.0       -1.0  0.0   0.0        0.0       0.0
+  0.0  -0.166668   0.0  0.0  -0.166668   0.833333  0.0
+  0.0  -0.499999   0.0  0.0  -0.499999  -0.500001  0.0
+
+  Applying scale_and_round for interpretation...
+
+  Scaled N_perp (for interpretation only):
+8×7 Matrix{Float64}:
+ -0.0   0.0  -0.0  0.0   1.0   0.5  0.0
+ -0.0   1.0  -0.0  0.0   0.0  -0.5  0.0
+ -0.0  -0.0  -0.0  0.0   0.0  -0.0  1.0
+  1.0  -0.0  -0.0  0.0   0.0  -0.0  0.0
+ -0.0  -0.0  -0.0  1.0   0.0  -0.0  0.0
+ -0.0  -0.0   1.0  0.0   0.0  -0.0  0.0
+ -0.0   0.0  -0.0  0.0  -0.0  -1.5  0.0
+ -0.0   0.5  -0.0  0.0  -0.5   1.0  0.0
+
+  Interpreting Stage 1 monomial combinations:
+    θ¹[1] ~ k₀₂
+    θ¹[2] ~ c₁ × K_M^0.5
+    θ¹[3] ~ k₂₁
+    θ¹[4] ~ k₁₂
+    θ¹[5] ~ b₁ × 1/K_M^0.5
+    θ¹[6] ~ b₁^0.5 × 1/c₁^0.5 × 1/V_M^1.5 × K_M
+    θ¹[7] ~ k₀₁
+
+--- STAGE 2: Identity transformation (sums) ---
+Expected to find combinations: q₃, q₅
+These involve sums: k₀₂+k₁₂, c₁V_M(k₀₁+k₂₁)
+
+Stage 1 Transformation Matrix A1:
+  Size: (8, 8)
+8×8 adjoint(::Matrix{Float64}) with eltype Float64:
+  0.0        0.0        0.0          -1.0           0.0           0.0           0.0        0.0
+ -0.166666  -0.833334   0.0           0.0           0.0           0.0          -0.166668  -0.499999
+  0.0        0.0        0.0           0.0           0.0          -1.0           0.0        0.0
+  0.0        0.0        0.0           0.0           1.0           0.0           0.0        0.0
+  0.833334   0.166666   0.0           0.0           0.0           0.0          -0.166668  -0.499999
+ -0.166666   0.166666   0.0           0.0           0.0           0.0           0.833333  -0.500001
+  0.0        0.0        1.0           0.0           0.0           0.0           0.0        0.0
+  0.5       -0.5       -5.45798e-12  -7.43567e-12  -2.97727e-12   2.97464e-12   0.5        0.5
+
+Transformed parameters θ¹ at true values:
+  θ¹[1] = 10.0
+  θ¹[2] = 0.4493
+  θ¹[3] = 4.0
+  θ¹[4] = 0.3
+  θ¹[5] = 1.348
+  θ¹[6] = 0.674
+  θ¹[7] = 0.2
+  θ¹[8] = 1.633
+
+Stage 2 Results:
+  Rank of Jacobian: 6
+  Dimension of invariant null space: 1
+  Dimension of potentially identifiable subspace: 7
+
+  Singular values:
+8-element Vector{Float64}:
+ 1.9156626641282681
+ 0.5199517014571833
+ 0.17319455041236817
+ 0.005581581916511818
+ 0.0020244314197195895
+ 1.3972579871116643e-5
+ 8.948532523021177e-17
+ 2.9301400921973645e-18
+
+  N_perp (potentially identifiable in Stage 1 space):
+8×7 Matrix{Float64}:
+ -0.000285329  -0.00184672    0.0109533    -0.144098     -0.0658094     0.00400521   -0.987302
+  0.889464     -0.321008     -0.0863792    -0.0849591     0.161273     -0.255184     -2.3357e-14
+  0.0036928     0.0168704    -0.017509     -0.876159     -0.454733      0.00189256    0.157968
+  0.178096      0.258441      0.948703     -0.0247933     0.0263897    -0.000540722   0.0118476
+ -0.245574      0.245765     -0.0410883    -0.246442      0.480353     -0.765592     -6.99956e-14
+  0.231859      0.60279      -0.226648     -0.228571      0.475467      0.503192      4.74964e-14
+  0.25111       0.637273     -0.197526      0.301279     -0.552606     -0.309074     -0.0118476
+  3.05141e-13   7.74615e-13  -2.39272e-13   3.68317e-13  -6.63702e-13   1.05513e-12   6.83298e-16
+
+  N (invariant null space in Stage 1 space):
+8×1 Matrix{Float64}:
+  9.974571625350752e-15
+  3.6416057291424895e-13
+  4.089995137586522e-16
+ -3.2870208589421e-16
+  1.0921122914111117e-12
+ -7.230900980363411e-13
+ -7.691375746157548e-13
+  1.0
+
+  Applying scale_and_round to Stage 2 N_perp...
+
+  Scaled Stage 2 N_perp:
+8×7 Matrix{Float64}:
+ -0.0  -0.0   0.0   0.0   0.0   0.0   1.0
+  1.0  -0.5  -0.0   0.0  -0.5  -0.5   0.0
+  0.0   0.0  -0.0   1.0   1.0   0.0  -0.0
+  0.0   0.5   1.0   0.0  -0.0  -0.0  -0.0
+ -0.5   0.5  -0.0   0.5  -1.0  -1.5   0.0
+  0.5   1.0  -0.0   0.5  -1.0   1.0  -0.0
+  0.5   1.0  -0.0  -0.5   1.0  -0.5   0.0
+  0.0   0.0  -0.0  -0.0   0.0   0.0  -0.0
+
+  Interpreting Stage 2 (linear) combinations of Stage 1 coordinates:
+    ψ[1] ~ θ¹[2] -θ¹[5] +θ¹[6] +θ¹[7]
+    ψ[2] ~ -θ¹[2] +θ¹[4] +θ¹[5] θ¹[6] θ¹[7]
+    ψ[3] ~ θ¹[4]
+    ψ[4] ~ θ¹[3] +θ¹[5] +θ¹[6] -θ¹[7]
+    ψ[5] ~ -θ¹[2] θ¹[3] -θ¹[5] -θ¹[6] θ¹[7]
+    ψ[6] ~ -θ¹[2] -θ¹[5] θ¹[6] -θ¹[7]
+    ψ[7] ~ θ¹[1]
+
+============================================================
+VALIDATION AGAINST MESHKAT ET AL. (2014)
+============================================================
+
+Known identifiable combinations from Meshkat et al.:
+  q₁ = b₁c₁             = 3.0
+  q₂ = c₁K_M            = 3.0
+  q₃ = k₀₂ + k₁₂        = 0.4
+  q₄ = c₁V_M k₁₂k₂₁     = 0.11249999999999999
+  q₅ = c₁V_M(k₀₁ + k₂₁) = 0.675
+
+Sequential IIR Results:
+  Stage 1: Found 7 potentially identifiable monomial combinations
+  Stage 2: Found 7 potentially identifiable linear combinations
+
+Total identifiable structure:
+  Rank at Stage 1: 6 (expected ~5-6)
+  Rank at Stage 2: 6 (expected ~5-6)
+
+Interpretation:
+  - Stage 1 (monomials) separated individual rates and some products
+  - Stage 2 (sums) should reveal linear combinations like k₀₂+k₁₂
+  - The Hessian invariance test identified which combinations are truly invariant
+
+============================================================
+MAPPING TO MESHKAT'S CANONICAL COMBINATIONS
+============================================================
+
+Stage 1 coordinates at true θ:
+  θ¹[1] = 10.0
+  θ¹[2] = 0.4493
+  θ¹[3] = 4.0
+  θ¹[4] = 0.3
+  θ¹[5] = 1.348
+  θ¹[6] = 0.674
+  θ¹[7] = 0.2
+  θ¹[8] = 1.633
+
+Actual Stage 1 transformations from A1_full matrix:
+  (Rows of A1_full give exponents in: θ¹[i] = ∏ⱼ θⱼ^(A1[i,j]))
+
+Verifying Stage 1 interpretations:
+  θ¹[1] = k₀₂^(-1)      : 10.0 vs 10.0
+  θ¹[3] = k₂₁^(-1)      : 4.0 vs 4.0
+  θ¹[4] = k₁₂           : 0.3 vs 0.3
+  θ¹[7] = k₀₁           : 0.2 vs 0.2
+  θ¹[2] complex product : 0.4493 vs 0.4493
+
+============================================================
+SYSTEMATIC RECONSTRUCTION OF MESHKAT'S q₁...q₅
+============================================================
+
+Reconstruction from Stage 1 coordinates:
+  q₁ = b₁c₁             : 3.0 vs 3.0 ✓
+  q₂ = c₁K_M            : 3.0 vs 3.0 ✓
+  q₃ = k₀₂ + k₁₂        : 0.4 vs 0.4 ✓
+  q₄ = c₁V_Mk₁₂k₂₁      : 0.1125 vs 0.1125 ✓
+  q₅ = c₁V_M(k₀₁ + k₂₁) : 0.675 vs 0.675 ✓
+
+Interpretation:
+  ✓ All q₁...q₅ can be perfectly reconstructed from θ¹ via inverse transform
+  ✓ This confirms Stage 1 transformation is invertible and preserves information
+  ⚠ BUT: The q's are NOT simple combinations of θ¹ components
+     They require the full inverse transformation A1_inv
+
+Critical question for Stage 2:
+  Can Stage 2 identify combinations of θ¹ that correspond to q₁...q₅?
+  If Varimax has separated parameters well, some q's might appear as
+  simple products or ratios of θ¹ components. Let's investigate...
+
+============================================================
+MAXIMUM LIKELIHOOD ESTIMATION
+============================================================
+
+MLE estimate:
+  b₁ = 1.6593 (true: 2.0)
+  c₁ = 0.5 (true: 1.5)
+  k₀₁ = 0.05 (true: 0.2)
+  k₀₂ = 0.05 (true: 0.1)
+  k₁₂ = 1.0 (true: 0.3)
+  k₂₁ = 0.7576 (true: 0.25)
+  V_M = 0.2 (true: 1.0)
+  K_M = 10.0 (true: 2.0)
+
+============================================================
+JACOBIAN SVD ANALYSIS
+============================================================
+Computing and returning SVD of Jacobian of φ mapping
+
+Singular values of Jacobian J_ϕ(θ):
+  σ[1] = 2.122
+  σ[2] = 0.5456
+  σ[3] = 0.1151
+  σ[4] = 0.02582
+  σ[5] = 3.787e-5
+  σ[6] = 7.551e-9
+  σ[7] = 1.742e-16
+  σ[8] = 1.283e-17
+
+Right singular vectors (parameter combinations):
+8×8 Matrix{Float64}:
+ -0.0750416   -0.248892      0.654354     0.699626     0.0629768   -0.0810143    0.0650754    -0.00129436
+  0.256891     0.852418     -0.017987     0.382949    -0.189554     0.156474    -0.00153271    2.54071e-5
+  0.104365     0.346686      0.472233    -0.410997     0.322103    -0.609174     0.0463698    -0.000910492
+  0.0269801    0.0894497     0.162065    -0.109798     0.733265     0.644207     0.0164194    -0.000332735
+  0.109177    -0.0329416    -0.0669451   -0.0240063   -0.0312615    0.0230974    0.989375     -0.0395504
+ -0.937079     0.28237      -0.00787154  -0.00277674  -0.00366445   0.0027768    0.118712      0.167235
+ -0.00207927   0.000626546  -0.56359      0.42695      0.56359     -0.42695     -0.000250615  -0.0125308
+  0.163449    -0.0492521    -0.00716949   0.00543128   0.00716949  -0.00543128   0.0197008     0.985042
+
+Condition number: 1.6542574426469088e17
+
+Effective rank: 5 / 8
+
+⚠ Model is structurally non-identifiable!
+  Expected: 5 identifiable combinations from 8 parameters
+  Found: 5 singular values above threshold
+
+============================================================
+PROFILE LIKELIHOOD ANALYSIS
+============================================================
+TODO: Compute 1D profiles for all 8 parameters
+Expected: Flat profiles for non-identifiable parameters
+         Curved profiles for identifiable combinations
+
+============================================================
+END OF ANALYSIS
+============================================================
