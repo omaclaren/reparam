@@ -253,7 +253,7 @@ println("\n" * repeat("=", 70))
 println("Applying IIR with finite-difference invariance test...")
 println(repeat("=", 70))
 
-S_inv, N_inv, N_perp_inv, rank_J = find_invariant_subspace(
+S, N, N_perp, rank_J = find_invariant_subspace(
     ϕ_log, θ_log_true;
     invariance_method=:finite_difference,
     fd_epsilon=1e-5,
@@ -262,8 +262,8 @@ S_inv, N_inv, N_perp_inv, rank_J = find_invariant_subspace(
 )
 
 println("\nSingular values of Jacobian (in log-space):")
-for (i, s) in enumerate(S_inv)
-    if i <= 10 || i > length(S_inv) - 3
+for (i, s) in enumerate(S)
+    if i <= 10 || i > length(S) - 3
         println("  σ[$i] = ", round(s, sigdigits=6))
     elseif i == 11
         println("  ...")
@@ -273,18 +273,18 @@ end
 println("\nInvariant Subspace Analysis:")
 println("  Jacobian rank: $rank_J / $n_params")
 println("  Expected rank: 15 or 16 (with 2-3 non-identifiable combinations)")
-println("  Identifiable directions: ", size(N_perp_inv, 2))
-println("  Non-identifiable directions: ", size(N_inv, 2))
+println("  Identifiable directions: ", size(N_perp, 2))
+println("  Non-identifiable directions: ", size(N, 2))
 
 # Print the invariant null space vectors
-if size(N_inv, 2) > 0
+if size(N, 2) > 0
     println("\n" * repeat("=", 70))
     println("NON-IDENTIFIABLE (INVARIANT) DIRECTIONS - SVD Basis (Mixed)")
     println("Expected structure: Products of K/β ratios")
     println(repeat("=", 70))
 
-    for j in 1:size(N_inv, 2)
-        v = N_inv[:, j]
+    for j in 1:size(N, 2)
+        v = N[:, j]
         println("\nSVD Direction $j:")
 
         # Find significant coefficients
@@ -335,11 +335,11 @@ if size(N_inv, 2) > 0
     println("\n" * repeat("=", 70))
     println("COMPLEMENT SPACE N_perp (Should contain K/β ratios)")
     println(repeat("=", 70))
-    println("Dimensions: ", size(N_perp_inv))
+    println("Dimensions: ", size(N_perp))
 
     # Apply Varimax to N_perp to see if we can find K/β ratios
     println("\nApplying Varimax rotation to N_perp...")
-    N_perp_varimax = varimax_rotation(N_perp_inv; n_restarts=200, threshold=1e-2)
+    N_perp_varimax = varimax_rotation(N_perp; n_restarts=200, threshold=1e-2)
 
     # Look for directions with opposite signs for β and K (ratios)
     println("\nSearching for K/β ratio patterns in N_perp...")
@@ -380,14 +380,14 @@ if size(N_inv, 2) > 0
     println("\nOriginal SVD basis (N_perp):")
     println("  All singular values (identifiable directions):")
     for i in 1:rank_J
-        println("    σ[$i] = $(round(S_inv[i], digits=3))")
+        println("    σ[$i] = $(round(S[i], digits=3))")
     end
-    println("  Condition number: $(round(S_inv[1]/S_inv[rank_J], digits=2))")
+    println("  Condition number: $(round(S[1]/S[rank_J], digits=2))")
 
     # Check which SVD directions have K/β structure
-    # Note: N_perp_inv already contains the identifiable directions (columns of V)
+    # Note: N_perp already contains the identifiable directions (columns of V)
     println("\n  Checking SVD basis for K/β ratio patterns:")
-    V_r_from_svd = N_perp_inv
+    V_r_from_svd = N_perp
     beta_indices = [7, 8, 9]
     K_indices = [10, 11, 12]
 
@@ -434,30 +434,30 @@ if size(N_inv, 2) > 0
     println(repeat("=", 70))
 
     # SVD-based transformation (as returned by find_invariant_subspace)
-    A_svd_T = hcat(N_perp_inv, N_inv)
+    A_svd_T = hcat(N_perp, N)
     A_svd = A_svd_T'
 
     println("\nSVD-based transformation matrix A_svd:")
     println("  Dimensions: ", size(A_svd))
     println("  First 15 rows (identifiable): from N_perp")
-    println("  Last 3 rows (non-identifiable): from N_inv")
+    println("  Last 3 rows (non-identifiable): from N")
 
     # Show the non-identifiable combinations from SVD
     println("\n  Non-identifiable directions (SVD basis):")
     param_names_short = ["α₀₁", "α₀₂", "α₀₃", "α₁", "α₂", "α₃", "β₁", "β₂", "β₃", "K₁", "K₂", "K₃",
                          "k_dm₁", "k_dm₂", "k_dm₃", "k_dp₁", "k_dp₂", "k_dp₃"]
 
-    for i in 1:size(N_inv, 2)
+    for i in 1:size(N, 2)
         row = A_svd[15+i, :]
         println("    ψ[$(15+i)] = ", join([round(row[j], digits=3) for j in 1:n_params], ", "))
     end
 
     # Varimax-based transformation
     println("\n" * repeat("=", 70))
-    println("Applying Varimax rotation separately to N_perp and N_inv...")
+    println("Applying Varimax rotation separately to N_perp and N...")
     println(repeat("=", 70))
 
-    N_inv_varimax = varimax_rotation(N_inv; n_restarts=200, threshold=1e-2)
+    N_varimax = varimax_rotation(N; n_restarts=200, threshold=1e-2)
 
     # Apply scale_and_round to get clean integer/half-integer patterns
     # IMPORTANT: This does NOT change identifiability! The normalized sensitivity
@@ -471,10 +471,10 @@ if size(N_inv, 2) > 0
     println("  (Note: This rescales for clean exponents but doesn't change identifiability)")
     println("  (Warning: This breaks orthonormality - A_varimax is for presentation only)")
     N_perp_clean = scale_and_round(N_perp_varimax; round_within=0.1)
-    N_inv_clean = scale_and_round(N_inv_varimax; round_within=0.1)
+    N_clean = scale_and_round(N_varimax; round_within=0.1)
 
     # Build Varimax transformation matrix (for presentation/interpretation)
-    A_varimax_T = hcat(N_perp_clean, N_inv_clean)
+    A_varimax_T = hcat(N_perp_clean, N_clean)
     A_varimax = A_varimax_T'
 
     println("\nVarimax-based transformation matrix A_varimax:")
@@ -482,7 +482,7 @@ if size(N_inv, 2) > 0
 
     # Show the non-identifiable combinations from Varimax
     println("\n  Non-identifiable directions (Varimax basis):")
-    for i in 1:size(N_inv_varimax, 2)
+    for i in 1:size(N_varimax, 2)
         row = A_varimax[15+i, :]
         println("    ψ[$(15+i)] = ", join([round(row[j], digits=3) for j in 1:n_params], ", "))
     end
@@ -511,14 +511,14 @@ if size(N_inv, 2) > 0
     end
 
     println("\nNon-identifiable monomials (SVD basis):")
-    for i in 1:size(N_inv, 2)
+    for i in 1:size(N, 2)
         row = A_svd[15+i, :]
         mono = format_monomial(row, param_names_short)
         println("  ψ[$(15+i)] = $mono")
     end
 
     println("\nNon-identifiable monomials (Varimax basis):")
-    for i in 1:size(N_inv_varimax, 2)
+    for i in 1:size(N_varimax, 2)
         row = A_varimax[15+i, :]
         mono = format_monomial(row, param_names_short)
         println("  ψ[$(15+i)] = $mono")
@@ -531,8 +531,8 @@ if size(N_inv, 2) > 0
 
     # For SVD non-identifiable combos
     println("\nSVD non-identifiable combinations:")
-    for i in 1:size(N_inv, 2)
-        v_orig = N_inv[:, i]  # Direction in original parameter space
+    for i in 1:size(N, 2)
+        v_orig = N[:, i]  # Direction in original parameter space
         Jv_norm = norm(J_θ_log * v_orig)
         row = A_svd[15+i, :]
         mono = format_monomial(row, param_names_short)
@@ -542,8 +542,8 @@ if size(N_inv, 2) > 0
 
     # For Varimax non-identifiable combos
     println("\nVarimax non-identifiable combinations (after scale_and_round):")
-    for i in 1:size(N_inv_clean, 2)
-        v_orig = N_inv_clean[:, i]
+    for i in 1:size(N_clean, 2)
+        v_orig = N_clean[:, i]
         Jv_norm = norm(J_θ_log * v_orig)
         row = A_varimax[15+i, :]
         mono = format_monomial(row, param_names_short)
@@ -557,8 +557,8 @@ if size(N_inv, 2) > 0
     println(repeat("=", 70))
 
     println("\nSVD identifiable combinations (all 15):")
-    for i in 1:size(N_perp_inv, 2)
-        v_orig = N_perp_inv[:, i]
+    for i in 1:size(N_perp, 2)
+        v_orig = N_perp[:, i]
         Jv_norm = norm(J_θ_log * v_orig)
         row = A_svd[i, :]
         mono = format_monomial(row, param_names_short, 0.1)
@@ -606,8 +606,8 @@ if size(N_inv, 2) > 0
 
     # Collect and sort SVD results
     svd_results = []
-    for i in 1:size(N_perp_inv, 2)
-        v_orig = N_perp_inv[:, i]
+    for i in 1:size(N_perp, 2)
+        v_orig = N_perp[:, i]
         sigma = norm(J_θ_log * v_orig)
         row = A_svd[i, :]
         mono = format_monomial(row, param_names_short, 0.1)
@@ -667,8 +667,8 @@ if size(N_inv, 2) > 0
 
     println("\nVarimax-rotated null directions (βK products):")
 
-    for j in 1:size(N_inv_varimax, 2)
-        v = N_inv_varimax[:, j]
+    for j in 1:size(N_varimax, 2)
+        v = N_varimax[:, j]
         println("\nVarimax Direction $j:")
         println("  All coefficients: ", [round(v[i], digits=3) for i in 1:n_params])
 
