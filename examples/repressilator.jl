@@ -236,15 +236,129 @@ println("  Observables: 3 mRNAs (m₁, m₂, m₃)")
 println("  Total observations: $N_obs")
 println("  Noise level σ = $σ")
 
+# IIR analysis moved to after MLE computation (see below)
+
+
+println("PROFILE-WISE PREDICTION: Individual vs Ratio Comparison")
+println(repeat("=", 70))
+
 # --------------------------------------------------------
-# Apply IIR (18 parameters)
+# Setup: Compare prediction uncertainty for:
+# Option B: Individual parameters K₁, β₁ vs ratio K₁/β₁
+# --------------------------------------------------------
+
+# Use existing time grid from data (T_end=100, NT=21)
+# For predictions, we want finer resolution
+t_pred = LinRange(0, T_end, 101)  # Fine grid for smooth prediction bands
+
+# Observation noise model (same as fitting)
+σ_pred = σ
+
+# Define prediction distribution: mRNA trajectories m₁, m₂, m₃
+# Use data grid (t) for likelihood, prediction grid (t_pred) for visualization
+function predict_mRNA(θ, t_grid=t)
+    sol_matrix = solve_repressilator(t_grid, θ, X0)
+    mRNA = extract_mrna(sol_matrix)  # 3×NT matrix
+    return vec(mRNA')  # Flatten to vector (time-major order)
+end
+
+# Distribution for predictions (mRNA only, not proteins)
+# Use fine grid for smooth prediction bands
+distrib_fine_θ = θ -> MvLogNormal(log.(abs.(predict_mRNA(θ, t_pred)) .+ 1e-10), σ_pred^2*I(3*length(t_pred)))
+
+# MLE prediction for reference (on fine grid)
+mRNA_MLE = predict_mRNA(θ_true, t_pred)
+pred_mean_MLE = mRNA_MLE
+
+println("\nPrediction setup:")
+println("  Parameters: 18 (n=2 fixed in model)")
+println("  Time points: $(length(t_pred)) over [0, $T_end]")
+println("  Observables: 3 mRNA species (m₁, m₂, m₃)")
+println("  Total prediction dimension: $(3*length(t_pred))")
+println("  Noise level: σ = $σ_pred")
+
+# --------------------------------------------------------
+# Option B: Individual K₁, β₁ vs ratio K₁/β₁
+# --------------------------------------------------------
+
+println("\n" * repeat("-", 70))
+println("Option B: Individual Parameters vs Identifiable Ratio")
+println(repeat("-", 70))
+
+# We need to profile:
+# 1. K₁ individually (non-identifiable, βK product in null space)
+# 2. β₁ individually (non-identifiable, βK product in null space)
+# 3. K₁/β₁ ratio (identifiable, in complement space)
+
+# Define log-likelihood for profiling
+# We need synthetic "data" first - generate from true parameters
+sol_matrix_data = solve_repressilator(t, θ_true, X0)
+data_mRNA = extract_mrna(sol_matrix_data)  # 3×NT
+data_obs = vec(data_mRNA')  # Flatten (time-major order)
+
+# Log-likelihood function
+function lnlike_θ(θ)
+    if any(θ .<= 0)
+        return -Inf
+    end
+    try
+        pred = predict_mRNA(θ)
+        if length(pred) != length(data_obs)
+            return -Inf  # Solver failed
+        end
+        # Simple Gaussian log-likelihood
+        return -0.5 * sum(((data_obs .- pred) ./ σ).^2)
+    catch
+        return -Inf  # Any solver failure
+    end
+end
+
+# Find MLE by optimization
+println("\nFinding MLE...")
+
+# Bounds for optimization (log scale for positivity)
+# Tighter bounds to avoid unstable ODE regions
+θ_log_lower = log.(θ_true .* 0.7)  # 30% smaller (tighter than before)
+θ_log_upper = log.(θ_true .* 1.5)  # 50% larger (tighter than before)
+θ_log_initial = log.(θ_true)  # Start from true parameters
+
+# Log-likelihood in log-parameter space
+lnlike_θ_log = θ_log -> lnlike_θ(exp.(θ_log))
+
+# Optimize to find MLE (empty target_indices means find MLE)
+target_indices = Int[]  # Empty for MLE
+n_guesses_mle = 3
+grid_steps_mle = Int[]  # Empty for MLE
+
+# Generate multiple initial guesses
+nuisance_guesses_mle = generate_initial_guesses(θ_log_lower, θ_log_upper, n_guesses_mle)
+
+θ_log_MLE, lnlike_MLE = profile_target(
+    lnlike_θ_log, target_indices,
+    θ_log_lower, θ_log_upper,
+    θ_log_initial;
+    grid_steps=grid_steps_mle,
+    ω_initial_extras=nuisance_guesses_mle,
+    method=:LN_BOBYQA,
+    optmaxtime=30.0)
+
+θ_MLE = exp.(θ_log_MLE)
+
+println("Log-likelihood at MLE: $(round(lnlike_MLE, digits=2))")
+println("MLE parameter values:")
+for (i, (name, val)) in enumerate(zip(param_names, θ_MLE))
+    println("  $name = $(round(val, sigdigits=4)) (true: $(round(θ_true[i], sigdigits=4)))")
+end
+
+# --------------------------------------------------------
+# Apply IIR at MLE (18 parameters)
 # --------------------------------------------------------
 
 println("\n" * repeat("=", 70))
-println("Applying IIR (18 parameters)")
+println("Applying IIR at MLE (18 parameters)")
 println(repeat("=", 70))
 
-# Wrap in log-space for Stage 1
+# Wrap in log-space for IIR
 ϕ_log(θ_log) = ϕ_func(exp.(θ_log))
 θ_log_true = log.(θ_true)
 n_params = 18
@@ -254,7 +368,7 @@ println("Applying IIR with finite-difference invariance test...")
 println(repeat("=", 70))
 
 S, N, N_perp, rank_J = find_invariant_subspace(
-    ϕ_log, θ_log_true;
+    ϕ_log, θ_log_MLE;  # ✓ CORRECT - using MLE
     invariance_method=:finite_difference,
     fd_epsilon=1e-5,
     fd_n_probes=5,
@@ -275,6 +389,9 @@ println("  Jacobian rank: $rank_J / $n_params")
 println("  Expected rank: 15 or 16 (with 2-3 non-identifiable combinations)")
 println("  Identifiable directions: ", size(N_perp, 2))
 println("  Non-identifiable directions: ", size(N, 2))
+
+# Compute Jacobian at MLE for later use
+J_θ_log = ForwardDiff.jacobian(ϕ_log, θ_log_MLE)
 
 # Print the invariant null space vectors
 if size(N, 2) > 0
@@ -399,8 +516,8 @@ if size(N, 2) > 0
             beta_coef = v[beta_indices[j]]
             K_coef = v[K_indices[j]]
             if abs(beta_coef) > 0.3 && abs(K_coef) > 0.3 && sign(beta_coef) != sign(K_coef)
-                push!(svd_kb_directions, (i, j, S_full[i]))
-                println("    SVD[$i] (σ=$(round(S_full[i], digits=3))): K$j/β$j ratio (β=$((round(beta_coef, digits=3))), K=$(round(K_coef, digits=3)))")
+                push!(svd_kb_directions, (i, j, S[i]))
+                println("    SVD[$i] (σ=$(round(S[i], digits=3))): K$j/β$j ratio (β=$((round(beta_coef, digits=3))), K=$(round(K_coef, digits=3)))")
             end
         end
     end
@@ -439,8 +556,8 @@ if size(N, 2) > 0
 
     println("\nSVD-based transformation matrix A_svd:")
     println("  Dimensions: ", size(A_svd))
-    println("  First 15 rows (identifiable): from N_perp")
-    println("  Last 3 rows (non-identifiable): from N")
+    println("  First $rank_J rows (identifiable): from N_perp")
+    println("  Last $(n_params - rank_J) rows (non-identifiable): from N")
 
     # Show the non-identifiable combinations from SVD
     println("\n  Non-identifiable directions (SVD basis):")
@@ -448,8 +565,8 @@ if size(N, 2) > 0
                          "k_dm₁", "k_dm₂", "k_dm₃", "k_dp₁", "k_dp₂", "k_dp₃"]
 
     for i in 1:size(N, 2)
-        row = A_svd[15+i, :]
-        println("    ψ[$(15+i)] = ", join([round(row[j], digits=3) for j in 1:n_params], ", "))
+        row = A_svd[rank_J+i, :]
+        println("    ψ[$(rank_J+i)] = ", join([round(row[j], digits=3) for j in 1:n_params], ", "))
     end
 
     # Varimax-based transformation
@@ -483,8 +600,8 @@ if size(N, 2) > 0
     # Show the non-identifiable combinations from Varimax
     println("\n  Non-identifiable directions (Varimax basis):")
     for i in 1:size(N_varimax, 2)
-        row = A_varimax[15+i, :]
-        println("    ψ[$(15+i)] = ", join([round(row[j], digits=3) for j in 1:n_params], ", "))
+        row = A_varimax[rank_J+i, :]
+        println("    ψ[$(rank_J+i)] = ", join([round(row[j], digits=3) for j in 1:n_params], ", "))
     end
 
     # Show symbolic monomials for both
@@ -512,16 +629,16 @@ if size(N, 2) > 0
 
     println("\nNon-identifiable monomials (SVD basis):")
     for i in 1:size(N, 2)
-        row = A_svd[15+i, :]
+        row = A_svd[rank_J+i, :]
         mono = format_monomial(row, param_names_short)
-        println("  ψ[$(15+i)] = $mono")
+        println("  ψ[$(rank_J+i)] = $mono")
     end
 
     println("\nNon-identifiable monomials (Varimax basis):")
     for i in 1:size(N_varimax, 2)
-        row = A_varimax[15+i, :]
+        row = A_varimax[rank_J+i, :]
         mono = format_monomial(row, param_names_short)
-        println("  ψ[$(15+i)] = $mono")
+        println("  ψ[$(rank_J+i)] = $mono")
     end
 
     # Compare degree of identifiability: compute ||J·ψ|| for transformed parameters
@@ -534,9 +651,9 @@ if size(N, 2) > 0
     for i in 1:size(N, 2)
         v_orig = N[:, i]  # Direction in original parameter space
         Jv_norm = norm(J_θ_log * v_orig)
-        row = A_svd[15+i, :]
+        row = A_svd[rank_J+i, :]
         mono = format_monomial(row, param_names_short)
-        println("  ψ[$(15+i)] = $mono")
+        println("  ψ[$(rank_J+i)] = $mono")
         println("    ||J·v|| = $(round(Jv_norm, digits=6)) (should be ≈0 for non-identifiable)")
     end
 
@@ -545,9 +662,9 @@ if size(N, 2) > 0
     for i in 1:size(N_clean, 2)
         v_orig = N_clean[:, i]
         Jv_norm = norm(J_θ_log * v_orig)
-        row = A_varimax[15+i, :]
+        row = A_varimax[rank_J+i, :]
         mono = format_monomial(row, param_names_short)
-        println("  ψ[$(15+i)] = $mono")
+        println("  ψ[$(rank_J+i)] = $mono")
         println("    ||J·v|| = $(round(Jv_norm, digits=6)) (should be ≈0 for non-identifiable)")
     end
 
@@ -556,7 +673,7 @@ if size(N, 2) > 0
     println("IDENTIFIABLE DIRECTIONS (N_perp): SVD vs Varimax")
     println(repeat("=", 70))
 
-    println("\nSVD identifiable combinations (all 15):")
+    println("\nSVD identifiable combinations (all $rank_J):")
     for i in 1:size(N_perp, 2)
         v_orig = N_perp[:, i]
         Jv_norm = norm(J_θ_log * v_orig)
@@ -643,7 +760,7 @@ if size(N, 2) > 0
     println("\nRank | SVD Combination (σ_eff) | Varimax Combination (σ_eff) | Type")
     println(repeat("-", 70))
 
-    for rank in 1:15
+    for rank in 1:rank_J
         svd_idx, svd_mono, svd_sigma = svd_results[rank]
         var_idx, var_mono, var_sigma, var_type = varimax_results[rank]
 
@@ -661,9 +778,9 @@ if size(N, 2) > 0
     var_singles = count(x -> x[4] == "single", varimax_results)
     var_ratios = count(x -> x[4] == "K/β ratio", varimax_results)
 
-    println("  SVD: $(15-svd_singles) mixed + $svd_singles single = 15 total")
-    println("  Varimax: $var_singles single + $var_ratios K/β ratios + $(15-var_singles-var_ratios) other = 15 total")
-    println("  Varimax interpretability: $(var_singles+var_ratios)/15 simple combinations ($(round(100*(var_singles+var_ratios)/15, digits=1))%)")
+    println("  SVD: $(rank_J-svd_singles) mixed + $svd_singles single = $rank_J total")
+    println("  Varimax: $var_singles single + $var_ratios K/β ratios + $(rank_J-var_singles-var_ratios) other = $rank_J total")
+    println("  Varimax interpretability: $(var_singles+var_ratios)/$rank_J simple combinations ($(round(100*(var_singles+var_ratios)/rank_J, digits=1))%)")
 
     println("\nVarimax-rotated null directions (βK products):")
 
@@ -693,15 +810,22 @@ if size(N, 2) > 0
                     println("  → ($ratio_str) ratio")
                 end
 
-                # Compute the product and ratio values
-                K_val = exp(θ_log_true[K_indices[i]])
-                beta_val = exp(θ_log_true[beta_indices[i]])
-                product_val = beta_val * K_val
-                ratio_val = K_val / beta_val
+                # Compute the product and ratio values (compare MLE vs true)
+                K_val_MLE = exp(θ_log_MLE[K_indices[i]])
+                beta_val_MLE = exp(θ_log_MLE[beta_indices[i]])
+                K_val_true = exp(θ_log_true[K_indices[i]])
+                beta_val_true = exp(θ_log_true[beta_indices[i]])
 
-                println("    K$i = $(round(K_val, digits=4)), β$i = $(round(beta_val, digits=4))")
-                println("    β$i·K$i = $(round(product_val, digits=2)) (in invariant null space)")
-                println("    K$i/β$i = $(round(ratio_val, digits=2)) (in complement, identifiable)")
+                product_val_MLE = beta_val_MLE * K_val_MLE
+                ratio_val_MLE = K_val_MLE / beta_val_MLE
+                product_val_true = beta_val_true * K_val_true
+                ratio_val_true = K_val_true / beta_val_true
+
+                println("    MLE:  K$i = $(round(K_val_MLE, digits=4)), β$i = $(round(beta_val_MLE, digits=4))")
+                println("    True: K$i = $(round(K_val_true, digits=4)), β$i = $(round(beta_val_true, digits=4))")
+                println("    β$i·K$i (MLE) = $(round(product_val_MLE, digits=2)) (in invariant null space)")
+                println("    K$i/β$i (MLE) = $(round(ratio_val_MLE, digits=2)) (in complement, identifiable)")
+                println("    K$i/β$i (true) = $(round(ratio_val_true, digits=2))")
                 println("    Expected K$i/β$i per Eisenberg: $(round([346.32, 130.43, 633.71][i], digits=2))")
             end
         end
@@ -709,118 +833,6 @@ if size(N, 2) > 0
 else
     println("\n⚠ WARNING: No invariant null space found!")
     println("This suggests the model doesn't have IIR-compatible invariant structure.")
-end
-
-println("\n" * repeat("=", 70))
-println("PROFILE-WISE PREDICTION: Individual vs Ratio Comparison")
-println(repeat("=", 70))
-
-# --------------------------------------------------------
-# Setup: Compare prediction uncertainty for:
-# Option B: Individual parameters K₁, β₁ vs ratio K₁/β₁
-# --------------------------------------------------------
-
-# Use existing time grid from data (T_end=100, NT=21)
-# For predictions, we want finer resolution
-t_pred = LinRange(0, T_end, 101)  # Fine grid for smooth prediction bands
-
-# Observation noise model (same as fitting)
-σ_pred = σ
-
-# Define prediction distribution: mRNA trajectories m₁, m₂, m₃
-# Use data grid (t) for likelihood, prediction grid (t_pred) for visualization
-function predict_mRNA(θ, t_grid=t)
-    sol_matrix = solve_repressilator(t_grid, θ, X0)
-    mRNA = extract_mrna(sol_matrix)  # 3×NT matrix
-    return vec(mRNA')  # Flatten to vector (time-major order)
-end
-
-# Distribution for predictions (mRNA only, not proteins)
-# Use fine grid for smooth prediction bands
-distrib_fine_θ = θ -> MvLogNormal(log.(abs.(predict_mRNA(θ, t_pred)) .+ 1e-10), σ_pred^2*I(3*length(t_pred)))
-
-# MLE prediction for reference (on fine grid)
-mRNA_MLE = predict_mRNA(θ_true, t_pred)
-pred_mean_MLE = mRNA_MLE
-
-println("\nPrediction setup:")
-println("  Parameters: 18 (n=2 fixed in model)")
-println("  Time points: $(length(t_pred)) over [0, $T_end]")
-println("  Observables: 3 mRNA species (m₁, m₂, m₃)")
-println("  Total prediction dimension: $(3*length(t_pred))")
-println("  Noise level: σ = $σ_pred")
-
-# --------------------------------------------------------
-# Option B: Individual K₁, β₁ vs ratio K₁/β₁
-# --------------------------------------------------------
-
-println("\n" * repeat("-", 70))
-println("Option B: Individual Parameters vs Identifiable Ratio")
-println(repeat("-", 70))
-
-# We need to profile:
-# 1. K₁ individually (non-identifiable, βK product in null space)
-# 2. β₁ individually (non-identifiable, βK product in null space)
-# 3. K₁/β₁ ratio (identifiable, in complement space)
-
-# Define log-likelihood for profiling
-# We need synthetic "data" first - generate from true parameters
-sol_matrix_data = solve_repressilator(t, θ_true, X0)
-data_mRNA = extract_mrna(sol_matrix_data)  # 3×NT
-data_obs = vec(data_mRNA')  # Flatten (time-major order)
-
-# Log-likelihood function
-function lnlike_θ(θ)
-    if any(θ .<= 0)
-        return -Inf
-    end
-    try
-        pred = predict_mRNA(θ)
-        if length(pred) != length(data_obs)
-            return -Inf  # Solver failed
-        end
-        # Simple Gaussian log-likelihood
-        return -0.5 * sum(((data_obs .- pred) ./ σ).^2)
-    catch
-        return -Inf  # Any solver failure
-    end
-end
-
-# Find MLE by optimization
-println("\nFinding MLE...")
-
-# Bounds for optimization (log scale for positivity)
-# Tighter bounds to avoid unstable ODE regions
-θ_log_lower = log.(θ_true .* 0.7)  # 30% smaller (tighter than before)
-θ_log_upper = log.(θ_true .* 1.5)  # 50% larger (tighter than before)
-θ_log_initial = log.(θ_true)  # Start from true parameters
-
-# Log-likelihood in log-parameter space
-lnlike_θ_log = θ_log -> lnlike_θ(exp.(θ_log))
-
-# Optimize to find MLE (empty target_indices means find MLE)
-target_indices = Int[]  # Empty for MLE
-n_guesses_mle = 3
-grid_steps_mle = Int[]  # Empty for MLE
-
-# Generate multiple initial guesses
-nuisance_guesses_mle = generate_initial_guesses(θ_log_lower, θ_log_upper, n_guesses_mle)
-
-θ_log_MLE, lnlike_MLE = profile_target(
-    lnlike_θ_log, target_indices,
-    θ_log_lower, θ_log_upper,
-    θ_log_initial;
-    grid_steps=grid_steps_mle,
-    ω_initial_extras=nuisance_guesses_mle,
-    method=:LN_BOBYQA,
-    optmaxtime=30.0)
-
-θ_MLE = exp.(θ_log_MLE)
-
-println("Log-likelihood at MLE: $(round(lnlike_MLE, digits=2))")
-println("MLE parameter values:")
-for (i, (name, val)) in enumerate(zip(param_names, θ_MLE))
-    println("  $name = $(round(val, sigdigits=4)) (true: $(round(θ_true[i], sigdigits=4)))")
 end
 
 # Profile K₁ (parameter index 10)
