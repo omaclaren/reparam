@@ -70,7 +70,7 @@ println("=" ^ 70)
 # 18 parameters with rank 15/18 (3 non-identifiable).
 # Expected identifiable: K₁/β₁, K₂/β₂, K₃/β₃ ratios.
 
-function repressilator_eisenberg!(dX, X, θ, t)
+function repressilator!(dX, X, θ, t)
     """
     Repressilator ODE system - Eisenberg & Hayashi formulation with n=2 fixed.
 
@@ -114,7 +114,7 @@ function solve_repressilator(t_save, θ, X0; solver=Rodas4())
     Solve the repressilator ODE system.
     """
     tspan = (0.0, maximum(t_save))
-    prob = ODEProblem(repressilator_eisenberg!, X0, tspan, θ)
+    prob = ODEProblem(repressilator!, X0, tspan, θ)
     sol = solve(prob, solver, saveat=t_save, abstol=1e-10, reltol=1e-8)
     return Array(sol)
 end
@@ -125,7 +125,7 @@ function extract_mrna(solution_matrix)
     return solution_matrix[1:3, :]
 end
 
-# Creates ϕ mapping function
+# Creates ϕ mapping function. Assume map to mRNA only (all three).
 function create_ϕ_mapping(t, X0)
     """Create ϕ mapping from parameters to mRNA observations."""
     function ϕ(θ)
@@ -264,66 +264,8 @@ for (i, s) in enumerate(S_θ)
     end
 end
 
-# First get the null space to inspect invariance scores manually
-println("\nDiagnostic: Computing null space and testing invariance...")
-
-# Reuse the Jacobian already computed above
-svd_J = svd(J_θ_log; full=true)
-rank_J_check = count(>(sqrt(eps()) * svd_J.S[1]), svd_J.S)
-V_0 = svd_J.V[:, rank_J_check+1:end]  # Null space
-
-println("\nNull space analysis:")
-println("  Rank: $rank_J_check / $n_params")
-println("  Null space dimension: ", size(V_0, 2))
-
-# Manually compute invariance scores to see how badly they fail
-if size(V_0, 2) > 0
-    println("\nInvariance test (finite-difference probing):")
-    println("Testing if J(θ + ε·α)·α ≈ 0 for each null vector α")
-
-    fd_eps = 1e-5
-    n_probes = 5
-
-    for j in 1:min(size(V_0, 2), 5)  # Show first 5 null vectors
-        α = V_0[:, j]
-
-        # Collect ||J(θ+δ)·α|| at multiple perturbations
-        norms = Float64[]
-        for i in 1:n_probes
-            s = (i - (n_probes+1)/2) * fd_eps
-            if abs(s) < 1e-12
-                s = fd_eps
-            end
-
-            θ_pert = θ_log_true + s * α
-            J_pert = compute_ϕ_Jacobian(ϕ_log, θ_pert)
-            push!(norms, norm(J_pert * α))
-        end
-
-        avg_norm = mean(norms)
-        max_norm = maximum(norms)
-
-        println("\n  Null vector $j:")
-        println("    Mean ||J(θ+δ)·α||: $(round(avg_norm, sigdigits=4))")
-        println("    Max  ||J(θ+δ)·α||: $(round(max_norm, sigdigits=4))")
-        println("    Threshold (atolM): 1e-6")
-
-        if max_norm < 1e-6
-            println("    → INVARIANT ✓")
-        else
-            println("    → NON-INVARIANT (fails by factor of $(round(max_norm/1e-6, digits=1)))")
-        end
-
-        # Show which parameters are involved
-        active_params = findall(abs.(α) .> 0.05)
-        if !isempty(active_params)
-            println("    Active parameters: ", join([param_names[i] for i in active_params], ", "))
-        end
-    end
-end
-
 println("\n" * repeat("=", 70))
-println("Running full IIR analysis with finite-difference method...")
+println("Applying IIR with finite-difference invariance test...")
 println(repeat("=", 70))
 
 S_inv, N_inv, N_perp_inv, rank_J = find_invariant_subspace(
