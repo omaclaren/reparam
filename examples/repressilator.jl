@@ -18,6 +18,11 @@ using ForwardDiff
 # Set random seed for reproducibility
 Random.seed!(42)
 
+# Global index helpers for parameter groups (used throughout analysis)
+const BETA_INDICES = [7, 8, 9]
+const K_INDICES = [10, 11, 12]
+const PARAM_INDICES = collect(1:18)
+
 # ========================================================================
 # CONFIGURATION: Profiling Settings
 # ========================================================================
@@ -500,18 +505,14 @@ if size(N, 2) > 0
             end
 
             # Check if β and K have same coefficients (βK product pattern)
-            # In 18-param space: β₁, β₂, β₃ are at positions 7, 8, 9
-            #                    K₁, K₂, K₃ are at positions 10, 11, 12
-            beta_indices = [7, 8, 9]
-            K_indices = [10, 11, 12]
-
             println("  Pattern check (βK product if coefficients match):")
             all_match = true
-            for i in 1:3
-                beta_coef = v[beta_indices[i]]
-                K_coef = v[K_indices[i]]
+            for (gene_idx, beta_idx) in enumerate(BETA_INDICES)
+                K_idx = K_INDICES[gene_idx]
+                beta_coef = v[beta_idx]
+                K_coef = v[K_idx]
                 match = abs(beta_coef - K_coef) < 0.01
-                println("    β$i: $(round(beta_coef, digits=3)), K$i: $(round(K_coef, digits=3)) → $(match ? "✓ Same" : "✗ Different")")
+                println("    β$(gene_idx): $(round(beta_coef, digits=3)), K$(gene_idx): $(round(K_coef, digits=3)) → $(match ? "✓ Same" : "✗ Different")")
                 all_match = all_match && match
             end
             if all_match
@@ -544,35 +545,106 @@ if size(N, 2) > 0
     println("\nApplying Varimax rotation to N_perp...")
     N_perp_varimax = varimax_rotation(N_perp; n_restarts=200, threshold=1e-2)
 
+    # Helper functions for identifying ratio patterns
+    ratio_score(vec, gene_idx) = begin
+        beta_coef = vec[BETA_INDICES[gene_idx]]
+        K_coef = vec[K_INDICES[gene_idx]]
+        magnitude_penalty = abs(abs(beta_coef) - abs(K_coef))
+        other_energy = sum(abs.(vec)) - abs(beta_coef) - abs(K_coef)
+        sign_penalty = beta_coef * K_coef > 0 ? 1.0 : 0.0
+        base_score = magnitude_penalty + other_energy + sign_penalty
+        # Discourage selecting trivial zero vectors
+        if abs(beta_coef) + abs(K_coef) < 1e-6
+            return Inf
+        end
+        return base_score
+    end
+
+    best_ratio_column(matrix, gene_idx) = begin
+        best_ratio_score = Inf
+        best_j = nothing
+        for j in 1:size(matrix, 2)
+            score = ratio_score(matrix[:, j], gene_idx)
+            if score < best_ratio_score
+                best_ratio_score = score
+                best_j = j
+            end
+        end
+        return best_j, best_ratio_score
+    end
+
     # Look for directions with opposite signs for β and K (ratios)
     println("\nSearching for K/β ratio patterns in N_perp...")
-    beta_indices = [7, 8, 9]
-    K_indices = [10, 11, 12]
-
-    ratio_directions = []
+    ratio_threshold_primary = 0.2
+    ratio_directions = Tuple{Int, Int, Float64, Float64}[]
     for j in 1:size(N_perp_varimax, 2)
         v = N_perp_varimax[:, j]
 
         # Check each potential K/β pair
-        for i in 1:3
-            beta_coef = v[beta_indices[i]]
-            K_coef = v[K_indices[i]]
+        for gene_idx in eachindex(BETA_INDICES)
+            beta_coef = v[BETA_INDICES[gene_idx]]
+            K_coef = v[K_INDICES[gene_idx]]
 
             # Ratio pattern: opposite signs, both non-negligible
-            if abs(beta_coef) > 0.3 && abs(K_coef) > 0.3 && sign(beta_coef) != sign(K_coef)
-                push!(ratio_directions, (j, i, beta_coef, K_coef))
-                println("  Direction $j: β$i=$(round(beta_coef, digits=3)), K$i=$(round(K_coef, digits=3))")
-                println("    → K$i/β$i ratio pattern!")
+            if abs(beta_coef) > ratio_threshold_primary &&
+               abs(K_coef) > ratio_threshold_primary &&
+               sign(beta_coef) != sign(K_coef)
+                push!(ratio_directions, (j, gene_idx, beta_coef, K_coef))
+                println("  Direction $j: β$(gene_idx)=$(round(beta_coef, digits=3)), K$(gene_idx)=$(round(K_coef, digits=3))")
+                println("    → K$(gene_idx)/β$(gene_idx) ratio pattern!")
             end
         end
     end
 
     if isempty(ratio_directions)
-        println("  ⚠ No clear K/β ratio patterns found in N_perp")
-        println("  This needs further investigation...")
+        println("  ⚠ No clear K/β ratio patterns found with threshold $(ratio_threshold_primary). Relaxing threshold...")
+        ratio_threshold_relaxed = 0.1
+        for j in 1:size(N_perp_varimax, 2)
+            v = N_perp_varimax[:, j]
+            for gene_idx in eachindex(BETA_INDICES)
+                beta_coef = v[BETA_INDICES[gene_idx]]
+                K_coef = v[K_INDICES[gene_idx]]
+                if abs(beta_coef) > ratio_threshold_relaxed &&
+                   abs(K_coef) > ratio_threshold_relaxed &&
+                   sign(beta_coef) != sign(K_coef)
+                    push!(ratio_directions, (j, gene_idx, beta_coef, K_coef))
+                    println("  (relaxed) Direction $j: β$(gene_idx)=$(round(beta_coef, digits=3)), K$(gene_idx)=$(round(K_coef, digits=3))")
+                end
+            end
+        end
+    end
+
+    if isempty(ratio_directions)
+        println("  ⚠ Still no obvious ratio patterns — applying heuristic search.")
+        for gene_idx in eachindex(BETA_INDICES)
+            best_tuple = nothing
+            best_ratio_score_local = Inf
+            for j in 1:size(N_perp_varimax, 2)
+                v = N_perp_varimax[:, j]
+                score = ratio_score(v, gene_idx)
+                if score < best_ratio_score_local
+                    best_ratio_score_local = score
+                    best_tuple = (j, gene_idx, v[BETA_INDICES[gene_idx]], v[K_INDICES[gene_idx]])
+                end
+            end
+            if !isnothing(best_tuple)
+                push!(ratio_directions, best_tuple)
+                println("  (heuristic) Gene $(gene_idx) best match at column $(best_tuple[1]) with score $(round(best_ratio_score_local, digits=3))")
+            end
+        end
+    end
+
+    if isempty(ratio_directions)
+        println("  ⚠ Unable to identify K/β ratio patterns in N_perp. Downstream heuristics will attempt recovery.")
     else
         println("\nFound $(length(ratio_directions)) K/β ratio patterns in N_perp ✓")
     end
+
+    ratio_direction_map = Dict{Tuple{Int, Int}, Tuple{Int, Int, Float64, Float64}}()
+    for entry in ratio_directions
+        ratio_direction_map[(entry[1], entry[2])] = entry
+    end
+    ratio_directions = sort(collect(values(ratio_direction_map)), by=x->(x[2], x[1]))
 
     # Measure degree of identifiability
     println("\n" * repeat("=", 70))
@@ -591,19 +663,17 @@ if size(N, 2) > 0
     # Note: N_perp already contains the identifiable directions (columns of V)
     println("\n  Checking SVD basis for K/β ratio patterns:")
     V_r_from_svd = N_perp
-    beta_indices = [7, 8, 9]
-    K_indices = [10, 11, 12]
 
     svd_kb_directions = []
     for i in 1:rank_J
         v = V_r_from_svd[:, i]
         # Check if this direction shows K/β ratio pattern (opposite signs)
-        for j in 1:3
-            beta_coef = v[beta_indices[j]]
-            K_coef = v[K_indices[j]]
+        for gene_idx in eachindex(BETA_INDICES)
+            beta_coef = v[BETA_INDICES[gene_idx]]
+            K_coef = v[K_INDICES[gene_idx]]
             if abs(beta_coef) > 0.3 && abs(K_coef) > 0.3 && sign(beta_coef) != sign(K_coef)
-                push!(svd_kb_directions, (i, j, S[i]))
-                println("    SVD[$i] (σ=$(round(S[i], digits=3))): K$j/β$j ratio (β=$((round(beta_coef, digits=3))), K=$(round(K_coef, digits=3)))")
+                push!(svd_kb_directions, (i, gene_idx, S[i]))
+                println("    SVD[$i] (σ=$(round(S[i], digits=3))): K$(gene_idx)/β$(gene_idx) ratio (β=$(round(beta_coef, digits=3)), K=$(round(K_coef, digits=3)))")
             end
         end
     end
@@ -624,12 +694,16 @@ if size(N, 2) > 0
 
     # For comparison, compute for all N_perp_varimax directions
     all_eff_sigmas = [norm(J_θ_log * N_perp_varimax[:, j]) for j in 1:size(N_perp_varimax, 2)]
-    ratio_indices = [r[1] for r in ratio_directions]
-    ratio_eff_sigmas = all_eff_sigmas[ratio_indices]
+    ratio_indices = unique([r[1] for r in ratio_directions])
 
     println("\n  Effective σ range for all N_perp_varimax: [$(round(minimum(all_eff_sigmas), digits=3)), $(round(maximum(all_eff_sigmas), digits=3))]")
-    println("  Effective σ range for K/β ratios: [$(round(minimum(ratio_eff_sigmas), digits=3)), $(round(maximum(ratio_eff_sigmas), digits=3))]")
-    println("  K/β ratios condition number: $(round(maximum(ratio_eff_sigmas)/minimum(ratio_eff_sigmas), digits=2))")
+    if isempty(ratio_indices)
+        println("  No K/β ratio directions identified; skipping ratio-specific σ range.")
+    else
+        ratio_eff_sigmas = all_eff_sigmas[ratio_indices]
+        println("  Effective σ range for K/β ratios: [$(round(minimum(ratio_eff_sigmas), digits=3)), $(round(maximum(ratio_eff_sigmas), digits=3))]")
+        println("  K/β ratios condition number: $(round(maximum(ratio_eff_sigmas)/minimum(ratio_eff_sigmas), digits=2))")
+    end
 
     # Build full transformation matrices (SVD vs Varimax)
     println("\n" * repeat("=", 70))
@@ -691,14 +765,44 @@ if size(N, 2) > 0
     println(repeat("=", 70))
 
     # Create forward and inverse transformations: ψ = exp(A * log(θ))
-    θ_to_ψ, ψ_to_θ = reparam(A_varimax)
+    θ_to_ψ, ψ_to_θ = reparam(A_varimax_T)
 
     # Transform MLE to ψ space
     ψ_MLE = θ_to_ψ(θ_MLE)
+    ψ_log_MLE = log.(ψ_MLE)
     println("\nMLE in ψ coordinates:")
     for i in 1:min(5, length(ψ_MLE))
         println("  ψ[$i] = $(round(ψ_MLE[i], digits=4))")
     end
+
+    # Derive ψ-space bounds by mapping θ bounds through the log-linear transform
+    ψ_log_lower_bounds = similar(ψ_MLE)
+    ψ_log_upper_bounds = similar(ψ_MLE)
+    for i in 1:n_params
+        row = A_varimax[i, :]
+        lower_val = 0.0
+        upper_val = 0.0
+        for j in 1:n_params
+            coef = row[j]
+            if coef >= 0
+                lower_val += coef * θ_log_lower[j]
+                upper_val += coef * θ_log_upper[j]
+            else
+                lower_val += coef * θ_log_upper[j]
+                upper_val += coef * θ_log_lower[j]
+            end
+        end
+        if lower_val > upper_val
+            lower_val, upper_val = upper_val, lower_val
+        end
+        ψ_log_lower_bounds[i] = lower_val
+        ψ_log_upper_bounds[i] = upper_val
+    end
+    expansion_margin = 2.0
+    ψ_log_lower_bounds .= min.(ψ_log_lower_bounds, ψ_log_MLE .- expansion_margin)
+    ψ_log_upper_bounds .= max.(ψ_log_upper_bounds, ψ_log_MLE .+ expansion_margin)
+    ψ_lower_bounds = exp.(ψ_log_lower_bounds)
+    ψ_upper_bounds = exp.(ψ_log_upper_bounds)
 
     # Create likelihood in ψ space
     function lnlike_ψ(ψ)
@@ -713,23 +817,23 @@ if size(N, 2) > 0
     println("  lnlike_θ(θ_MLE) = $(round(lnlike_θ(θ_MLE), digits=4))")
     println("  Match: $(isapprox(lnlike_ψ(ψ_MLE), lnlike_θ(θ_MLE), atol=1e-6))")
 
-    # Identify which ψ index corresponds to K₁/β₁ ratio
-    # From ratio_directions (computed earlier): find entry where i==1
-    K1_β1_ratio_column = nothing
-    for (j, i, beta_coef, K_coef) in ratio_directions
-        if i == 1  # K₁/β₁ ratio
-            K1_β1_ratio_column = j
-            println("\n Found K₁/β₁ ratio at N_perp column $j")
-            break
-        end
+    # Identify which ψ index corresponds to K₁/β₁ ratio (use heuristic if needed)
+    candidate_columns = [j for (j, gene_idx, _, _) in ratio_directions if gene_idx == 1]
+    best_column, best_ratio_score = best_ratio_column(N_perp_clean, 1)
+    if isnothing(best_column)
+        error("Could not identify a K₁/β₁ ratio direction in N_perp!")
     end
 
-    if isnothing(K1_β1_ratio_column)
-        error("Could not identify K₁/β₁ ratio direction in N_perp!")
+    if isempty(candidate_columns)
+        println("\nNo direct K₁/β₁ hits in ratio_directions; using heuristic best column $(best_column) with score $(round(best_ratio_score, digits=3)).")
+    elseif best_column ∉ candidate_columns
+        println("\nHeuristic refined K₁/β₁ ratio assignment from columns $(candidate_columns) to $best_column (score $(round(best_ratio_score, digits=3))).")
+    else
+        println("\nFound K₁/β₁ ratio at N_perp column $best_column (score $(round(best_ratio_score, digits=3))).")
     end
 
     # The ψ index is the column index in N_perp (since A = [N_perp'; N'])
-    ψ_K1_β1_index = K1_β1_ratio_column
+    ψ_K1_β1_index = best_column
     println("  K₁/β₁ ratio is ψ[$ψ_K1_β1_index] in IIR coordinates")
     println("  ψ[$ψ_K1_β1_index](MLE) = $(round(ψ_MLE[ψ_K1_β1_index], digits=4))")
     println("  True K₁/β₁ = $(round(θ_true[10]/θ_true[7], digits=2))")
@@ -932,44 +1036,39 @@ if size(N, 2) > 0
         println("\nVarimax Direction $j:")
         println("  All coefficients: ", [round(v[i], digits=3) for i in 1:n_params])
 
-        # Check for individual K/β pattern
-        # In 18-param space: β₁, β₂, β₃ are at positions 7, 8, 9
-        #                    K₁, K₂, K₃ are at positions 10, 11, 12
-        beta_indices = [7, 8, 9]
-        K_indices = [10, 11, 12]
-
         # Look for pattern where one β and one K dominate
-        for i in 1:3
-            beta_coef = v[beta_indices[i]]
-            K_coef = v[K_indices[i]]
+        for (gene_idx, beta_idx) in enumerate(BETA_INDICES)
+            K_idx = K_INDICES[gene_idx]
+            beta_coef = v[beta_idx]
+            K_coef = v[K_idx]
 
             if abs(beta_coef) > 0.3 && abs(K_coef) > 0.3
                 # Found dominant β,K pair
                 # Same sign → product, opposite sign → ratio
                 if sign(beta_coef) == sign(K_coef)
-                    println("  → (β$i·K$i) product")
+                    println("  → (β$(gene_idx)·K$(gene_idx)) product")
                 else
-                    ratio_str = beta_coef > 0 ? "β$i/K$i" : "K$i/β$i"
+                    ratio_str = beta_coef > 0 ? "β$(gene_idx)/K$(gene_idx)" : "K$(gene_idx)/β$(gene_idx)"
                     println("  → ($ratio_str) ratio")
                 end
 
                 # Compute the product and ratio values (compare MLE vs true)
-                K_val_MLE = exp(θ_log_MLE[K_indices[i]])
-                beta_val_MLE = exp(θ_log_MLE[beta_indices[i]])
-                K_val_true = exp(θ_log_true[K_indices[i]])
-                beta_val_true = exp(θ_log_true[beta_indices[i]])
+                K_val_MLE = exp(θ_log_MLE[K_idx])
+                beta_val_MLE = exp(θ_log_MLE[beta_idx])
+                K_val_true = exp(θ_log_true[K_idx])
+                beta_val_true = exp(θ_log_true[beta_idx])
 
                 product_val_MLE = beta_val_MLE * K_val_MLE
                 ratio_val_MLE = K_val_MLE / beta_val_MLE
                 product_val_true = beta_val_true * K_val_true
                 ratio_val_true = K_val_true / beta_val_true
 
-                println("    MLE:  K$i = $(round(K_val_MLE, digits=4)), β$i = $(round(beta_val_MLE, digits=4))")
-                println("    True: K$i = $(round(K_val_true, digits=4)), β$i = $(round(beta_val_true, digits=4))")
-                println("    β$i·K$i (MLE) = $(round(product_val_MLE, digits=2)) (in invariant null space)")
-                println("    K$i/β$i (MLE) = $(round(ratio_val_MLE, digits=2)) (in complement, identifiable)")
-                println("    K$i/β$i (true) = $(round(ratio_val_true, digits=2))")
-                println("    Expected K$i/β$i per Eisenberg: $(round([346.32, 130.43, 633.71][i], digits=2))")
+                println("    MLE:  K$(gene_idx) = $(round(K_val_MLE, digits=4)), β$(gene_idx) = $(round(beta_val_MLE, digits=4))")
+                println("    True: K$(gene_idx) = $(round(K_val_true, digits=4)), β$(gene_idx) = $(round(beta_val_true, digits=4))")
+                println("    β$(gene_idx)·K$(gene_idx) (MLE) = $(round(product_val_MLE, digits=2)) (in invariant null space)")
+                println("    K$(gene_idx)/β$(gene_idx) (MLE) = $(round(ratio_val_MLE, digits=2)) (in complement, identifiable)")
+                println("    K$(gene_idx)/β$(gene_idx) (true) = $(round(ratio_val_true, digits=2))")
+                println("    Expected K$(gene_idx)/β$(gene_idx) per Eisenberg: $(round([346.32, 130.43, 633.71][gene_idx], digits=2))")
             end
         end
     end
@@ -978,12 +1077,11 @@ else
     println("This suggests the model doesn't have IIR-compatible invariant structure.")
 end
 
-# Profile K₁ and β₁ in parallel using threading
-println("\nProfiling K₁ and β₁ in parallel (using $(Threads.nthreads()) threads)...")
+# Profile K₁ and β₁ in parallel using threading (for comparison)
+println("\nProfiling K₁ and β₁ individually in θ-space (comparison, using $(Threads.nthreads()) threads)...")
 
 K1_index = 10
 β1_index = 7
-n_params = 18
 n_guesses = CONFIG.n_guesses
 
 # Pre-allocate result containers
@@ -1027,48 +1125,57 @@ end
 ψK1_values, lnlike_K1_values, lower_K1, upper_K1, K1_profile_vals = profile_results[1]
 ψβ1_values, lnlike_β1_values, lower_β1, upper_β1, β1_profile_vals = profile_results[2]
 
-# Profile K₁/β₁ ratio (conditional on CONFIG.do_2d)
+# Profile K₁/β₁ ratio directly in ψ-space (identifiable combination)
+println("\nProfiling identifiable K₁/β₁ ratio directly in ψ-space...")
+nuisance_indices_ratio = setdiff(1:n_params, ψ_K1_β1_index)
+nuisance_guess_ratio = ψ_log_MLE[nuisance_indices_ratio]
+
+nuisance_extras_ratio = generate_initial_guesses(
+    ψ_log_lower_bounds[nuisance_indices_ratio],
+    ψ_log_upper_bounds[nuisance_indices_ratio],
+    n_guesses)
+
+ψ_ratio_log_values, lnlike_ratio_values = profile_target(
+    lnlike_ψ_log, ψ_K1_β1_index,
+    ψ_log_lower_bounds, ψ_log_upper_bounds,
+    nuisance_guess_ratio;
+    grid_steps=[CONFIG.grid_1d],
+    ω_initial_extras=nuisance_extras_ratio,
+    method=:LN_BOBYQA,
+    optmaxtime=CONFIG.timeout)
+
+ratio_log_vals = [ψ[ψ_K1_β1_index] for ψ in ψ_ratio_log_values]
+ratio_values = exp.(ratio_log_vals)
+println("  Profiled ratio range: [$(round(minimum(ratio_values), digits=2)), $(round(maximum(ratio_values), digits=2))]")
+println("  True ratio: $(round(θ_true[K1_index]/θ_true[β1_index], digits=2))")
+
+# Prediction intervals using ψ-space distribution
+lower_ratio, upper_ratio, _ = construct_upper_lower_profile_wise_CIs_for_mean(
+    distrib_fine_ψ_log, ψ_ratio_log_values, lnlike_ratio_values; l_level=95, df=18)
+
+# Optional: retain legacy 2D joint profile for validation if requested
 if CONFIG.do_2d
-    println("\n3. Profiling K₁/β₁ ratio (identifiable)...")
-    # Need to parameterize as: ψ₁ = log(K₁/β₁), with K₁ = exp(ψ₁) * β₁
-    # This requires constrained profiling - implement simplified version
+    println("\n(Optional) Running 2D joint profile of (β₁, K₁) in θ-space for validation...")
+    target_indices_K1β1 = [β1_index, K1_index]
+    nuisance_indices_2d = setdiff(1:n_params, target_indices_K1β1)
+    nuisance_guess_2d = θ_log_MLE[nuisance_indices_2d]
 
-    # For now, profile the ratio by fixing the product β₁*K₁ and varying the ratio
-    # Transformation: [K₁, β₁] → [K₁/β₁, β₁*K₁]
-    # In log space: [log K₁, log β₁] → [log K₁ - log β₁, log K₁ + log β₁]
-
-    println("  Using 2D joint profile of (β₁, K₁) to extract ratio...")
-    target_indices_K1β1 = [β1_index, K1_index]  # [7, 10]
-    nuisance_indices_ratio = setdiff(1:n_params, target_indices_K1β1)
-    nuisance_guess_ratio = θ_log_MLE[nuisance_indices_ratio]
-
-    nuisance_extras_ratio = generate_initial_guesses(
-        θ_log_lower[nuisance_indices_ratio],
-        θ_log_upper[nuisance_indices_ratio],
+    nuisance_extras_2d = generate_initial_guesses(
+        θ_log_lower[nuisance_indices_2d],
+        θ_log_upper[nuisance_indices_2d],
         n_guesses)
 
     ψK1β1_values, lnlike_K1β1_values = profile_target(
         lnlike_θ_log, target_indices_K1β1,
         θ_log_lower, θ_log_upper,
-        nuisance_guess_ratio;
+        nuisance_guess_2d;
         grid_steps=CONFIG.grid_2d,
-        ω_initial_extras=nuisance_extras_ratio,
+        ω_initial_extras=nuisance_extras_2d,
         method=:LN_BOBYQA,
         optmaxtime=CONFIG.timeout)
 
-    # Extract ratio values: log(K₁/β₁) = log(K₁) - log(β₁)
-    ratio_values = [ψ[K1_index] - ψ[β1_index] for ψ in ψK1β1_values]
-    println("  Profiled ratio range: [$(round(exp(minimum(ratio_values)), digits=2)), $(round(exp(maximum(ratio_values)), digits=2))]")
-    println("  True ratio: $(round(θ_true[K1_index]/θ_true[β1_index], digits=2))")
-
-    # Prediction intervals from joint (K₁,β₁) profile
-    lower_ratio, upper_ratio, _ = construct_upper_lower_profile_wise_CIs_for_mean(
-        distrib_fine_θ_log, ψK1β1_values, lnlike_K1β1_values; l_level=95, df=18)
-else
-    println("\n3. Skipping 2D profile (CONFIG.do_2d = false)")
-    # Create dummy variables for plotting section
-    lower_ratio = lower_K1  # Use K1 as placeholder
-    upper_ratio = upper_K1
+    ratio_values_joint = [exp(ψ[K1_index] - ψ[β1_index]) for ψ in ψK1β1_values]
+    println("  Joint profile ratio range: [$(round(minimum(ratio_values_joint), digits=2)), $(round(maximum(ratio_values_joint), digits=2))]")
 end
 
 println("\nPrediction interval widths (mean across time/species):")
