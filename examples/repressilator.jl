@@ -921,62 +921,54 @@ else
     println("This suggests the model doesn't have IIR-compatible invariant structure.")
 end
 
-# Profile K₁ (parameter index 10)
-println("\n1. Profiling K₁ (parameter 10, non-identifiable)...")
+# Profile K₁ and β₁ in parallel using threading
+println("\nProfiling K₁ and β₁ in parallel (using $(Threads.nthreads()) threads)...")
+
 K1_index = 10
-n_params = 18
-nuisance_indices_K1 = setdiff(1:n_params, K1_index)
-nuisance_guess_K1 = θ_log_MLE[nuisance_indices_K1]
-
-# Generate multiple initial guesses
-n_guesses = CONFIG.n_guesses
-nuisance_extras_K1 = generate_initial_guesses(
-    θ_log_lower[nuisance_indices_K1],
-    θ_log_upper[nuisance_indices_K1],
-    n_guesses)
-
-ψK1_values, lnlike_K1_values = profile_target(
-    lnlike_θ_log, K1_index,
-    θ_log_lower, θ_log_upper,
-    nuisance_guess_K1;
-    grid_steps=[CONFIG.grid_1d],
-    ω_initial_extras=nuisance_extras_K1,
-    method=:LN_BOBYQA,
-    optmaxtime=CONFIG.timeout)
-
-K1_profile_vals = [ψ[K1_index] for ψ in ψK1_values]
-println("  Profiled K₁ range: [$(round(exp(minimum(K1_profile_vals)), digits=2)), $(round(exp(maximum(K1_profile_vals)), digits=2))]")
-
-# Prediction intervals from K₁ profile
-lower_K1, upper_K1, _ = construct_upper_lower_profile_wise_CIs_for_mean(
-    distrib_fine_θ_log, ψK1_values, lnlike_K1_values; l_level=95, df=18)
-
-# Profile β₁ (parameter index 7)
-println("\n2. Profiling β₁ (parameter 7, non-identifiable)...")
 β1_index = 7
-nuisance_indices_β1 = setdiff(1:n_params, β1_index)
-nuisance_guess_β1 = θ_log_MLE[nuisance_indices_β1]
+n_params = 18
+n_guesses = CONFIG.n_guesses
 
-nuisance_extras_β1 = generate_initial_guesses(
-    θ_log_lower[nuisance_indices_β1],
-    θ_log_upper[nuisance_indices_β1],
-    n_guesses)
+# Pre-allocate result containers
+profile_results = Vector{Any}(undef, 2)
 
-ψβ1_values, lnlike_β1_values = profile_target(
-    lnlike_θ_log, β1_index,
-    θ_log_lower, θ_log_upper,
-    nuisance_guess_β1;
-    grid_steps=[CONFIG.grid_1d],
-    ω_initial_extras=nuisance_extras_β1,
-    method=:LN_BOBYQA,
-    optmaxtime=CONFIG.timeout)
+Threads.@threads for i in 1:2
+    param_index = i == 1 ? K1_index : β1_index
+    param_name = i == 1 ? "K₁" : "β₁"
 
-β1_profile_vals = [ψ[β1_index] for ψ in ψβ1_values]
-println("  Profiled β₁ range: [$(round(exp(minimum(β1_profile_vals)), digits=4)), $(round(exp(maximum(β1_profile_vals)), digits=4))]")
+    println("\n$(i). Profiling $param_name (parameter $param_index, non-identifiable)...")
 
-# Prediction intervals from β₁ profile
-lower_β1, upper_β1, _ = construct_upper_lower_profile_wise_CIs_for_mean(
-    distrib_fine_θ_log, ψβ1_values, lnlike_β1_values; l_level=95, df=18)
+    nuisance_indices = setdiff(1:n_params, param_index)
+    nuisance_guess = θ_log_MLE[nuisance_indices]
+
+    nuisance_extras = generate_initial_guesses(
+        θ_log_lower[nuisance_indices],
+        θ_log_upper[nuisance_indices],
+        n_guesses)
+
+    ψ_values, lnlike_values = profile_target(
+        lnlike_θ_log, param_index,
+        θ_log_lower, θ_log_upper,
+        nuisance_guess;
+        grid_steps=[CONFIG.grid_1d],
+        ω_initial_extras=nuisance_extras,
+        method=:LN_BOBYQA,
+        optmaxtime=CONFIG.timeout)
+
+    profile_vals = [ψ[param_index] for ψ in ψ_values]
+    println("  Profiled $param_name range: [$(round(exp(minimum(profile_vals)), digits=2)), $(round(exp(maximum(profile_vals)), digits=2))]")
+
+    # Compute prediction intervals
+    lower, upper, _ = construct_upper_lower_profile_wise_CIs_for_mean(
+        distrib_fine_θ_log, ψ_values, lnlike_values; l_level=95, df=18)
+
+    # Store results
+    profile_results[i] = (ψ_values, lnlike_values, lower, upper, profile_vals)
+end
+
+# Extract results from parallel computation
+ψK1_values, lnlike_K1_values, lower_K1, upper_K1, K1_profile_vals = profile_results[1]
+ψβ1_values, lnlike_β1_values, lower_β1, upper_β1, β1_profile_vals = profile_results[2]
 
 # Profile K₁/β₁ ratio (conditional on CONFIG.do_2d)
 if CONFIG.do_2d
