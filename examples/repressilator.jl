@@ -22,7 +22,7 @@ Random.seed!(42)
 # CONFIGURATION: Profiling Settings
 # ========================================================================
 # Three modes: "test" (~1 min), "paper" (~4 min), "full" (~60 min)
-const PROFILE_MODE = "paper"  # Change to "test" or "full" as needed
+const PROFILE_MODE = "test"  # Change to "test" or "full" as needed
 
 # Mode configurations
 const PROFILE_CONFIGS = Dict(
