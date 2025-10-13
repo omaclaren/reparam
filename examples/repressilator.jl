@@ -22,7 +22,7 @@ Random.seed!(42)
 # CONFIGURATION: Profiling Settings
 # ========================================================================
 # Three modes: "test" (~1 min), "paper" (~4 min), "full" (~60 min)
-const PROFILE_MODE = "test"  # Change to "test" or "full" as needed
+const PROFILE_MODE = "paper"  # Change to "test" or "full" as needed
 
 # Mode configurations
 const PROFILE_CONFIGS = Dict(
@@ -1051,7 +1051,7 @@ for (i, (name, subscript)) in enumerate(zip(species_names, species_subscripts))
     plot_profile_wise_CI_comparison(
         t_pred, mle_mat[i,:],
         ci_intervals,
-        "repressilator_$(subscript)", "$name concentration", "Time", "t";
+        "repressilator_$(subscript)", "$name", "t", "t";
         data_indep=t, data_dep=data_mat[:, i],
         title="Repressilator $name: Individual vs Ratio Prediction Intervals",
         save_dir=joinpath(@__DIR__, "..", "figures") * "/"
