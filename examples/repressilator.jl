@@ -21,7 +21,7 @@ Random.seed!(42)
 # CONFIGURATION: Profiling Settings
 # ========================================================================
 # Three modes: "test" (~1 min), "paper" (~4 min), "full" (~60 min)
-const PROFILE_MODE = "test"  # Change to "paper" or "full" as needed
+const PROFILE_MODE = "paper"  # Change to "paper" or "full" as needed
 
 # Mode configurations
 const PROFILE_CONFIGS = Dict(
@@ -156,7 +156,7 @@ t = LinRange(0, T_end, NT)
 X0 = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
 # Observation noise
-σ = 0.01  # Small noise
+σ = 0.5  # Moderate noise for visible prediction intervals
 
 # --------------------------------------------------------
 # True parameter values - EISENBERG & HAYASHI EXACT
