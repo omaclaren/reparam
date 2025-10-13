@@ -299,19 +299,32 @@ sol_matrix_data = solve_repressilator(t, θ_true, X0)
 data_mRNA = extract_mrna(sol_matrix_data)  # 3×NT
 data_obs = vec(data_mRNA')  # Flatten (time-major order)
 
-# Log-likelihood function
+# Log-likelihood function with failure tracking
+mutable struct LikelihoodStats
+    n_calls::Int
+    n_failures::Int
+end
+const lnlike_stats = LikelihoodStats(0, 0)
+
 function lnlike_θ(θ)
+    lnlike_stats.n_calls += 1
+
     if any(θ .<= 0)
+        lnlike_stats.n_failures += 1
         return -Inf
     end
     try
         pred = predict_mRNA(θ)
         if length(pred) != length(data_obs)
+            lnlike_stats.n_failures += 1
             return -Inf  # Solver failed
         end
         # Simple Gaussian log-likelihood
         return -0.5 * sum(((data_obs .- pred) ./ σ).^2)
-    catch
+    catch e
+        lnlike_stats.n_failures += 1
+        # Uncomment for debugging:
+        # @warn "Solver error" exception=e
         return -Inf  # Any solver failure
     end
 end
@@ -346,6 +359,18 @@ nuisance_guesses_mle = generate_initial_guesses(θ_log_lower, θ_log_upper, n_gu
     optmaxtime=30.0)
 
 θ_MLE = exp.(θ_log_MLE)
+
+# Report likelihood evaluation statistics
+println("\nLikelihood evaluation statistics:")
+println("  Total evaluations: $(lnlike_stats.n_calls)")
+println("  Failures (returned -Inf): $(lnlike_stats.n_failures)")
+println("  Success rate: $(round((1 - lnlike_stats.n_failures/lnlike_stats.n_calls)*100, digits=1))%")
+if lnlike_stats.n_failures / lnlike_stats.n_calls > 0.5
+    @warn "High failure rate (>50%) during optimization. Consider:\n" *
+          "  - Widening bounds\n" *
+          "  - Using more robust ODE solver\n" *
+          "  - Checking for numerical stability issues"
+end
 
 # Verify MLE is better than true parameters
 lnlike_true = lnlike_θ(θ_true)
