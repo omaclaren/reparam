@@ -382,19 +382,17 @@ if size(N_inv, 2) > 0
     println("DEGREE OF IDENTIFIABILITY Analysis")
     println(repeat("=", 70))
 
-    # Get SVD components (reuse Jacobian already computed)
-    U, S_full, Vt = svd(J_θ_log)
-
+    # Reuse SVD already computed earlier (line 257)
     println("\nOriginal SVD basis (N_perp):")
     println("  All singular values (identifiable directions):")
     for i in 1:rank_J
-        println("    σ[$i] = $(round(S_full[i], digits=3))")
+        println("    σ[$i] = $(round(S_θ[i], digits=3))")
     end
-    println("  Condition number: $(round(S_full[1]/S_full[rank_J], digits=2))")
+    println("  Condition number: $(round(S_θ[1]/S_θ[rank_J], digits=2))")
 
     # Check which SVD directions have K/β structure
     println("\n  Checking SVD basis for K/β ratio patterns:")
-    V_r_from_svd = Vt'[:, 1:rank_J]
+    V_r_from_svd = Vt_θ'[:, 1:rank_J]
     beta_indices = [7, 8, 9]
     K_indices = [10, 11, 12]
 
