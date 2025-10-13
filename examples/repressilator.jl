@@ -387,7 +387,7 @@ t_mle_start = time()
     θ_log_initial;
     grid_steps=grid_steps_mle,
     ω_initial_extras=nuisance_guesses_mle,
-    method=:LN_BOBYQA,
+    method=:LD_LBFGS,
     optmaxtime=30.0)
 t_mle_elapsed = time() - t_mle_start
 
