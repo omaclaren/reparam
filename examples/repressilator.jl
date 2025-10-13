@@ -964,8 +964,9 @@ plot!(p, t_pred, lower_ratio_mat[1,:], fillrange=upper_ratio_mat[1,:],
 # Data points
 scatter!(p, t, vec(data_mRNA[1,:]), label="Data", color=:black, ms=4)
 
-savefig(p, "../figures/repressilator_prediction_comparison.png")
-println("\nSaved prediction comparison to: ../figures/repressilator_prediction_comparison.png")
+fig_path = joinpath(@__DIR__, "..", "figures", "repressilator_prediction_comparison.png")
+savefig(p, fig_path)
+println("\nSaved prediction comparison to: $fig_path")
 
 println("\n" * repeat("=", 70))
 println("Analysis Complete")
