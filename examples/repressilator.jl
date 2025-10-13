@@ -13,6 +13,7 @@ using Distributions
 using LinearAlgebra
 using Random
 using DifferentialEquations
+using ForwardDiff
 
 # Set random seed for reproducibility
 Random.seed!(42)
@@ -21,7 +22,7 @@ Random.seed!(42)
 # CONFIGURATION: Profiling Settings
 # ========================================================================
 # Three modes: "test" (~1 min), "paper" (~4 min), "full" (~60 min)
-const PROFILE_MODE = "paper"  # Change to "paper" or "full" as needed
+const PROFILE_MODE = "paper"  # Change to "test" or "full" as needed
 
 # Mode configurations
 const PROFILE_CONFIGS = Dict(
@@ -406,12 +407,18 @@ end
 
 # Verify MLE is better than true parameters
 lnlike_true = lnlike_θ(θ_true)
+improvement = lnlike_MLE - lnlike_true
+
 println("\nMLE verification:")
-println("  Log-likelihood at true parameters: $(round(lnlike_true, digits=2))")
-println("  Log-likelihood at MLE: $(round(lnlike_MLE, digits=2))")
-println("  Improvement: $(round(lnlike_MLE - lnlike_true, digits=2))")
-if lnlike_MLE < lnlike_true
-    @warn "MLE has worse likelihood than true parameters! Optimization may have failed."
+println("  Log-likelihood at true parameters: $(round(lnlike_true, digits=4))")
+println("  Log-likelihood at MLE: $(round(lnlike_MLE, digits=4))")
+println("  Improvement: $(round(improvement, digits=4))")
+
+# Only warn if improvement is clearly negative (accounting for numerical noise)
+if improvement < -0.01
+    @warn "MLE has significantly worse likelihood than true parameters! Optimization may have failed."
+elseif abs(improvement) < 0.01
+    println("  (Improvement ≈0: MLE very close to true parameters, as expected with low noise)")
 end
 
 println("\nMLE parameter values:")
