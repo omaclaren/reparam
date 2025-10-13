@@ -1042,25 +1042,29 @@ lower_ratio_mat = reshape_pred(lower_ratio)
 upper_ratio_mat = reshape_pred(upper_ratio)
 mle_mat = reshape_pred(pred_mean_MLE)
 
-# Plot m₁ predictions for comparison using library function
-ci_intervals = [
-    (lower_K1_mat[1,:], upper_K1_mat[1,:], "K₁ individual", :red),
-    (lower_β1_mat[1,:], upper_β1_mat[1,:], "β₁ individual", :orange),
-    (lower_ratio_mat[1,:], upper_ratio_mat[1,:], "K₁/β₁ ratio (joint)", :blue)
-]
-
-# Extract actual noisy data for m₁ (data is flattened in time-major order)
+# Extract actual noisy data (data is flattened in time-major order)
 data_mat = reshape(data, 3, NT)'  # NT×3
-data_m1 = data_mat[:, 1]  # m₁ values at measurement times
 
-plot_profile_wise_CI_comparison(
-    t_pred, mle_mat[1,:],
-    ci_intervals,
-    "repressilator", "m₁ concentration", "Time", "t";
-    data_indep=t, data_dep=data_m1,
-    title="Repressilator: Individual vs Ratio Prediction Intervals",
-    save_dir=joinpath(@__DIR__, "..", "figures") * "/"
-)
+# Plot predictions for all three mRNA species
+species_names = ["m₁", "m₂", "m₃"]
+species_subscripts = ["1", "2", "3"]
+
+for (i, (name, subscript)) in enumerate(zip(species_names, species_subscripts))
+    ci_intervals = [
+        (lower_K1_mat[i,:], upper_K1_mat[i,:], "K₁ individual", :red),
+        (lower_β1_mat[i,:], upper_β1_mat[i,:], "β₁ individual", :orange),
+        (lower_ratio_mat[i,:], upper_ratio_mat[i,:], "K₁/β₁ ratio (joint)", :blue)
+    ]
+
+    plot_profile_wise_CI_comparison(
+        t_pred, mle_mat[i,:],
+        ci_intervals,
+        "repressilator_$(subscript)", "$name concentration", "Time", "t";
+        data_indep=t, data_dep=data_mat[:, i],
+        title="Repressilator $name: Individual vs Ratio Prediction Intervals",
+        save_dir=joinpath(@__DIR__, "..", "figures") * "/"
+    )
+end
 
 println("\n" * repeat("=", 70))
 println("Analysis Complete")
