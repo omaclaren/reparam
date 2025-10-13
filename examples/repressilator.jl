@@ -249,21 +249,6 @@ println(repeat("=", 70))
 θ_log_true = log.(θ_true)
 n_params = 18
 
-# Compute Jacobian in log-space
-J_θ_log = compute_ϕ_Jacobian(ϕ_log, θ_log_true)
-println("\nJacobian dimensions (in log-space): ", size(J_θ_log))
-
-# SVD analysis
-U_θ, S_θ, Vt_θ = svd(J_θ_log)
-println("\nSingular values of Jacobian (in log-space):")
-for (i, s) in enumerate(S_θ)
-    if i <= 10 || i > length(S_θ) - 3
-        println("  σ[$i] = ", round(s, sigdigits=6))
-    elseif i == 11
-        println("  ...")
-    end
-end
-
 println("\n" * repeat("=", 70))
 println("Applying IIR with finite-difference invariance test...")
 println(repeat("=", 70))
@@ -275,6 +260,15 @@ S_inv, N_inv, N_perp_inv, rank_J = find_invariant_subspace(
     fd_n_probes=5,
     atolM=1e-6  # Relaxed tolerance for approximate invariance
 )
+
+println("\nSingular values of Jacobian (in log-space):")
+for (i, s) in enumerate(S_inv)
+    if i <= 10 || i > length(S_inv) - 3
+        println("  σ[$i] = ", round(s, sigdigits=6))
+    elseif i == 11
+        println("  ...")
+    end
+end
 
 println("\nInvariant Subspace Analysis:")
 println("  Jacobian rank: $rank_J / $n_params")
@@ -382,17 +376,18 @@ if size(N_inv, 2) > 0
     println("DEGREE OF IDENTIFIABILITY Analysis")
     println(repeat("=", 70))
 
-    # Reuse SVD already computed earlier (line 257)
+    # Use singular values from find_invariant_subspace
     println("\nOriginal SVD basis (N_perp):")
     println("  All singular values (identifiable directions):")
     for i in 1:rank_J
-        println("    σ[$i] = $(round(S_θ[i], digits=3))")
+        println("    σ[$i] = $(round(S_inv[i], digits=3))")
     end
-    println("  Condition number: $(round(S_θ[1]/S_θ[rank_J], digits=2))")
+    println("  Condition number: $(round(S_inv[1]/S_inv[rank_J], digits=2))")
 
     # Check which SVD directions have K/β structure
+    # Note: N_perp_inv already contains the identifiable directions (columns of V)
     println("\n  Checking SVD basis for K/β ratio patterns:")
-    V_r_from_svd = Vt_θ'[:, 1:rank_J]
+    V_r_from_svd = N_perp_inv
     beta_indices = [7, 8, 9]
     K_indices = [10, 11, 12]
 
