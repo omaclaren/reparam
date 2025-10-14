@@ -26,14 +26,14 @@ const PARAM_INDICES = collect(1:18)
 # ========================================================================
 # CONFIGURATION: Profiling Settings
 # ========================================================================
-# Three modes: "test" (~1 min), "paper" (~4 min), "full" (~60 min)
+# Three modes: "test" (~2 min), "paper" (~10 min), "full" (~60 min)
 const PROFILE_MODE = "paper"  # Options: "test", "paper", "full"
 
 # Mode configurations
 const PROFILE_CONFIGS = Dict(
-    "test"  => (grid_1d=3, grid_2d=[3,3], timeout=10.0, n_guesses=1, do_2d=false),
-    "paper" => (grid_1d=7, grid_2d=[5,5], timeout=30.0, n_guesses=3, do_2d=false),
-    "full"  => (grid_1d=10, grid_2d=[7,7], timeout=60.0, n_guesses=3, do_2d=true)
+    "test"  => (grid_1d=5, grid_2d=[3,3], timeout=10.0, n_guesses=1, do_2d=false),
+    "paper" => (grid_1d=15, grid_2d=[7,7], timeout=30.0, n_guesses=3, do_2d=false),
+    "full"  => (grid_1d=25, grid_2d=[10,10], timeout=60.0, n_guesses=3, do_2d=true)
 )
 
 # Parallelization note:
