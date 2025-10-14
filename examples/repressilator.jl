@@ -227,12 +227,18 @@ println("  K₁/β₁ = $(K₁_true/β₁_true)")
 println("  K₂/β₂ = $(K₂_true/β₂_true)")
 println("  K₃/β₃ = $(K₃_true/β₃_true)")
 
+function predict_mRNA(θ, t_grid=t)
+    sol_matrix = solve_repressilator(t_grid, θ, X0)
+    mRNA = extract_mrna(sol_matrix)  # 3×NT matrix
+    return vec(mRNA')  # Flatten to vector (time-major order)
+end
+
 # --------------------------------------------------------
 # Generate synthetic data
 # --------------------------------------------------------
 
 ϕ_func = create_ϕ_mapping(t, X0)
-y_true = ϕ_func(θ_true)
+y_true = predict_mRNA(θ_true, t)
 N_obs = length(y_true)
 data = y_true + σ * randn(N_obs)
 
@@ -262,15 +268,10 @@ t_pred = LinRange(0, T_end, 101)  # Fine grid for smooth prediction bands
 
 # Define prediction distribution: mRNA trajectories m₁, m₂, m₃
 # Use data grid (t) for likelihood, prediction grid (t_pred) for visualization
-function predict_mRNA(θ, t_grid=t)
-    sol_matrix = solve_repressilator(t_grid, θ, X0)
-    mRNA = extract_mrna(sol_matrix)  # 3×NT matrix
-    return vec(mRNA')  # Flatten to vector (time-major order)
-end
 
 # Distribution for predictions (mRNA only, not proteins)
-# Use fine grid for smooth prediction bands
-distrib_fine_θ = θ -> MvLogNormal(log.(abs.(predict_mRNA(θ, t_pred)) .+ 1e-10), σ_pred^2*I(3*length(t_pred)))
+# Use fine grid for smooth prediction bands; additive Gaussian noise model
+distrib_fine_θ = θ -> MvNormal(predict_mRNA(θ, t_pred), σ_pred^2 * I(3*length(t_pred)))
 
 # Log-space wrapper for profiling (profiles are in log-space)
 distrib_fine_θ_log = θ_log -> distrib_fine_θ(exp.(θ_log))
@@ -435,8 +436,8 @@ for (i, (name, val)) in enumerate(zip(param_names, θ_MLE))
     println("  $name = $(round(val, sigdigits=4)) (true: $(round(θ_true[i], sigdigits=4)), error: $(round(rel_error, digits=1))%)")
 end
 
-# Compute MLE predictions for plotting (on fine grid)
-pred_mean_MLE = predict_mRNA(θ_MLE, t_pred)
+# Compute MLE predictions for plotting (on fine grid) using distribution mean
+pred_mean_MLE = mean(distrib_fine_θ(θ_MLE))
 
 # --------------------------------------------------------
 # Apply IIR at MLE (18 parameters)
@@ -1127,7 +1128,7 @@ Threads.@threads for i in 1:2
 
     # Compute prediction intervals
     lower, upper, _ = construct_upper_lower_profile_wise_CIs_for_mean(
-        distrib_fine_θ_log, ψ_values, lnlike_values; l_level=95, df=18)
+        distrib_fine_θ_log, ψ_values, lnlike_values; l_level=95, df=rank_J)
 
     # Store results
     profile_results[i] = (ψ_values, lnlike_values, lower, upper, profile_vals)
@@ -1211,7 +1212,7 @@ plot_1D_profile("repressilator",
 
 # Prediction intervals using ψ-space distribution
 lower_ratio, upper_ratio, _ = construct_upper_lower_profile_wise_CIs_for_mean(
-    distrib_fine_ψ_log, ψ_ratio_log_values, lnlike_ratio_values; l_level=95, df=18)
+    distrib_fine_ψ_log, ψ_ratio_log_values, lnlike_ratio_values; l_level=95, df=rank_J)
 
 # Optional: retain legacy 2D joint profile for validation if requested
 if CONFIG.do_2d
