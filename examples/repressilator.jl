@@ -828,14 +828,32 @@ if size(N, 2) > 0
     println("  ψ[$ψ_K1_β1_index](MLE) = $(round(ψ_MLE[ψ_K1_β1_index], digits=6))")
     println("  True β₁/K₁ = $(round(θ_true[7]/θ_true[10], digits=6))  (inverse K₁/β₁ = $(round(θ_true[10]/θ_true[7], digits=2)))")
 
-    # Tighten profiling bounds around β₁/K₁ by focusing on a small multiplicative band about the MLE
+    # Set biologically-informed bounds for β₁/K₁ ratio based on component bounds
+    # If K₁ ∈ [20, 100] and β₁ ∈ [0.05, 0.3], then:
+    # - β₁/K₁ ∈ [0.05/100, 0.3/20] = [0.0005, 0.015]
+    # - K₁/β₁ ∈ [20/0.3, 100/0.05] = [66.7, 2000]
     β1_index_local = 7
     K1_index_local = 10
-    ratio_beta_over_K_mle = exp(θ_log_MLE[β1_index_local] - θ_log_MLE[K1_index_local])
-    log_center = log(ratio_beta_over_K_mle)
-    log_halfwidth = log(5.0)  # allow 5× variation in each direction
-    ψ_log_lower_bounds[ψ_K1_β1_index] = log_center - log_halfwidth
-    ψ_log_upper_bounds[ψ_K1_β1_index] = log_center + log_halfwidth
+
+    # Determine if this is β/K or K/β based on the transformation
+    v = N_perp_clean[:, ψ_K1_β1_index]
+    beta_coef = v[β1_index_local]
+    K_coef = v[K1_index_local]
+
+    if beta_coef > 0 && K_coef < 0
+        # This is β₁/K₁ (β positive, K negative in log space)
+        ratio_min = θ_lower[β1_index_local] / θ_upper[K1_index_local]
+        ratio_max = θ_upper[β1_index_local] / θ_lower[K1_index_local]
+        println("  Identified as β₁/K₁ ratio: bounds [$(round(ratio_min, digits=6)), $(round(ratio_max, digits=4))]")
+    else
+        # This is K₁/β₁ (K positive, β negative in log space)
+        ratio_min = θ_lower[K1_index_local] / θ_upper[β1_index_local]
+        ratio_max = θ_upper[K1_index_local] / θ_lower[β1_index_local]
+        println("  Identified as K₁/β₁ ratio: bounds [$(round(ratio_min, digits=1)), $(round(ratio_max, digits=1))]")
+    end
+
+    ψ_log_lower_bounds[ψ_K1_β1_index] = log(ratio_min)
+    ψ_log_upper_bounds[ψ_K1_β1_index] = log(ratio_max)
 
     # Create distribution function in ψ space for prediction intervals
     distrib_fine_ψ(ψ) = distrib_fine_θ(ψ_to_θ(ψ))
