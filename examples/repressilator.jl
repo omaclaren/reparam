@@ -168,38 +168,38 @@ X0 = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 σ = 1.0  # Moderate noise for visible prediction intervals
 
 # --------------------------------------------------------
-# True parameter values - EISENBERG & HAYASHI EXACT
+# True parameter values - within biological bounds
 # --------------------------------------------------------
 
-# Basal transcription rates
-α₀₁_true = 5e-4
-α₀₂_true = 1e-4
-α₀₃_true = 9e-4
+# Basal transcription rates: [0.01, 0.1] nM/sec
+α₀₁_true = 0.02
+α₀₂_true = 0.03
+α₀₃_true = 0.025
 
-# Regulated transcription rates
-α₁_true = 0.5
-α₂_true = 0.7
-α₃_true = 0.8
+# Regulated transcription rates: [0.8, 2.0] nM/sec
+α₁_true = 1.0
+α₂_true = 1.2
+α₃_true = 1.5
 
-# Translation rates
-β₁_true = 0.1155
-β₂_true = 0.23
-β₃_true = 0.0789
+# Translation rates: [0.01, 0.03] sec⁻¹
+β₁_true = 0.02
+β₂_true = 0.025
+β₃_true = 0.015
 
-# Inhibition constants
-K₁_true = 40.0
-K₂_true = 30.0
-K₃_true = 50.0
+# Inhibition constants: [40, 100] nM
+K₁_true = 60.0
+K₂_true = 50.0
+K₃_true = 70.0
 
-# mRNA degradation rates
-k_degm₁_true = 0.005776
-k_degm₂_true = 0.00987
-k_degm₃_true = 0.00345
+# mRNA degradation rates: [0.004, 0.008] sec⁻¹
+k_degm₁_true = 0.006
+k_degm₂_true = 0.0055
+k_degm₃_true = 0.0065
 
-# Protein degradation rates
-k_degp₁_true = 0.001155
-k_degp₂_true = 0.00059
-k_degp₃_true = 0.004982
+# Protein degradation rates: [0.001, 0.0015] sec⁻¹
+k_degp₁_true = 0.0012
+k_degp₂_true = 0.0011
+k_degp₃_true = 0.0013
 
 # Hill coefficient (fixed at 2.0 in model)
 n_true = 2.0
@@ -1028,8 +1028,22 @@ if size(N, 2) > 0
         svd_idx, svd_mono, svd_sigma = svd_results[rank]
         var_idx, var_mono, var_sigma, var_type = varimax_results[rank]
 
-        # Truncate SVD mono if too long
-        svd_display = length(svd_mono) > 25 ? svd_mono[1:22]*"..." : svd_mono
+        # Truncate SVD mono if too long (use firstindex/nextind for Unicode safety)
+        svd_display = if length(svd_mono) > 25
+            # Safely truncate to ~22 characters
+            truncated = ""
+            count = 0
+            for c in svd_mono
+                count += 1
+                if count > 22
+                    break
+                end
+                truncated *= c
+            end
+            truncated * "..."
+        else
+            svd_mono
+        end
 
         println("$(lpad(rank,2)) | $(rpad(svd_display,25)) ($(rpad(round(svd_sigma,digits=1),6))) | $(rpad(var_mono,20)) ($(rpad(round(var_sigma,digits=1),6))) | $var_type")
     end
