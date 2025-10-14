@@ -153,16 +153,19 @@ println("18 Free Parameters (n fixed at 2)")
 println("Expected identifiable: K₁/β₁, K₂/β₂, K₃/β₃ ratios")
 println(repeat("=", 70))
 
-# Time grid - dense sampling as in Eisenberg
+# Time grid - observations at sparse time points
 T_end = 100.0
-NT = 21
-t = LinRange(0, T_end, NT)
+NT = 7
+t_obs = LinRange(0, T_end, NT)
+
+# Fine grid for predictions and IIR analysis
+t_pred = LinRange(0, T_end, 201)
 
 # Initial conditions from Eisenberg paper
 X0 = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
 # Observation noise
-σ = 0.5  # Moderate noise for visible prediction intervals
+σ = 1.0  # Moderate noise for visible prediction intervals
 
 # --------------------------------------------------------
 # True parameter values - EISENBERG & HAYASHI EXACT
@@ -227,7 +230,7 @@ println("  K₁/β₁ = $(K₁_true/β₁_true)")
 println("  K₂/β₂ = $(K₂_true/β₂_true)")
 println("  K₃/β₃ = $(K₃_true/β₃_true)")
 
-function predict_mRNA(θ, t_grid=t)
+function predict_mRNA(θ, t_grid)
     sol_matrix = solve_repressilator(t_grid, θ, X0)
     mRNA = extract_mrna(sol_matrix)  # 3×NT matrix
     return vec(mRNA')  # Flatten to vector (time-major order)
@@ -237,8 +240,8 @@ end
 # Generate synthetic data
 # --------------------------------------------------------
 
-ϕ_func = create_ϕ_mapping(t, X0)
-y_true = predict_mRNA(θ_true, t)
+ϕ_func = create_ϕ_mapping(t_pred, X0)  # Use fine grid for IIR analysis
+y_true = predict_mRNA(θ_true, t_obs)
 N_obs = length(y_true)
 data = y_true + σ * randn(N_obs)
 
@@ -258,10 +261,6 @@ println(repeat("=", 70))
 # Setup: Compare prediction uncertainty for:
 # Option B: Individual parameters K₁, β₁ vs ratio K₁/β₁
 # --------------------------------------------------------
-
-# Use existing time grid from data (T_end=100, NT=21)
-# For predictions, we want finer resolution
-t_pred = LinRange(0, T_end, 101)  # Fine grid for smooth prediction bands
 
 # Observation noise model (same as fitting)
 σ_pred = σ
@@ -296,41 +295,11 @@ println(repeat("-", 70))
 # 2. β₁ individually (non-identifiable, βK product in null space)
 # 3. K₁/β₁ ratio (identifiable, in complement space)
 
-# Define log-likelihood for profiling
-# We need synthetic "data" first - generate from true parameters
-sol_matrix_data = solve_repressilator(t, θ_true, X0)
-data_mRNA = extract_mrna(sol_matrix_data)  # 3×NT
-data_obs = vec(data_mRNA')  # Flatten (time-major order)
+# Define distribution for observations (use observation time grid)
+distrib_θ = θ -> MvNormal(predict_mRNA(θ, t_obs), σ^2 * I(3*NT))
 
-# Log-likelihood function with failure tracking
-mutable struct LikelihoodStats
-    n_calls::Int
-    n_failures::Int
-end
-const lnlike_stats = LikelihoodStats(0, 0)
-
-function lnlike_θ(θ)
-    lnlike_stats.n_calls += 1
-
-    if any(θ .<= 0)
-        lnlike_stats.n_failures += 1
-        return -Inf
-    end
-    try
-        pred = predict_mRNA(θ)
-        if length(pred) != length(data_obs)
-            lnlike_stats.n_failures += 1
-            return -Inf  # Solver failed
-        end
-        # Simple Gaussian log-likelihood
-        return -0.5 * sum(((data_obs .- pred) ./ σ).^2)
-    catch e
-        lnlike_stats.n_failures += 1
-        # Uncomment for debugging:
-        # @warn "Solver error" exception=e
-        return -Inf  # Any solver failure
-    end
-end
+# Construct likelihood using standard pattern
+lnlike_θ = construct_lnlike_xy(distrib_θ, data; dist_type=:multi)
 
 # Find MLE by optimization
 println("\n" * repeat("=", 70))
@@ -401,18 +370,6 @@ println("Optimization complete!")
 println("  Time: $(round(t_mle_elapsed, digits=1)) seconds")
 
 θ_MLE = exp.(θ_log_MLE)
-
-# Report likelihood evaluation statistics
-println("\nLikelihood evaluation statistics:")
-println("  Total evaluations: $(lnlike_stats.n_calls)")
-println("  Failures (returned -Inf): $(lnlike_stats.n_failures)")
-println("  Success rate: $(round((1 - lnlike_stats.n_failures/lnlike_stats.n_calls)*100, digits=1))%")
-if lnlike_stats.n_failures / lnlike_stats.n_calls > 0.5
-    @warn "High failure rate (>50%) during optimization. Consider:\n" *
-          "  - Widening bounds\n" *
-          "  - Using more robust ODE solver\n" *
-          "  - Checking for numerical stability issues"
-end
 
 # Verify MLE is better than true parameters
 lnlike_true = lnlike_θ(θ_true)
@@ -845,8 +802,8 @@ if size(N, 2) > 0
     ratio_beta_over_K_mle = exp(θ_log_MLE[β1_index_local] - θ_log_MLE[K1_index_local])
     log_center = log(ratio_beta_over_K_mle)
     log_halfwidth = log(5.0)  # allow 5× variation in each direction
-    ψ_log_lower_bounds[ψ_K1_β1_index] = max(ψ_log_lower_bounds[ψ_K1_β1_index], log_center - log_halfwidth)
-    ψ_log_upper_bounds[ψ_K1_β1_index] = min(ψ_log_upper_bounds[ψ_K1_β1_index], log_center + log_halfwidth)
+    ψ_log_lower_bounds[ψ_K1_β1_index] = log_center - log_halfwidth
+    ψ_log_upper_bounds[ψ_K1_β1_index] = log_center + log_halfwidth
 
     # Create distribution function in ψ space for prediction intervals
     distrib_fine_ψ(ψ) = distrib_fine_θ(ψ_to_θ(ψ))
@@ -1163,6 +1120,8 @@ K_over_beta_values = 1 ./ beta_over_K_values
 println("  β₁/K₁ range: [$(round(minimum(beta_over_K_values), digits=6)), $(round(maximum(beta_over_K_values), digits=6))]")
 println("  Equivalent K₁/β₁ range: [$(round(minimum(K_over_beta_values), digits=2)), $(round(maximum(K_over_beta_values), digits=2))]")
 println("  True β₁/K₁ = $(round(θ_true[β1_index]/θ_true[K1_index], digits=6))  (K₁/β₁ = $(round(θ_true[K1_index]/θ_true[β1_index], digits=2)))")
+println("  Raw ratio log grid: ", ratio_log_vals)
+println("  Raw ratio lnlike: ", lnlike_ratio_values)
 ratio_log_mle = ψ_log_MLE[ψ_K1_β1_index]
 ratio_mle_distance = minimum(abs.(ratio_log_vals .- ratio_log_mle))
 println("  Distance from profiled grid to log-MLE: $(ratio_mle_distance)")
@@ -1171,6 +1130,7 @@ if ratio_mle_distance > 1e-2
 end
 
 # Plot 1D profiles for diagnostics (ratio plus individual parameters)
+
 ratio_plot_idx = sortperm(K_over_beta_values)
 ratio_values_sorted = K_over_beta_values[ratio_plot_idx]
 lnlike_ratio_sorted = lnlike_ratio_values[ratio_plot_idx]
@@ -1209,6 +1169,51 @@ plot_1D_profile("repressilator",
     ψ_true=θ_true[β1_index],
     ψ_MLE=θ_MLE[β1_index],
     save_dir=joinpath(@__DIR__, "..", "figures") * "/")
+
+# Profile best identified single parameter for diagnostics
+
+# Find the first entry in the sorted Varimax results that is a single parameter
+idx = findfirst(entry -> entry[4] == "single", varimax_results)
+
+if idx !== nothing
+    best_single_entry = varimax_results[idx]
+    best_index, best_label, _, _ = best_single_entry
+    println("\nProfiling best identified single parameter: " * best_label * " (ψ[" * string(best_index) * "])")
+    nuisance_indices_single = setdiff(1:n_params, best_index)
+    nuisance_guess_single = ψ_log_MLE[nuisance_indices_single]
+    nuisance_extras_single = generate_initial_guesses(
+        ψ_log_lower_bounds[nuisance_indices_single],
+        ψ_log_upper_bounds[nuisance_indices_single],
+        CONFIG.n_guesses)
+
+    ψ_single_log_values, lnlike_single_values = profile_target(
+        lnlike_ψ_log, best_index,
+        ψ_log_lower_bounds, ψ_log_upper_bounds,
+        nuisance_guess_single;
+        grid_steps=[CONFIG.grid_1d],
+        ω_initial_extras=nuisance_extras_single,
+        method=:LN_BOBYQA,
+        optmaxtime=CONFIG.timeout)
+
+    single_log_vals = [ψ[best_index] for ψ in ψ_single_log_values]
+    single_values = exp.(single_log_vals)
+    println("  Single parameter log grid: " , single_log_vals)
+    println("  Single parameter lnlike: " , lnlike_single_values)
+
+    sort_idx = sortperm(single_values)
+    single_values_sorted = single_values[sort_idx]
+    lnlike_single_sorted = lnlike_single_values[sort_idx]
+    lnlike_single_norm = lnlike_single_sorted .- maximum(lnlike_single_sorted)
+
+    ψ_true = θ_to_ψ(θ_true)
+
+    plot_1D_profile("repressilator",
+        single_values_sorted, lnlike_single_norm, best_label;
+        varname_save=string("psi", best_index, "_single"),
+        ψ_true=ψ_true[best_index],
+        ψ_MLE=ψ_MLE[best_index],
+        save_dir=joinpath(@__DIR__, "..", "figures") * "/")
+end
 
 # Prediction intervals using ψ-space distribution
 lower_ratio, upper_ratio, _ = construct_upper_lower_profile_wise_CIs_for_mean(
@@ -1277,7 +1282,7 @@ for (i, (name, subscript)) in enumerate(zip(species_names, species_subscripts))
         t_pred, mle_mat[i,:],
         ci_intervals,
         "repressilator_$(subscript)", "$name", "t", "t";
-        data_indep=t, data_dep=data_mat[:, i],
+        data_indep=t_obs, data_dep=data_mat[:, i],
         title="Repressilator $name: Individual vs Ratio Prediction Intervals",
         save_dir=joinpath(@__DIR__, "..", "figures") * "/",
         show_legend=false,
