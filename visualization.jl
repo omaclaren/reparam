@@ -365,7 +365,9 @@ function plot_profile_wise_CI_comparison(indep_var, mle,
                  model_name, dep_varname,
                  indep_varname, indep_varname_save;
                  data_indep=nothing, data_dep=nothing,
-                 title="", save_dir="./figures/", fmt=:png, dpi=600)
+                 title="", save_dir="./figures/", fmt=:png, dpi=600,
+                 show_legend::Bool=true, show_title::Bool=true,
+                 show_mle::Bool=true, show_data::Bool=true)
     """
     Compare confidence intervals for mean function from multiple profiles.
 
@@ -392,34 +394,42 @@ function plot_profile_wise_CI_comparison(indep_var, mle,
         ]
     """
     # Create base plot
+    legend_setting = show_legend ? :topright : false
+    plot_title = show_title ? title : ""
+
     plt = plot(xlabel=latexstring(indep_varname),
-              ylabel=latexstring(dep_varname),
-              title=title,
-              xlims=(indep_var[1], indep_var[end]),
-              legend=:topright,
-              grid=false,
-              size=(800, 500))
+               ylabel=latexstring(dep_varname),
+               title=plot_title,
+               xlims=(indep_var[1], indep_var[end]),
+               legend=legend_setting,
+               grid=false,
+               size=(800, 500))
 
     # Plot MLE trajectory first (so it's on top)
-    plot!(plt, indep_var, mle, label="MLE", color=:black, lw=2)
+    if show_mle
+        mle_label = show_legend ? "MLE" : ""
+        plot!(plt, indep_var, mle, label=mle_label, color=:black, lw=2)
+    end
 
     # Plot each CI interval
     for (lower, upper, label, color) in ci_intervals
+        ci_label = show_legend ? label : ""
         plot!(plt, indep_var, lower,
               fillrange=upper,
               fillalpha=0.3,
-              label=label,
+              label=ci_label,
               color=color,
               lw=0)
     end
 
     # Add data points if provided
-    if !isnothing(data_indep) && !isnothing(data_dep)
+    if show_data && !isnothing(data_indep) && !isnothing(data_dep)
+        data_label = show_legend ? "Data" : ""
         scatter!(plt, data_indep, data_dep,
-                label="Data",
-                color=:black,
-                ms=4,
-                markershape=:circle)
+                 label=data_label,
+                 color=:black,
+                 ms=4,
+                 markershape=:circle)
     end
 
     display(plt)

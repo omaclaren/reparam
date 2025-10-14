@@ -139,20 +139,33 @@ function scale_and_round(evecs; round_within=0.5, column_scales=nothing)
 # --------------------------------------------------------
 function reparam(evecs_scaled; a_func=x->log.(x), a_func_inv=x->exp.(x))
     """
-    Construct parameter transformation based on scaled eigenvectors.
-    
+    Construct log-linear forward and inverse transformations from a matrix of
+    parameter combinations.
+
+    This helper assumes **columns** of `evecs_scaled` correspond to the desired
+    combinations in the transformed coordinates. Internally it forms
+    ``A = evecs_scaled'`` so that the forward map is
+    ``ψ = f^{-1}(A f(θ))`` with `f = a_func` (log by default).
+
     Parameters:
-    - evecs_scaled: Matrix of scaled eigenvectors
-    - a_func: Component-wise transformation (default: log)
-    - a_func_inv: Inverse of component-wise transformation (default: exp)
-    
+    - evecs_scaled: Matrix whose **columns** are the parameter combinations
+      (typically scaled and rounded output from `find_invariant_subspace`)
+    - a_func: Component-wise transform to enforce positivity (default: `log`)
+    - a_func_inv: Inverse of `a_func` (default: `exp`)
+
     Returns:
-    - (xytoXY, XYtoxy): Tuple of forward and inverse transformation functions
+    - `(θ_to_ψ, ψ_to_θ)`: Tuple of forward and inverse transformation functions
+
+    Notes:
+    - If you prefer to work with a matrix `A` whose **rows** are combinations,
+      you can bypass this helper and define the transform explicitly as:
+      `θ_to_ψ(θ) = a_func_inv(A * a_func(θ))` and
+      `ψ_to_θ(ψ) = a_func_inv(inv(A) * a_func(ψ))`.
     """
     # Forward and inverse transformations
-    xytoXY(xy) = a_func_inv(evecs_scaled'*a_func(xy))
-    XYtoxy(XY) = a_func_inv(inv(evecs_scaled')*a_func(XY))
-    
+    xytoXY(xy) = a_func_inv(evecs_scaled' * a_func(xy))
+    XYtoxy(XY) = a_func_inv(inv(evecs_scaled') * a_func(XY))
+
     return xytoXY, XYtoxy
 end
 
@@ -294,4 +307,3 @@ function construct_2D_internal_constraint_box(lbs, ubs, lb_funcs, ub_funcs;
 
     return new_lbs, new_ubs
 end
-

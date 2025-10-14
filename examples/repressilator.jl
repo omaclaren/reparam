@@ -27,7 +27,7 @@ const PARAM_INDICES = collect(1:18)
 # CONFIGURATION: Profiling Settings
 # ========================================================================
 # Three modes: "test" (~1 min), "paper" (~4 min), "full" (~60 min)
-const PROFILE_MODE = "test"  # Change to "test" or "full" as needed
+const PROFILE_MODE = "paper"  # Options: "test", "paper", "full"
 
 # Mode configurations
 const PROFILE_CONFIGS = Dict(
@@ -1253,7 +1253,7 @@ mle_mat = reshape_pred(pred_mean_MLE)
 data_mat = reshape(data, 3, NT)'  # NT×3
 
 # Plot predictions for all three mRNA species
-species_names = ["m₁", "m₂", "m₃"]
+species_names = ["m_{1}", "m_{2}", "m_{3}"]
 species_subscripts = ["1", "2", "3"]
 
 for (i, (name, subscript)) in enumerate(zip(species_names, species_subscripts))
