@@ -32,7 +32,7 @@ const PROFILE_MODE = "paper"  # Options: "test", "paper", "full"
 # Mode configurations
 const PROFILE_CONFIGS = Dict(
     "test"  => (grid_1d=3, grid_2d=[3,3], timeout=10.0, n_guesses=1, do_2d=false),
-    "paper" => (grid_1d=7, grid_2d=[5,5], timeout=10.0, n_guesses=2, do_2d=false),
+    "paper" => (grid_1d=7, grid_2d=[5,5], timeout=30.0, n_guesses=3, do_2d=false),
     "full"  => (grid_1d=10, grid_2d=[7,7], timeout=60.0, n_guesses=3, do_2d=true)
 )
 
@@ -159,7 +159,7 @@ NT = 9
 t_obs = LinRange(0, T_end, NT)
 
 # Fine grid for predictions and IIR analysis
-t_pred = LinRange(0, T_end, 201)
+t_pred = LinRange(0, T_end, 501)
 
 # Initial conditions from Eisenberg paper
 X0 = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0]
@@ -419,7 +419,7 @@ S, N, N_perp, rank_J = find_invariant_subspace(
     invariance_method=:finite_difference,
     fd_epsilon=1e-5,
     fd_n_probes=5,
-    atolM=1e-6  # Relaxed tolerance for approximate invariance
+    atolM=1e-5  # Relaxed tolerance for approximate invariance
 )
 t_iir_elapsed = time() - t_iir_start
 println("\nIIR analysis time: $(round(t_iir_elapsed, digits=1)) seconds")
@@ -700,19 +700,17 @@ if size(N, 2) > 0
     # integer exponents (±1 instead of ±0.707 = ±1/√2)
     #
     # WARNING: scale_and_round destroys orthonormality! The scaled bases are no
-    # longer orthonormal. Only use scaled versions for display, not for transformations.
-    println("\nApplying scale_and_round to Varimax-rotated bases for display...")
-    println("  (Note: Scaled versions are for presentation only, not for transformations)")
+    # longer orthonormal. A_varimax is for presentation/interpretation only.
+    # For actual transformations requiring orthogonality, use A_svd or re-orthonormalize.
+    println("\nApplying scale_and_round to Varimax-rotated bases...")
+    println("  (Note: This rescales for clean exponents but doesn't change identifiability)")
+    println("  (Warning: This breaks orthonormality - A_varimax is for presentation only)")
     N_perp_clean = scale_and_round(N_perp_varimax; round_within=0.1)
     N_clean = scale_and_round(N_varimax; round_within=0.1)
 
-    # Build Varimax transformation matrix using UNSCALED basis (mathematically correct)
-    A_varimax_T = hcat(N_perp_varimax, N_varimax)
+    # Build Varimax transformation matrix (for presentation/interpretation)
+    A_varimax_T = hcat(N_perp_clean, N_clean)
     A_varimax = A_varimax_T'
-
-    # Build display matrix using scaled basis (for symbolic monomials only)
-    A_varimax_display_T = hcat(N_perp_clean, N_clean)
-    A_varimax_display = A_varimax_display_T'
 
     println("\nVarimax-based transformation matrix A_varimax:")
     println("  Dimensions: ", size(A_varimax))
