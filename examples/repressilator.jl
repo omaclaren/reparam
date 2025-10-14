@@ -16,7 +16,7 @@ using DifferentialEquations
 using ForwardDiff
 
 # Set random seed for reproducibility
-Random.seed!(42)
+Random.seed!(41)
 
 # Global index helpers for parameter groups (used throughout analysis)
 const BETA_INDICES = [7, 8, 9]
@@ -314,29 +314,29 @@ println("\nSetting biologically-informed parameter bounds:")
 θ_lower = similar(θ_true)
 θ_upper = similar(θ_true)
 
-# Basal transcription α₀ᵢ (indices 1-3): [0.0001, 0.001] nM/sec (leakage)
-θ_lower[1:3] .= 0.0001
-θ_upper[1:3] .= 0.001
+# Basal transcription α₀ᵢ (indices 1-3): [0.01, 0.1] nM/sec (leakage)
+θ_lower[1:3] .= 0.01
+θ_upper[1:3] .= 0.1
 
-# Regulated transcription αᵢ (indices 4-6): [0.3, 1.0] nM/sec
-θ_lower[4:6] .= 0.3
-θ_upper[4:6] .= 1.0
+# Regulated transcription αᵢ (indices 4-6): [0.8, 2.0] nM/sec
+θ_lower[4:6] .= 0.8
+θ_upper[4:6] .= 2.0
 
-# Translation βᵢ (indices 7-9): [0.05, 0.3] sec⁻¹
-θ_lower[7:9] .= 0.05
-θ_upper[7:9] .= 0.3
+# Translation βᵢ (indices 7-9): [0.01, 0.03] sec⁻¹
+θ_lower[7:9] .= 0.01
+θ_upper[7:9] .= 0.03
 
-# Repression threshold Kᵢ (indices 10-12): [20, 100] nM
-θ_lower[10:12] .= 20.0
+# Repression threshold Kᵢ (indices 10-12): [40, 100] nM
+θ_lower[10:12] .= 40.0
 θ_upper[10:12] .= 100.0
 
-# mRNA degradation k_degmᵢ (indices 13-15): [0.003, 0.01] sec⁻¹ (t₁/₂ ≈ 1-4 min)
-θ_lower[13:15] .= 0.003
-θ_upper[13:15] .= 0.01
+# mRNA degradation k_degmᵢ (indices 13-15): [0.004, 0.008] sec⁻¹ (t₁/₂ ≈ 2 min)
+θ_lower[13:15] .= 0.004
+θ_upper[13:15] .= 0.008
 
-# Protein degradation k_degpᵢ (indices 16-18): [0.0005, 0.006] sec⁻¹ (t₁/₂ ≈ 2-20 min)
-θ_lower[16:18] .= 0.0005
-θ_upper[16:18] .= 0.006
+# Protein degradation k_degpᵢ (indices 16-18): [0.001, 0.0015] sec⁻¹ (t₁/₂ ≈ 10 min)
+θ_lower[16:18] .= 0.001
+θ_upper[16:18] .= 0.0015
 
 # Convert to log space
 θ_log_lower = log.(θ_lower)
@@ -829,9 +829,9 @@ if size(N, 2) > 0
     println("  True β₁/K₁ = $(round(θ_true[7]/θ_true[10], digits=6))  (inverse K₁/β₁ = $(round(θ_true[10]/θ_true[7], digits=2)))")
 
     # Set biologically-informed bounds for β₁/K₁ ratio based on component bounds
-    # If K₁ ∈ [20, 100] and β₁ ∈ [0.05, 0.3], then:
-    # - β₁/K₁ ∈ [0.05/100, 0.3/20] = [0.0005, 0.015]
-    # - K₁/β₁ ∈ [20/0.3, 100/0.05] = [66.7, 2000]
+    # If K₁ ∈ [40, 100] and β₁ ∈ [0.01, 0.03], then:
+    # - β₁/K₁ ∈ [0.01/100, 0.03/40] = [0.0001, 0.00075]
+    # - K₁/β₁ ∈ [40/0.03, 100/0.01] = [1333, 10000]
     β1_index_local = 7
     K1_index_local = 10
 
