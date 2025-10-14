@@ -155,7 +155,7 @@ println(repeat("=", 70))
 
 # Time grid - observations at sparse time points
 T_end = 100.0
-NT = 7
+NT = 9
 t_obs = LinRange(0, T_end, NT)
 
 # Fine grid for predictions and IIR analysis
@@ -700,17 +700,19 @@ if size(N, 2) > 0
     # integer exponents (±1 instead of ±0.707 = ±1/√2)
     #
     # WARNING: scale_and_round destroys orthonormality! The scaled bases are no
-    # longer orthonormal. A_varimax is for presentation/interpretation only.
-    # For actual transformations requiring orthogonality, use A_svd or re-orthonormalize.
-    println("\nApplying scale_and_round to Varimax-rotated bases...")
-    println("  (Note: This rescales for clean exponents but doesn't change identifiability)")
-    println("  (Warning: This breaks orthonormality - A_varimax is for presentation only)")
+    # longer orthonormal. Only use scaled versions for display, not for transformations.
+    println("\nApplying scale_and_round to Varimax-rotated bases for display...")
+    println("  (Note: Scaled versions are for presentation only, not for transformations)")
     N_perp_clean = scale_and_round(N_perp_varimax; round_within=0.1)
     N_clean = scale_and_round(N_varimax; round_within=0.1)
 
-    # Build Varimax transformation matrix (for presentation/interpretation)
-    A_varimax_T = hcat(N_perp_clean, N_clean)
+    # Build Varimax transformation matrix using UNSCALED basis (mathematically correct)
+    A_varimax_T = hcat(N_perp_varimax, N_varimax)
     A_varimax = A_varimax_T'
+
+    # Build display matrix using scaled basis (for symbolic monomials only)
+    A_varimax_display_T = hcat(N_perp_clean, N_clean)
+    A_varimax_display = A_varimax_display_T'
 
     println("\nVarimax-based transformation matrix A_varimax:")
     println("  Dimensions: ", size(A_varimax))
