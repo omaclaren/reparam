@@ -31,9 +31,9 @@ const PROFILE_MODE = "paper"  # Options: "test", "paper", "full"
 
 # Mode configurations
 const PROFILE_CONFIGS = Dict(
-    "test" => (grid_1d=3, grid_2d=[3,3], timeout=10.0, n_guesses=1, do_2d=false),
-    "paper" => (grid_1d=5, grid_2d=[5,5], timeout=10.0, n_guesses=1, do_2d=true),
-    "full" => (grid_1d=10, grid_2d=[7,7], timeout=60.0, n_guesses=2, do_2d=true)
+    "test"  => (grid_1d=3, grid_2d=[3,3], timeout=10.0, n_guesses=1, do_2d=false),
+    "paper" => (grid_1d=7, grid_2d=[5,5], timeout=10.0, n_guesses=2, do_2d=false),
+    "full"  => (grid_1d=10, grid_2d=[7,7], timeout=60.0, n_guesses=3, do_2d=true)
 )
 
 # Parallelization note:
@@ -837,6 +837,15 @@ if size(N, 2) > 0
     println("  β₁/K₁ combination is ψ[$ψ_K1_β1_index] in IIR coordinates")
     println("  ψ[$ψ_K1_β1_index](MLE) = $(round(ψ_MLE[ψ_K1_β1_index], digits=6))")
     println("  True β₁/K₁ = $(round(θ_true[7]/θ_true[10], digits=6))  (inverse K₁/β₁ = $(round(θ_true[10]/θ_true[7], digits=2)))")
+
+    # Tighten profiling bounds around β₁/K₁ by focusing on a small multiplicative band about the MLE
+    β1_index_local = 7
+    K1_index_local = 10
+    ratio_beta_over_K_mle = exp(θ_log_MLE[β1_index_local] - θ_log_MLE[K1_index_local])
+    log_center = log(ratio_beta_over_K_mle)
+    log_halfwidth = log(5.0)  # allow 5× variation in each direction
+    ψ_log_lower_bounds[ψ_K1_β1_index] = max(ψ_log_lower_bounds[ψ_K1_β1_index], log_center - log_halfwidth)
+    ψ_log_upper_bounds[ψ_K1_β1_index] = min(ψ_log_upper_bounds[ψ_K1_β1_index], log_center + log_halfwidth)
 
     # Create distribution function in ψ space for prediction intervals
     distrib_fine_ψ(ψ) = distrib_fine_θ(ψ_to_θ(ψ))
