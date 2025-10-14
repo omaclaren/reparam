@@ -1179,16 +1179,27 @@ if idx !== nothing
     best_single_entry = varimax_results[idx]
     best_index, best_label, _, _ = best_single_entry
     println("\nProfiling best identified single parameter: " * best_label * " (ψ[" * string(best_index) * "])")
+
+    # Create tighter bounds for single parameter profile (helps with visualization)
+    ψ_log_lower_single = copy(ψ_log_lower_bounds)
+    ψ_log_upper_single = copy(ψ_log_upper_bounds)
+
+    # For the profiled parameter, use tighter bounds around MLE
+    mle_val = ψ_log_MLE[best_index]
+    halfwidth = 2.0  # ±2 in log space ≈ factor of 7.4 in either direction
+    ψ_log_lower_single[best_index] = max(ψ_log_lower_bounds[best_index], mle_val - halfwidth)
+    ψ_log_upper_single[best_index] = min(ψ_log_upper_bounds[best_index], mle_val + halfwidth)
+
     nuisance_indices_single = setdiff(1:n_params, best_index)
     nuisance_guess_single = ψ_log_MLE[nuisance_indices_single]
     nuisance_extras_single = generate_initial_guesses(
-        ψ_log_lower_bounds[nuisance_indices_single],
-        ψ_log_upper_bounds[nuisance_indices_single],
+        ψ_log_lower_single[nuisance_indices_single],
+        ψ_log_upper_single[nuisance_indices_single],
         CONFIG.n_guesses)
 
     ψ_single_log_values, lnlike_single_values = profile_target(
         lnlike_ψ_log, best_index,
-        ψ_log_lower_bounds, ψ_log_upper_bounds,
+        ψ_log_lower_single, ψ_log_upper_single,
         nuisance_guess_single;
         grid_steps=[CONFIG.grid_1d],
         ω_initial_extras=nuisance_extras_single,
@@ -1207,8 +1218,34 @@ if idx !== nothing
 
     ψ_true = θ_to_ψ(θ_true)
 
+    # Convert Unicode subscripts to LaTeX for plotting
+    function unicode_to_latex(s)
+        # Replace Greek letters with subscripts
+        s = replace(s, "α₀₁" => "\\alpha_{01}")
+        s = replace(s, "α₀₂" => "\\alpha_{02}")
+        s = replace(s, "α₀₃" => "\\alpha_{03}")
+        s = replace(s, "α₁" => "\\alpha_{1}")
+        s = replace(s, "α₂" => "\\alpha_{2}")
+        s = replace(s, "α₃" => "\\alpha_{3}")
+        s = replace(s, "β₁" => "\\beta_{1}")
+        s = replace(s, "β₂" => "\\beta_{2}")
+        s = replace(s, "β₃" => "\\beta_{3}")
+        s = replace(s, "K₁" => "K_{1}")
+        s = replace(s, "K₂" => "K_{2}")
+        s = replace(s, "K₃" => "K_{3}")
+        s = replace(s, "k_degm₁" => "k_{degm1}")
+        s = replace(s, "k_degm₂" => "k_{degm2}")
+        s = replace(s, "k_degm₃" => "k_{degm3}")
+        s = replace(s, "k_degp₁" => "k_{degp1}")
+        s = replace(s, "k_degp₂" => "k_{degp2}")
+        s = replace(s, "k_degp₃" => "k_{degp3}")
+        return s
+    end
+
+    best_label_latex = unicode_to_latex(best_label)
+
     plot_1D_profile("repressilator",
-        single_values_sorted, lnlike_single_norm, best_label;
+        single_values_sorted, lnlike_single_norm, best_label_latex;
         varname_save=string("psi", best_index, "_single"),
         ψ_true=ψ_true[best_index],
         ψ_MLE=ψ_MLE[best_index],
