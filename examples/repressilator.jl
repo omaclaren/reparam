@@ -1095,24 +1095,75 @@ end
 ψK1_values, lnlike_K1_values, lower_K1, upper_K1, K1_profile_vals = profile_results[1]
 ψβ1_values, lnlike_β1_values, lower_β1, upper_β1, β1_profile_vals = profile_results[2]
 
-# Profile β₁/K₁ combination directly in ψ-space (identifiable combination)
-println("\nProfiling identifiable β₁/K₁ combination directly in ψ-space (reporting inverse K₁/β₁ for comparison)...")
-nuisance_indices_ratio = setdiff(1:n_params, ψ_K1_β1_index)
-nuisance_guess_ratio = ψ_log_MLE[nuisance_indices_ratio]
+# Profile ratio and best single parameter in parallel
+println("\nProfiling ratio and best single parameter in parallel (using $(Threads.nthreads()) threads)...")
 
-nuisance_extras_ratio = generate_initial_guesses(
-    ψ_log_lower_bounds[nuisance_indices_ratio],
-    ψ_log_upper_bounds[nuisance_indices_ratio],
-    n_guesses)
+# Pre-allocate for ratio + single parameter
+additional_profiles = Vector{Any}(undef, 2)
 
-ψ_ratio_log_values, lnlike_ratio_values = profile_target(
-    lnlike_ψ_log, ψ_K1_β1_index,
-    ψ_log_lower_bounds, ψ_log_upper_bounds,
-    nuisance_guess_ratio;
-    grid_steps=[CONFIG.grid_1d],
-    ω_initial_extras=nuisance_extras_ratio,
-    method=:LN_BOBYQA,
-    optmaxtime=CONFIG.timeout)
+Threads.@threads for job in 1:2
+    if job == 1
+        # Profile β₁/K₁ combination directly in ψ-space
+        println("\n  Job 1: Profiling identifiable β₁/K₁ ratio...")
+        nuisance_indices_ratio = setdiff(1:n_params, ψ_K1_β1_index)
+        nuisance_guess_ratio = ψ_log_MLE[nuisance_indices_ratio]
+
+        nuisance_extras_ratio = generate_initial_guesses(
+            ψ_log_lower_bounds[nuisance_indices_ratio],
+            ψ_log_upper_bounds[nuisance_indices_ratio],
+            n_guesses)
+
+        ψ_ratio_log_values, lnlike_ratio_values = profile_target(
+            lnlike_ψ_log, ψ_K1_β1_index,
+            ψ_log_lower_bounds, ψ_log_upper_bounds,
+            nuisance_guess_ratio;
+            grid_steps=[CONFIG.grid_1d],
+            ω_initial_extras=nuisance_extras_ratio,
+            method=:LN_BOBYQA,
+            optmaxtime=CONFIG.timeout)
+
+        additional_profiles[1] = (ψ_ratio_log_values, lnlike_ratio_values)
+    else
+        # Profile best identified single parameter
+        idx = findfirst(entry -> entry[4] == "single", varimax_results)
+        if idx !== nothing
+            best_single_entry = varimax_results[idx]
+            best_index, best_label, _, _ = best_single_entry
+            println("\n  Job 2: Profiling best single parameter: " * best_label * " (ψ[" * string(best_index) * "])")
+
+            # Create tighter bounds
+            ψ_log_lower_single = copy(ψ_log_lower_bounds)
+            ψ_log_upper_single = copy(ψ_log_upper_bounds)
+            mle_val = ψ_log_MLE[best_index]
+            halfwidth = 2.0
+            ψ_log_lower_single[best_index] = max(ψ_log_lower_bounds[best_index], mle_val - halfwidth)
+            ψ_log_upper_single[best_index] = min(ψ_log_upper_bounds[best_index], mle_val + halfwidth)
+
+            nuisance_indices_single = setdiff(1:n_params, best_index)
+            nuisance_guess_single = ψ_log_MLE[nuisance_indices_single]
+            nuisance_extras_single = generate_initial_guesses(
+                ψ_log_lower_single[nuisance_indices_single],
+                ψ_log_upper_single[nuisance_indices_single],
+                CONFIG.n_guesses)
+
+            ψ_single_log_values, lnlike_single_values = profile_target(
+                lnlike_ψ_log, best_index,
+                ψ_log_lower_single, ψ_log_upper_single,
+                nuisance_guess_single;
+                grid_steps=[CONFIG.grid_1d],
+                ω_initial_extras=nuisance_extras_single,
+                method=:LN_BOBYQA,
+                optmaxtime=CONFIG.timeout)
+
+            additional_profiles[2] = (ψ_single_log_values, lnlike_single_values, best_index, best_label)
+        else
+            additional_profiles[2] = nothing
+        end
+    end
+end
+
+# Extract ratio results
+ψ_ratio_log_values, lnlike_ratio_values = additional_profiles[1]
 
 ratio_log_vals = [ψ[ψ_K1_β1_index] for ψ in ψ_ratio_log_values]
 beta_over_K_values = exp.(ratio_log_vals)
@@ -1170,44 +1221,14 @@ plot_1D_profile("repressilator",
     ψ_MLE=θ_MLE[β1_index],
     save_dir=joinpath(@__DIR__, "..", "figures") * "/")
 
-# Profile best identified single parameter for diagnostics
-
-# Find the first entry in the sorted Varimax results that is a single parameter
-idx = findfirst(entry -> entry[4] == "single", varimax_results)
-
-if idx !== nothing
-    best_single_entry = varimax_results[idx]
-    best_index, best_label, _, _ = best_single_entry
-    println("\nProfiling best identified single parameter: " * best_label * " (ψ[" * string(best_index) * "])")
-
-    # Create tighter bounds for single parameter profile (helps with visualization)
-    ψ_log_lower_single = copy(ψ_log_lower_bounds)
-    ψ_log_upper_single = copy(ψ_log_upper_bounds)
-
-    # For the profiled parameter, use tighter bounds around MLE
-    mle_val = ψ_log_MLE[best_index]
-    halfwidth = 2.0  # ±2 in log space ≈ factor of 7.4 in either direction
-    ψ_log_lower_single[best_index] = max(ψ_log_lower_bounds[best_index], mle_val - halfwidth)
-    ψ_log_upper_single[best_index] = min(ψ_log_upper_bounds[best_index], mle_val + halfwidth)
-
-    nuisance_indices_single = setdiff(1:n_params, best_index)
-    nuisance_guess_single = ψ_log_MLE[nuisance_indices_single]
-    nuisance_extras_single = generate_initial_guesses(
-        ψ_log_lower_single[nuisance_indices_single],
-        ψ_log_upper_single[nuisance_indices_single],
-        CONFIG.n_guesses)
-
-    ψ_single_log_values, lnlike_single_values = profile_target(
-        lnlike_ψ_log, best_index,
-        ψ_log_lower_single, ψ_log_upper_single,
-        nuisance_guess_single;
-        grid_steps=[CONFIG.grid_1d],
-        ω_initial_extras=nuisance_extras_single,
-        method=:LN_BOBYQA,
-        optmaxtime=CONFIG.timeout)
+# Extract and plot single parameter results (from parallel computation)
+if additional_profiles[2] !== nothing
+    ψ_single_log_values, lnlike_single_values, best_index, best_label = additional_profiles[2]
 
     single_log_vals = [ψ[best_index] for ψ in ψ_single_log_values]
     single_values = exp.(single_log_vals)
+    println("\nSingle parameter results:")
+    println("  Parameter: " * best_label * " (ψ[" * string(best_index) * "])")
     println("  Single parameter log grid: " , single_log_vals)
     println("  Single parameter lnlike: " , lnlike_single_values)
 
