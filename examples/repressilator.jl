@@ -817,7 +817,7 @@ if size(N, 2) > 0
     println("  lnlike_θ(θ_MLE) = $(round(lnlike_θ(θ_MLE), digits=4))")
     println("  Match: $(isapprox(lnlike_ψ(ψ_MLE), lnlike_θ(θ_MLE), atol=1e-6))")
 
-    # Identify which ψ index corresponds to K₁/β₁ ratio (use heuristic if needed)
+    # Identify which ψ index corresponds to the β₁/K₁ combination (use heuristic if needed)
     candidate_columns = [j for (j, gene_idx, _, _) in ratio_directions if gene_idx == 1]
     best_column, best_ratio_score = best_ratio_column(N_perp_clean, 1)
     if isnothing(best_column)
@@ -825,18 +825,18 @@ if size(N, 2) > 0
     end
 
     if isempty(candidate_columns)
-        println("\nNo direct K₁/β₁ hits in ratio_directions; using heuristic best column $(best_column) with score $(round(best_ratio_score, digits=3)).")
+        println("\nNo direct β₁/K₁ hits in ratio_directions; using heuristic best column $(best_column) with score $(round(best_ratio_score, digits=3)).")
     elseif best_column ∉ candidate_columns
-        println("\nHeuristic refined K₁/β₁ ratio assignment from columns $(candidate_columns) to $best_column (score $(round(best_ratio_score, digits=3))).")
+        println("\nHeuristic refined β₁/K₁ combination assignment from columns $(candidate_columns) to $best_column (score $(round(best_ratio_score, digits=3))).")
     else
-        println("\nFound K₁/β₁ ratio at N_perp column $best_column (score $(round(best_ratio_score, digits=3))).")
+        println("\nFound β₁/K₁ combination at N_perp column $best_column (score $(round(best_ratio_score, digits=3))).")
     end
 
     # The ψ index is the column index in N_perp (since A = [N_perp'; N'])
     ψ_K1_β1_index = best_column
-    println("  K₁/β₁ ratio is ψ[$ψ_K1_β1_index] in IIR coordinates")
-    println("  ψ[$ψ_K1_β1_index](MLE) = $(round(ψ_MLE[ψ_K1_β1_index], digits=4))")
-    println("  True K₁/β₁ = $(round(θ_true[10]/θ_true[7], digits=2))")
+    println("  β₁/K₁ combination is ψ[$ψ_K1_β1_index] in IIR coordinates")
+    println("  ψ[$ψ_K1_β1_index](MLE) = $(round(ψ_MLE[ψ_K1_β1_index], digits=6))")
+    println("  True β₁/K₁ = $(round(θ_true[7]/θ_true[10], digits=6))  (inverse K₁/β₁ = $(round(θ_true[10]/θ_true[7], digits=2)))")
 
     # Create distribution function in ψ space for prediction intervals
     distrib_fine_ψ(ψ) = distrib_fine_θ(ψ_to_θ(ψ))
@@ -990,7 +990,7 @@ if size(N, 2) > 0
         # Classify type
         nonzero_count = count(abs.(row) .> 0.01)
         if j in ratio_indices
-            ptype = "K/β ratio"
+            ptype = "β/K ratio"
         elseif nonzero_count == 1
             ptype = "single"
         elseif nonzero_count == 2
@@ -1023,10 +1023,10 @@ if size(N, 2) > 0
 
     svd_singles = count(x -> occursin("⁻¹", x[2]) && count(c->c=='·', x[2])==0, svd_results)
     var_singles = count(x -> x[4] == "single", varimax_results)
-    var_ratios = count(x -> x[4] == "K/β ratio", varimax_results)
+    var_ratios = count(x -> x[4] == "β/K ratio", varimax_results)
 
     println("  SVD: $(rank_J-svd_singles) mixed + $svd_singles single = $rank_J total")
-    println("  Varimax: $var_singles single + $var_ratios K/β ratios + $(rank_J-var_singles-var_ratios) other = $rank_J total")
+    println("  Varimax: $var_singles single + $var_ratios β/K ratios + $(rank_J-var_singles-var_ratios) other = $rank_J total")
     println("  Varimax interpretability: $(var_singles+var_ratios)/$rank_J simple combinations ($(round(100*(var_singles+var_ratios)/rank_J, digits=1))%)")
 
     println("\nVarimax-rotated null directions (βK products):")
@@ -1060,15 +1060,18 @@ if size(N, 2) > 0
 
                 product_val_MLE = beta_val_MLE * K_val_MLE
                 ratio_val_MLE = K_val_MLE / beta_val_MLE
+                beta_over_K_MLE = beta_val_MLE / K_val_MLE
                 product_val_true = beta_val_true * K_val_true
                 ratio_val_true = K_val_true / beta_val_true
+                beta_over_K_true = beta_val_true / K_val_true
 
                 println("    MLE:  K$(gene_idx) = $(round(K_val_MLE, digits=4)), β$(gene_idx) = $(round(beta_val_MLE, digits=4))")
                 println("    True: K$(gene_idx) = $(round(K_val_true, digits=4)), β$(gene_idx) = $(round(beta_val_true, digits=4))")
                 println("    β$(gene_idx)·K$(gene_idx) (MLE) = $(round(product_val_MLE, digits=2)) (in invariant null space)")
-                println("    K$(gene_idx)/β$(gene_idx) (MLE) = $(round(ratio_val_MLE, digits=2)) (in complement, identifiable)")
-                println("    K$(gene_idx)/β$(gene_idx) (true) = $(round(ratio_val_true, digits=2))")
-                println("    Expected K$(gene_idx)/β$(gene_idx) per Eisenberg: $(round([346.32, 130.43, 633.71][gene_idx], digits=2))")
+                println("    β$(gene_idx)/K$(gene_idx) (MLE) = $(round(beta_over_K_MLE, digits=6)) (identifiable combination)")
+                println("    K$(gene_idx)/β$(gene_idx) (MLE) = $(round(ratio_val_MLE, digits=2)) (inverse)")
+                println("    β$(gene_idx)/K$(gene_idx) (true) = $(round(beta_over_K_true, digits=6))")
+                println("    K$(gene_idx)/β$(gene_idx) (true) = $(round(ratio_val_true, digits=2))  (Eisenberg reference)")
             end
         end
     end
@@ -1125,8 +1128,8 @@ end
 ψK1_values, lnlike_K1_values, lower_K1, upper_K1, K1_profile_vals = profile_results[1]
 ψβ1_values, lnlike_β1_values, lower_β1, upper_β1, β1_profile_vals = profile_results[2]
 
-# Profile K₁/β₁ ratio directly in ψ-space (identifiable combination)
-println("\nProfiling identifiable K₁/β₁ ratio directly in ψ-space...")
+# Profile β₁/K₁ combination directly in ψ-space (identifiable combination)
+println("\nProfiling identifiable β₁/K₁ combination directly in ψ-space (reporting inverse K₁/β₁ for comparison)...")
 nuisance_indices_ratio = setdiff(1:n_params, ψ_K1_β1_index)
 nuisance_guess_ratio = ψ_log_MLE[nuisance_indices_ratio]
 
@@ -1145,9 +1148,57 @@ nuisance_extras_ratio = generate_initial_guesses(
     optmaxtime=CONFIG.timeout)
 
 ratio_log_vals = [ψ[ψ_K1_β1_index] for ψ in ψ_ratio_log_values]
-ratio_values = exp.(ratio_log_vals)
-println("  Profiled ratio range: [$(round(minimum(ratio_values), digits=2)), $(round(maximum(ratio_values), digits=2))]")
-println("  True ratio: $(round(θ_true[K1_index]/θ_true[β1_index], digits=2))")
+beta_over_K_values = exp.(ratio_log_vals)
+K_over_beta_values = 1 ./ beta_over_K_values
+println("  β₁/K₁ range: [$(round(minimum(beta_over_K_values), digits=6)), $(round(maximum(beta_over_K_values), digits=6))]")
+println("  Equivalent K₁/β₁ range: [$(round(minimum(K_over_beta_values), digits=2)), $(round(maximum(K_over_beta_values), digits=2))]")
+println("  True β₁/K₁ = $(round(θ_true[β1_index]/θ_true[K1_index], digits=6))  (K₁/β₁ = $(round(θ_true[K1_index]/θ_true[β1_index], digits=2)))")
+ratio_log_mle = ψ_log_MLE[ψ_K1_β1_index]
+ratio_mle_distance = minimum(abs.(ratio_log_vals .- ratio_log_mle))
+println("  Distance from profiled grid to log-MLE: $(ratio_mle_distance)")
+if ratio_mle_distance > 1e-2
+    println("  ⚠ MLE log-value lies outside current grid resolution; consider increasing CONFIG.grid_1d or providing better initial guesses.")
+end
+
+# Plot 1D profiles for diagnostics (ratio plus individual parameters)
+ratio_plot_idx = sortperm(K_over_beta_values)
+ratio_values_sorted = K_over_beta_values[ratio_plot_idx]
+lnlike_ratio_sorted = lnlike_ratio_values[ratio_plot_idx]
+lnlike_ratio_norm = lnlike_ratio_sorted .- maximum(lnlike_ratio_sorted)
+
+ratio_mle = θ_MLE[K1_index] / θ_MLE[β1_index]
+plot_1D_profile("repressilator",
+    ratio_values_sorted, lnlike_ratio_norm, "K_{1}/\\beta_{1}";
+    varname_save="K1_over_beta1_ratio",
+    ψ_true=θ_true[K1_index]/θ_true[β1_index],
+    ψ_MLE=ratio_mle,
+    save_dir=joinpath(@__DIR__, "..", "figures") * "/")
+
+K1_values = exp.([ψ[K1_index] for ψ in ψK1_values])
+K1_plot_idx = sortperm(K1_values)
+K1_values_sorted = K1_values[K1_plot_idx]
+lnlike_K1_sorted = lnlike_K1_values[K1_plot_idx]
+lnlike_K1_norm = lnlike_K1_sorted .- maximum(lnlike_K1_sorted)
+
+plot_1D_profile("repressilator",
+    K1_values_sorted, lnlike_K1_norm, "K_{1}";
+    varname_save="K1_theta_space",
+    ψ_true=θ_true[K1_index],
+    ψ_MLE=θ_MLE[K1_index],
+    save_dir=joinpath(@__DIR__, "..", "figures") * "/")
+
+β1_values = exp.([ψ[β1_index] for ψ in ψβ1_values])
+β1_plot_idx = sortperm(β1_values)
+β1_values_sorted = β1_values[β1_plot_idx]
+lnlike_β1_sorted = lnlike_β1_values[β1_plot_idx]
+lnlike_β1_norm = lnlike_β1_sorted .- maximum(lnlike_β1_sorted)
+
+plot_1D_profile("repressilator",
+    β1_values_sorted, lnlike_β1_norm, "\\beta_{1}";
+    varname_save="beta1_theta_space",
+    ψ_true=θ_true[β1_index],
+    ψ_MLE=θ_MLE[β1_index],
+    save_dir=joinpath(@__DIR__, "..", "figures") * "/")
 
 # Prediction intervals using ψ-space distribution
 lower_ratio, upper_ratio, _ = construct_upper_lower_profile_wise_CIs_for_mean(
@@ -1184,7 +1235,7 @@ width_β1 = mean(upper_β1 - lower_β1)
 width_ratio = mean(upper_ratio - lower_ratio)
 println("  K₁ individual:   ", round(width_K1, digits=4))
 println("  β₁ individual:   ", round(width_β1, digits=4))
-println("  K₁/β₁ ratio:     ", round(width_ratio, digits=4))
+println("  β₁/K₁ identifiable: ", round(width_ratio, digits=4), "  (inverse K₁/β₁ shares the same prediction band)")
 
 # Reshape predictions for plotting (currently flattened)
 # Shape: 3 mRNA × NT_pred time points
@@ -1209,7 +1260,7 @@ for (i, (name, subscript)) in enumerate(zip(species_names, species_subscripts))
     ci_intervals = [
         (lower_K1_mat[i,:], upper_K1_mat[i,:], "K₁ individual", :red),
         (lower_β1_mat[i,:], upper_β1_mat[i,:], "β₁ individual", :orange),
-        (lower_ratio_mat[i,:], upper_ratio_mat[i,:], "K₁/β₁ ratio", :blue)
+        (lower_ratio_mat[i,:], upper_ratio_mat[i,:], "β₁/K₁ identifiable (IIR)", :blue)
     ]
 
     plot_profile_wise_CI_comparison(
@@ -1218,7 +1269,9 @@ for (i, (name, subscript)) in enumerate(zip(species_names, species_subscripts))
         "repressilator_$(subscript)", "$name", "t", "t";
         data_indep=t, data_dep=data_mat[:, i],
         title="Repressilator $name: Individual vs Ratio Prediction Intervals",
-        save_dir=joinpath(@__DIR__, "..", "figures") * "/"
+        save_dir=joinpath(@__DIR__, "..", "figures") * "/",
+        show_legend=false,
+        show_title=false
     )
 end
 
