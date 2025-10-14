@@ -306,10 +306,42 @@ println("\n" * repeat("=", 70))
 println("FINDING MLE")
 println(repeat("=", 70))
 
-# Bounds for optimization (log scale for positivity)
-# Tighter bounds to avoid unstable ODE regions
-θ_log_lower = log.(θ_true .* 0.7)  # 30% smaller
-θ_log_upper = log.(θ_true .* 1.5)  # 50% larger
+# Bounds for optimization based on biological constraints
+# From Elowitz & Leibler (2000) and physical constraints
+println("\nSetting biologically-informed parameter bounds:")
+
+# Initialize bounds arrays
+θ_lower = similar(θ_true)
+θ_upper = similar(θ_true)
+
+# Basal transcription α₀ᵢ (indices 1-3): [0.0001, 0.001] nM/sec (leakage)
+θ_lower[1:3] .= 0.0001
+θ_upper[1:3] .= 0.001
+
+# Regulated transcription αᵢ (indices 4-6): [0.3, 1.0] nM/sec
+θ_lower[4:6] .= 0.3
+θ_upper[4:6] .= 1.0
+
+# Translation βᵢ (indices 7-9): [0.05, 0.3] sec⁻¹
+θ_lower[7:9] .= 0.05
+θ_upper[7:9] .= 0.3
+
+# Repression threshold Kᵢ (indices 10-12): [20, 100] nM
+θ_lower[10:12] .= 20.0
+θ_upper[10:12] .= 100.0
+
+# mRNA degradation k_degmᵢ (indices 13-15): [0.003, 0.01] sec⁻¹ (t₁/₂ ≈ 1-4 min)
+θ_lower[13:15] .= 0.003
+θ_upper[13:15] .= 0.01
+
+# Protein degradation k_degpᵢ (indices 16-18): [0.0005, 0.006] sec⁻¹ (t₁/₂ ≈ 2-20 min)
+θ_lower[16:18] .= 0.0005
+θ_upper[16:18] .= 0.006
+
+# Convert to log space
+θ_log_lower = log.(θ_lower)
+θ_log_upper = log.(θ_upper)
+
 # Start from midpoint of bounds (NOT true parameters - we don't know those in real data!)
 θ_log_initial = 0.5 * (θ_log_lower + θ_log_upper)
 θ_initial = exp.(θ_log_initial)
@@ -319,8 +351,8 @@ println("  Method: LN_BOBYQA (gradient-free, bound-constrained)")
 println("  Parameters: 18")
 println("  Initial guesses: 3 (from midpoint and random)")
 println("  Max time: 30 seconds per guess")
-println("  Bounds: 0.7×θ_true to 1.5×θ_true (log-space)")
-println("  Starting point: midpoint = (0.7 + 1.5)/2 ≈ 1.1×θ_true")
+println("  Bounds: Biologically-informed ranges (see Elowitz & Leibler 2000)")
+println("  Starting point: Geometric midpoint of bound ranges")
 
 # Test initial point
 lnlike_initial = lnlike_θ(θ_initial)
