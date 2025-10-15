@@ -181,10 +181,11 @@ X0 = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 # True parameter values - biological estimates
 # --------------------------------------------------------
 
-# Basal transcription rates: [0.01, 0.1] nM/sec
-α₀₁_true = 0.02
-α₀₂_true = 0.03
-α₀₃_true = 0.025
+# Basal transcription rates: [0.005, 0.015] nM/sec (reduced to ~0.8% of regulated)
+# IMPORTANT: Must be non-zero for identifiability analysis, but small enough to allow oscillations
+α₀₁_true = 0.008
+α₀₂_true = 0.009
+α₀₃_true = 0.010
 
 # Regulated transcription rates: [0.8, 2.0] nM/sec
 α₁_true = 1.0
@@ -196,11 +197,11 @@ X0 = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 β₂_true = 0.025
 β₃_true = 0.015
 
-# Inhibition constants: [1000, 2000] nM (must be >> protein levels to avoid saturation)
-# With K ~ 1500 and proteins ~ 100-300 nM, get p/K ~ 0.1-0.2 (appropriate regime)
-K₁_true = 1500.0
-K₂_true = 1400.0
-K₃_true = 1600.0
+# Inhibition constants: [25, 35] nM (moderate range for steep Hill curve)
+# With n=3, system operates on steep part of curve, tolerates moderate leak
+K₁_true = 30.0
+K₂_true = 28.0
+K₃_true = 32.0
 
 # mRNA degradation rates: [0.004, 0.008] sec⁻¹
 k_degm₁_true = 0.006
@@ -325,9 +326,9 @@ println("\nSetting biologically-informed parameter bounds:")
 θ_lower = similar(θ_true)
 θ_upper = similar(θ_true)
 
-# Basal transcription α₀ᵢ (indices 1-3): [0.01, 0.1] nM/sec (leakage)
-θ_lower[1:3] .= 0.01
-θ_upper[1:3] .= 0.1
+# Basal transcription α₀ᵢ (indices 1-3): [0.005, 0.015] nM/sec (small leak for identifiability)
+θ_lower[1:3] .= 0.005
+θ_upper[1:3] .= 0.015
 
 # Regulated transcription αᵢ (indices 4-6): [0.8, 2.0] nM/sec
 θ_lower[4:6] .= 0.8
@@ -337,9 +338,9 @@ println("\nSetting biologically-informed parameter bounds:")
 θ_lower[7:9] .= 0.01
 θ_upper[7:9] .= 0.03
 
-# Repression threshold Kᵢ (indices 10-12): [1000, 2000] nM (must be >> protein levels)
-θ_lower[10:12] .= 1000.0
-θ_upper[10:12] .= 2000.0
+# Repression threshold Kᵢ (indices 10-12): [20, 40] nM (moderate range, steep Hill curve)
+θ_lower[10:12] .= 20.0
+θ_upper[10:12] .= 40.0
 
 # mRNA degradation k_degmᵢ (indices 13-15): [0.004, 0.008] sec⁻¹ (t₁/₂ ≈ 2 min)
 θ_lower[13:15] .= 0.004
