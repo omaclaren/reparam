@@ -161,7 +161,7 @@ println("Expected identifiable: K₁/β₁, K₂/β₂, K₃/β₃ ratios")
 println(repeat("=", 70))
 
 # Time grid - observations at sparse time points
-T_end = 20000.0  # ~2.2 oscillation cycles (period ≈ 9000s with biological params)
+T_end = 10000.0  # ~1 oscillation cycle (period ≈ 9000s with biological params)
 NT = 9
 t_obs = LinRange(0, T_end, NT)
 
@@ -193,10 +193,10 @@ X0 = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 β₂_true = 0.025
 β₃_true = 0.015
 
-# Inhibition constants: [40, 100] nM
-K₁_true = 60.0
-K₂_true = 50.0
-K₃_true = 70.0
+# Inhibition constants: [40, 100] nM (reduced for stronger repression)
+K₁_true = 45.0
+K₂_true = 40.0
+K₃_true = 50.0
 
 # mRNA degradation rates: [0.004, 0.008] sec⁻¹
 k_degm₁_true = 0.006
