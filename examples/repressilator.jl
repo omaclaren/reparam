@@ -161,7 +161,7 @@ println("Expected identifiable: K₁/β₁, K₂/β₂, K₃/β₃ ratios")
 println(repeat("=", 70))
 
 # Time grid - observations at sparse time points
-T_end = 500.0  # Intermediate time span to see initial dynamics
+T_end = 20000.0  # ~2.2 oscillation cycles (period ≈ 9000s with biological params)
 NT = 9
 t_obs = LinRange(0, T_end, NT)
 
@@ -175,43 +175,38 @@ X0 = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 σ = 1.0  # Moderate noise for visible prediction intervals
 
 # --------------------------------------------------------
-# True parameter values
+# True parameter values - biological estimates
 # --------------------------------------------------------
-# Parameters chosen to represent faster oscillations than typical biological values
-# (protein degradation increased ~5-10x, inhibition constants K lowered for stronger
-# repression, translation rates β increased). All values remain within biologically
-# plausible bounds. This allows multiple oscillation cycles within T_end=500 for
-# efficient computation and visualization.
 
 # Basal transcription rates: [0.01, 0.1] nM/sec
-α₀₁_true = 0.05
-α₀₂_true = 0.06
-α₀₃_true = 0.055
+α₀₁_true = 0.02
+α₀₂_true = 0.03
+α₀₃_true = 0.025
 
 # Regulated transcription rates: [0.8, 2.0] nM/sec
-α₁_true = 1.5
-α₂_true = 1.6
-α₃_true = 1.7
+α₁_true = 1.0
+α₂_true = 1.2
+α₃_true = 1.5
 
 # Translation rates: [0.01, 0.03] sec⁻¹
-β₁_true = 0.025
-β₂_true = 0.028
-β₃_true = 0.022
+β₁_true = 0.02
+β₂_true = 0.025
+β₃_true = 0.015
 
 # Inhibition constants: [40, 100] nM
-K₁_true = 45.0
-K₂_true = 42.0
-K₃_true = 48.0
+K₁_true = 60.0
+K₂_true = 50.0
+K₃_true = 70.0
 
 # mRNA degradation rates: [0.004, 0.008] sec⁻¹
-k_degm₁_true = 0.007
-k_degm₂_true = 0.0075
-k_degm₃_true = 0.0072
+k_degm₁_true = 0.006
+k_degm₂_true = 0.0055
+k_degm₃_true = 0.0065
 
 # Protein degradation rates: [0.001, 0.0015] sec⁻¹
-k_degp₁_true = 0.008
-k_degp₂_true = 0.009
-k_degp₃_true = 0.0085
+k_degp₁_true = 0.0012
+k_degp₂_true = 0.0011
+k_degp₃_true = 0.0013
 
 # Hill coefficient (fixed at 2.0 in model)
 n_true = 2.0
@@ -346,9 +341,9 @@ println("\nSetting biologically-informed parameter bounds:")
 θ_lower[13:15] .= 0.004
 θ_upper[13:15] .= 0.008
 
-# Protein degradation k_degpᵢ (indices 16-18): [0.001, 0.01] sec⁻¹ (widened for faster oscillations)
+# Protein degradation k_degpᵢ (indices 16-18): [0.001, 0.0015] sec⁻¹ (t₁/₂ ≈ 10 min)
 θ_lower[16:18] .= 0.001
-θ_upper[16:18] .= 0.01
+θ_upper[16:18] .= 0.0015
 
 # Convert to log space
 θ_log_lower = log.(θ_lower)
@@ -1509,7 +1504,7 @@ for i in 1:3
 end
 
 # Create combined 6-panel plot (3 mRNAs + 3 proteins)
-println("Creating combined mRNA + protein phase portrait...")
+println("Creating combined mRNA + protein dynamics plot...")
 
 p_plots = []
 species_info = [
@@ -1538,32 +1533,7 @@ combined_plot = plot(p_plots..., layout=(3, 2), size=(1200, 900),
                      plot_title="Repressilator Dynamics: mRNA (left) and Protein (right)")
 savefig(combined_plot, joinpath(@__DIR__, "..", "figures", "repressilator_full_dynamics_6panel.png"))
 
-# Create phase portraits (protein vs protein)
-println("Creating protein-protein phase portraits...")
-
-phase_pairs = [(1, 2, "p_1", "p_2"), (2, 3, "p_2", "p_3"), (1, 3, "p_1", "p_3")]
-for (i, j, label_i, label_j) in phase_pairs
-    plt = plot(proteins_MLE[i, :], proteins_MLE[j, :],
-               xlabel=label_i * " (nM)",
-               ylabel=label_j * " (nM)",
-               title="Phase Portrait: " * label_j * " vs " * label_i,
-               label="Trajectory",
-               color=:purple,
-               lw=2,
-               legend=:topright,
-               grid=true,
-               size=(700, 700))
-
-    # Mark initial and final points
-    scatter!(plt, [proteins_MLE[i, 1]], [proteins_MLE[j, 1]],
-             marker=:circle, markersize=8, color=:green, label="Start")
-    scatter!(plt, [proteins_MLE[i, end]], [proteins_MLE[j, end]],
-             marker=:star, markersize=10, color=:red, label="End")
-
-    savefig(plt, joinpath(@__DIR__, "..", "figures", "repressilator_phase_p$(i)_vs_p$(j).png"))
-end
-
-println("Protein dynamics plots saved to figures/")
+println("Dynamics visualization complete")
 
 println("\n" * repeat("=", 70))
 println("Analysis Complete")
