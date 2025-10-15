@@ -333,9 +333,9 @@ println("\nSetting biologically-informed parameter bounds:")
 θ_lower[7:9] .= 0.01
 θ_upper[7:9] .= 0.03
 
-# Repression threshold Kᵢ (indices 10-12): [40, 100] nM
-θ_lower[10:12] .= 40.0
-θ_upper[10:12] .= 100.0
+# Repression threshold Kᵢ (indices 10-12): [30, 70] nM
+θ_lower[10:12] .= 30.0
+θ_upper[10:12] .= 70.0
 
 # mRNA degradation k_degmᵢ (indices 13-15): [0.004, 0.008] sec⁻¹ (t₁/₂ ≈ 2 min)
 θ_lower[13:15] .= 0.004
