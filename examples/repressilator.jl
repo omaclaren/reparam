@@ -168,8 +168,11 @@ t_obs = LinRange(0, T_end, NT)
 # Fine grid for predictions and IIR analysis
 t_pred = LinRange(0, T_end, 501)
 
-# Initial conditions from Eisenberg paper
-X0 = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+# Initial conditions: basal steady-state (no repression yet)
+# m_i = α₀ᵢ/k_degmᵢ, p_i = βᵢ·m_i/k_degpᵢ
+# This represents genes freshly expressed at basal levels before
+# repression kicks in. Natural asymmetry breaks symmetry → oscillations.
+X0 = [3.33, 5.45, 3.85, 55.6, 124.0, 44.4]
 
 # Observation noise
 σ = 1.0  # Moderate noise for visible prediction intervals
