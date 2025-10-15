@@ -5,7 +5,8 @@
 function find_invariant_subspace(ϕ_func, θ0;
                                  compute_J=compute_ϕ_Jacobian,
                                  rtolJ=sqrt(eps(real(eltype(θ0)))),
-                                 atolM=1e-10,
+                                 atolM=nothing,  # Absolute tolerance (deprecated, use rtolM instead)
+                                 rtolM=sqrt(eps(real(eltype(θ0)))),  # Relative tolerance (default: √eps, same as rtolJ)
                                  kwargs...)
 
     """
@@ -28,10 +29,14 @@ function find_invariant_subspace(ϕ_func, θ0;
     # Arguments
     - `ϕ_func`: Auxiliary mapping function (mechanistic → distribution parameters)
     - `θ0`: Point in current parameter space to evaluate the Jacobian (typically MLE in f-transformed space)
-    - `compute_J`: Function to compute Jacobian (default: compute_ϕ_Jacobian). 
+    - `compute_J`: Function to compute Jacobian (default: compute_ϕ_Jacobian).
                    Can pass custom implementation for flexibility.
-    - `rtolJ`: Relative tolerance for determining numerical rank of J (default: √eps)
-    - `atolM`: Absolute tolerance for determining numerical rank of invariance test matrix (default: 1e-10)
+    - `rtolJ`: Relative tolerance for determining numerical rank of J (default: √eps ≈ 1.5e-8)
+    - `atolM`: Absolute tolerance for invariance test (default: nothing, deprecated).
+               Only use for backward compatibility with old code that requires fixed absolute tolerance.
+    - `rtolM`: Relative tolerance for invariance test (default: √eps ≈ 1.5e-8, consistent with rtolJ).
+               Effective tolerance is τM = rtolM * σ_max, which scales with Jacobian magnitude.
+               This is the recommended approach as it adapts to varying parameter scales automatically.
 
     # Returns
     - `S`: Singular values from the initial Jacobian SVD
@@ -97,6 +102,16 @@ function find_invariant_subspace(ϕ_func, θ0;
     # --- 2. Extract Invariant Component via Higher-Order Test ---
     r0 = size(V_0, 2)
 
+    # Compute effective invariance tolerance
+    # Prefer rtolM (relative, scales with problem) over atolM (absolute, legacy)
+    if !isnothing(atolM)
+        # Backward compatibility: use absolute tolerance if explicitly provided
+        τM = atolM
+    else
+        # Default: use relative tolerance (consistent with rtolJ)
+        τM = rtolM * σmax
+    end
+
     # Check if we should use finite-difference invariance test (for stiff ODEs)
     use_fd_invariance = haskey(kwargs, :invariance_method) && kwargs[:invariance_method] == :finite_difference
 
@@ -133,8 +148,8 @@ function find_invariant_subspace(ϕ_func, θ0;
         # Use column norms to classify
         invariance_scores = [norm(M_test[:, j]) for j in 1:r0]
 
-        # Use atolM as threshold for invariance
-        invariant_mask = invariance_scores .< atolM
+        # Use τM as threshold for invariance (scales with Jacobian magnitude if rtolM provided)
+        invariant_mask = invariance_scores .< τM
         rankM = count(.!invariant_mask)  # Number of non-invariant directions
 
         # Separate invariant from non-invariant
@@ -178,9 +193,9 @@ function find_invariant_subspace(ϕ_func, θ0;
         # Reduced SVD to separate invariant from non-invariant null space directions
         M_test_svd = svd(M_test; full=false)
         MS = M_test_svd.S
-        # Use absolute tolerance since we expect MS ≈ 0 for invariant null space
-        # atolM is absolute tolerance (default 1e-10)
-        rankM = count(>(atolM), MS)
+        # Use τM threshold (absolute or relative depending on rtolM parameter)
+        # We expect MS ≈ 0 for invariant null space
+        rankM = count(>(τM), MS)
 
         V_Mr = M_test_svd.V[:, 1:rankM]      # Coefficients for non-invariant combinations of V₀
         V_M0 = M_test_svd.V[:, rankM+1:end]  # Coefficients for invariant combinations of V₀

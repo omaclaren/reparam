@@ -66,7 +66,7 @@ println("=" ^ 70)
 # --------------------------------------------------------
 # Model Definition: Repressilator (Eisenberg & Hayashi Setup)
 # --------------------------------------------------------
-# Eisenberg & Hayashi exact parameter setup with n=2 (Hill coefficient fixed)
+# Eisenberg & Hayashi exact parameter setup with n=3 (Hill coefficient fixed)
 #
 # For i=1,2,3 (modulo 3):
 #   ṁᵢ = α₀ᵢ + αᵢ/(1 + (pᵢ₋₁/Kᵢ₋₁)²) - k_degmᵢ·mᵢ
@@ -78,7 +78,7 @@ println("=" ^ 70)
 
 function repressilator!(dX, X, θ, t)
     """
-    Repressilator ODE system - Eisenberg & Hayashi formulation with n=2 fixed.
+    Repressilator ODE system - Eisenberg & Hayashi formulation with n=3 fixed.
 
     State vector X = [m₁, m₂, m₃, p₁, p₂, p₃]
     Parameter vector θ = [α₀₁, α₀₂, α₀₃, α₁, α₂, α₃,
@@ -99,8 +99,8 @@ function repressilator!(dX, X, θ, t)
     k_degm₁, k_degm₂, k_degm₃ = θ[13:15]  # mRNA degradation
     k_degp₁, k_degp₂, k_degp₃ = θ[16:18]  # Protein degradation
 
-    # Hill coefficient fixed at 2
-    n = 2.0
+    # Hill coefficient fixed at 3 (>2 for oscillations?)
+    n = 3.0
 
     # mRNA dynamics: basal + regulated transcription - degradation
     # Gene i is repressed by protein i-1 with inhibition constant K_{i-1} (modulo 3)
@@ -156,7 +156,7 @@ end
 
 println(repeat("=", 70))
 println("Repressilator Model (Eisenberg & Hayashi Setup)")
-println("18 Free Parameters (n fixed at 2)")
+println("18 Free Parameters (n fixed at 3)")
 println("Expected identifiable: K₁/β₁, K₂/β₂, K₃/β₃ ratios")
 println(repeat("=", 70))
 
@@ -172,7 +172,7 @@ t_pred = LinRange(0, T_end, 501)
 # Eisenberg used [1, 0, 0, 0, 0, 0] but m1=1 creates extreme 170× spike.
 # Using m1=5 reduces to moderate 34× transient while maintaining asymmetry.
 # m1=5 is above basal level (3.3 nM) and biologically more reasonable.
-X0 = [5.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+X0 = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
 # Observation noise
 σ = 1.0  # Moderate noise for visible prediction intervals
@@ -196,10 +196,11 @@ X0 = [5.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 β₂_true = 0.025
 β₃_true = 0.015
 
-# Inhibition constants: [40, 100] nM (reduced for stronger repression)
-K₁_true = 45.0
-K₂_true = 40.0
-K₃_true = 50.0
+# Inhibition constants: [1000, 2000] nM (must be >> protein levels to avoid saturation)
+# With K ~ 1500 and proteins ~ 100-300 nM, get p/K ~ 0.1-0.2 (appropriate regime)
+K₁_true = 1500.0
+K₂_true = 1400.0
+K₃_true = 1600.0
 
 # mRNA degradation rates: [0.004, 0.008] sec⁻¹
 k_degm₁_true = 0.006
@@ -211,8 +212,8 @@ k_degp₁_true = 0.0012
 k_degp₂_true = 0.0011
 k_degp₃_true = 0.0013
 
-# Hill coefficient (fixed at 2.0 in model)
-n_true = 2.0
+# Hill coefficient (fixed at 3.0 in model)
+n_true = 3.0
 
 # Parameter names
 param_names = ["α₀₁", "α₀₂", "α₀₃",
@@ -230,7 +231,7 @@ param_names = ["α₀₁", "α₀₂", "α₀₃",
           k_degm₁_true, k_degm₂_true, k_degm₃_true,
           k_degp₁_true, k_degp₂_true, k_degp₃_true]
 
-println("\nTrue parameter values (18 total, n=2 fixed):")
+println("\nTrue parameter values (18 total, n=3 fixed):")
 for (i, (name, val)) in enumerate(zip(param_names, θ_true))
     println("  $name = $val")
 end
@@ -286,7 +287,7 @@ distrib_fine_θ = θ -> MvNormal(predict_mRNA(θ, t_pred), σ_pred^2 * I(3*lengt
 distrib_fine_θ_log = θ_log -> distrib_fine_θ(exp.(θ_log))
 
 println("\nPrediction setup:")
-println("  Parameters: 18 (n=2 fixed in model)")
+println("  Parameters: 18 (n=3 fixed in model)")
 println("  Time points: $(length(t_pred)) over [0, $T_end]")
 println("  Observables: 3 mRNA species (m₁, m₂, m₃)")
 println("  Total prediction dimension: $(3*length(t_pred))")
@@ -336,9 +337,9 @@ println("\nSetting biologically-informed parameter bounds:")
 θ_lower[7:9] .= 0.01
 θ_upper[7:9] .= 0.03
 
-# Repression threshold Kᵢ (indices 10-12): [30, 70] nM
-θ_lower[10:12] .= 30.0
-θ_upper[10:12] .= 70.0
+# Repression threshold Kᵢ (indices 10-12): [1000, 2000] nM (must be >> protein levels)
+θ_lower[10:12] .= 1000.0
+θ_upper[10:12] .= 2000.0
 
 # mRNA degradation k_degmᵢ (indices 13-15): [0.004, 0.008] sec⁻¹ (t₁/₂ ≈ 2 min)
 θ_lower[13:15] .= 0.004
@@ -460,8 +461,8 @@ S, N, N_perp, rank_J = find_invariant_subspace(
     ϕ_log, θ_log_MLE;  # ✓ CORRECT - using MLE
     invariance_method=:finite_difference,
     fd_epsilon=1e-5,
-    fd_n_probes=5,
-    atolM=1e-5  # Relaxed tolerance for approximate invariance
+    fd_n_probes=5
+    # rtolM defaults to √eps (same as rtolJ), scales automatically with Jacobian magnitude
 )
 t_iir_elapsed = time() - t_iir_start
 println("\nIIR analysis time: $(round(t_iir_elapsed, digits=1)) seconds")
