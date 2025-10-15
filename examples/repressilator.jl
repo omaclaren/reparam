@@ -1189,34 +1189,44 @@ for i in 1:3
     savefig(plt, joinpath(@__DIR__, "..", "figures", "repressilator_protein$(i)_dynamics.png"))
 end
 
-# Create combined 6-panel plot (3 mRNAs + 3 proteins)
-println("Creating combined mRNA + protein dynamics plot...")
+# Create combined 6-panel plot (3 mRNAs + 3 proteins) with true trajectories
+println("Creating combined mRNA + protein dynamics plot with true trajectories...")
+
+# Generate true parameter trajectories for comparison
+sol_full_true = solve_repressilator(t_pred, θ_true, X0)
+mrna_true = extract_mrna(sol_full_true)
+proteins_true = extract_proteins(sol_full_true)
 
 p_plots = []
 species_info = [
-    (mrna_MLE[1, :], "m_1", "mRNA 1", :red),
-    (mrna_MLE[2, :], "m_2", "mRNA 2", :green),
-    (mrna_MLE[3, :], "m_3", "mRNA 3", :blue),
-    (proteins_MLE[1, :], "p_1", "Protein 1", :darkred),
-    (proteins_MLE[2, :], "p_2", "Protein 2", :darkgreen),
-    (proteins_MLE[3, :], "p_3", "Protein 3", :darkblue)
+    (mrna_MLE[1, :], mrna_true[1, :], "m_1", "mRNA 1", :red, :pink),
+    (mrna_MLE[2, :], mrna_true[2, :], "m_2", "mRNA 2", :green, :lightgreen),
+    (mrna_MLE[3, :], mrna_true[3, :], "m_3", "mRNA 3", :blue, :lightblue),
+    (proteins_MLE[1, :], proteins_true[1, :], "p_1", "Protein 1", :darkred, :red),
+    (proteins_MLE[2, :], proteins_true[2, :], "p_2", "Protein 2", :darkgreen, :green),
+    (proteins_MLE[3, :], proteins_true[3, :], "p_3", "Protein 3", :darkblue, :blue)
 ]
 
-for (trajectory, label, title, color) in species_info
-    p = plot(t_pred, trajectory,
+for (traj_MLE, traj_true, label, title, color_MLE, color_true) in species_info
+    p = plot(t_pred, traj_true,
              xlabel="Time (s)",
              ylabel="Concentration (nM)",
              title=title,
-             label=label,
-             color=color,
+             label="True",
+             color=color_true,
              lw=2,
-             legend=false,
+             linestyle=:dash,
+             legend=:topright,
              grid=true)
+    plot!(p, t_pred, traj_MLE,
+          label="MLE",
+          color=color_MLE,
+          lw=2)
     push!(p_plots, p)
 end
 
 combined_plot = plot(p_plots..., layout=(3, 2), size=(1200, 900),
-                     plot_title="Repressilator Dynamics: mRNA (left) and Protein (right)")
+                     plot_title="Repressilator Dynamics: True (dashed) vs MLE (solid)")
 savefig(combined_plot, joinpath(@__DIR__, "..", "figures", "repressilator_full_dynamics_6panel.png"))
 
 println("\nMLE dynamics plots saved to figures/")
