@@ -175,38 +175,43 @@ X0 = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 σ = 1.0  # Moderate noise for visible prediction intervals
 
 # --------------------------------------------------------
-# True parameter values - within biological bounds
+# True parameter values
 # --------------------------------------------------------
+# Parameters chosen to represent faster oscillations than typical biological values
+# (protein degradation increased ~5-10x, inhibition constants K lowered for stronger
+# repression, translation rates β increased). All values remain within biologically
+# plausible bounds. This allows multiple oscillation cycles within T_end=500 for
+# efficient computation and visualization.
 
 # Basal transcription rates: [0.01, 0.1] nM/sec
-α₀₁_true = 0.02
-α₀₂_true = 0.03
-α₀₃_true = 0.025
+α₀₁_true = 0.05
+α₀₂_true = 0.06
+α₀₃_true = 0.055
 
 # Regulated transcription rates: [0.8, 2.0] nM/sec
-α₁_true = 1.0
-α₂_true = 1.2
-α₃_true = 1.5
+α₁_true = 1.5
+α₂_true = 1.6
+α₃_true = 1.7
 
 # Translation rates: [0.01, 0.03] sec⁻¹
-β₁_true = 0.02
-β₂_true = 0.025
-β₃_true = 0.015
+β₁_true = 0.025
+β₂_true = 0.028
+β₃_true = 0.022
 
 # Inhibition constants: [40, 100] nM
-K₁_true = 60.0
-K₂_true = 50.0
-K₃_true = 70.0
+K₁_true = 45.0
+K₂_true = 42.0
+K₃_true = 48.0
 
 # mRNA degradation rates: [0.004, 0.008] sec⁻¹
-k_degm₁_true = 0.006
-k_degm₂_true = 0.0055
-k_degm₃_true = 0.0065
+k_degm₁_true = 0.007
+k_degm₂_true = 0.0075
+k_degm₃_true = 0.0072
 
 # Protein degradation rates: [0.001, 0.0015] sec⁻¹
-k_degp₁_true = 0.0012
-k_degp₂_true = 0.0011
-k_degp₃_true = 0.0013
+k_degp₁_true = 0.008
+k_degp₂_true = 0.009
+k_degp₃_true = 0.0085
 
 # Hill coefficient (fixed at 2.0 in model)
 n_true = 2.0
@@ -341,9 +346,9 @@ println("\nSetting biologically-informed parameter bounds:")
 θ_lower[13:15] .= 0.004
 θ_upper[13:15] .= 0.008
 
-# Protein degradation k_degpᵢ (indices 16-18): [0.001, 0.0015] sec⁻¹ (t₁/₂ ≈ 10 min)
+# Protein degradation k_degpᵢ (indices 16-18): [0.001, 0.01] sec⁻¹ (widened for faster oscillations)
 θ_lower[16:18] .= 0.001
-θ_upper[16:18] .= 0.0015
+θ_upper[16:18] .= 0.01
 
 # Convert to log space
 θ_log_lower = log.(θ_lower)
