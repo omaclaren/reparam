@@ -1118,7 +1118,119 @@ else
     println("This suggests the model doesn't have IIR-compatible invariant structure.")
 end
 
+# ======================================================================
+# PROTEIN DYNAMICS VISUALIZATION (before profiling)
+# ======================================================================
+println("\n" * repeat("=", 70))
+println("MLE DYNAMICS VISUALIZATION")
+println(repeat("=", 70))
+println("\nGenerating MLE trajectory plots before starting profiling...")
+println("(Review these plots to verify dynamics before continuing)")
+
+# Solve full system at MLE to get both mRNA and protein trajectories
+sol_full_MLE = solve_repressilator(t_pred, θ_MLE, X0)
+mrna_MLE = extract_mrna(sol_full_MLE)
+proteins_MLE = extract_proteins(sol_full_MLE)
+
+# Plot individual mRNA trajectories with time markers
+mrna_names = ["m_1", "m_2", "m_3"]
+mrna_labels = ["mRNA 1", "mRNA 2", "mRNA 3"]
+mrna_colors = [:red, :green, :blue]
+
+for i in 1:3
+    plt = plot(t_pred, mrna_MLE[i, :],
+               xlabel="Time (s)",
+               ylabel="Concentration (nM)",
+               title=mrna_labels[i] * " Dynamics at MLE",
+               label="MLE trajectory",
+               color=mrna_colors[i],
+               lw=2,
+               legend=:topright,
+               grid=true,
+               size=(800, 500))
+
+    # Add markers at observation time points
+    scatter!(plt, t_obs, mrna_MLE[i, [findfirst(t -> t >= t_obs_val, t_pred) for t_obs_val in t_obs]],
+             marker=:circle,
+             markersize=6,
+             color=mrna_colors[i],
+             label="Observation times",
+             markerstrokewidth=2,
+             markerstrokecolor=:black)
+
+    savefig(plt, joinpath(@__DIR__, "..", "figures", "repressilator_mrna$(i)_dynamics.png"))
+end
+
+# Plot individual protein trajectories with time markers
+protein_names = ["p_1", "p_2", "p_3"]
+protein_labels = ["Protein 1 (LacI)", "Protein 2 (TetR)", "Protein 3 (cI)"]
+
+for i in 1:3
+    plt = plot(t_pred, proteins_MLE[i, :],
+               xlabel="Time (s)",
+               ylabel="Concentration (nM)",
+               title=protein_labels[i] * " Dynamics at MLE",
+               label="MLE trajectory",
+               color=:blue,
+               lw=2,
+               legend=:topright,
+               grid=true,
+               size=(800, 500))
+
+    # Add markers at observation time points to show time grid
+    scatter!(plt, t_obs, proteins_MLE[i, [findfirst(t -> t >= t_obs_val, t_pred) for t_obs_val in t_obs]],
+             marker=:circle,
+             markersize=6,
+             color=:blue,
+             label="Observation times",
+             markerstrokewidth=2,
+             markerstrokecolor=:black)
+
+    savefig(plt, joinpath(@__DIR__, "..", "figures", "repressilator_protein$(i)_dynamics.png"))
+end
+
+# Create combined 6-panel plot (3 mRNAs + 3 proteins)
+println("Creating combined mRNA + protein dynamics plot...")
+
+p_plots = []
+species_info = [
+    (mrna_MLE[1, :], "m_1", "mRNA 1", :red),
+    (mrna_MLE[2, :], "m_2", "mRNA 2", :green),
+    (mrna_MLE[3, :], "m_3", "mRNA 3", :blue),
+    (proteins_MLE[1, :], "p_1", "Protein 1", :darkred),
+    (proteins_MLE[2, :], "p_2", "Protein 2", :darkgreen),
+    (proteins_MLE[3, :], "p_3", "Protein 3", :darkblue)
+]
+
+for (trajectory, label, title, color) in species_info
+    p = plot(t_pred, trajectory,
+             xlabel="Time (s)",
+             ylabel="Concentration (nM)",
+             title=title,
+             label=label,
+             color=color,
+             lw=2,
+             legend=false,
+             grid=true)
+    push!(p_plots, p)
+end
+
+combined_plot = plot(p_plots..., layout=(3, 2), size=(1200, 900),
+                     plot_title="Repressilator Dynamics: mRNA (left) and Protein (right)")
+savefig(combined_plot, joinpath(@__DIR__, "..", "figures", "repressilator_full_dynamics_6panel.png"))
+
+println("\nMLE dynamics plots saved to figures/")
+println("  - Individual mRNA plots (3)")
+println("  - Individual protein plots (3)")
+println("  - Combined 6-panel plot")
+println("\n⏸  REVIEW PLOTS BEFORE CONTINUING TO PROFILING")
+println("   (Press Ctrl+C to interrupt if dynamics look incorrect)")
+println(repeat("=", 70))
+
 # Profile K₁ and β₁ in parallel using threading (for comparison)
+println("\n" * repeat("=", 70))
+println("STARTING PROFILE LIKELIHOOD ANALYSIS")
+println(repeat("=", 70))
 println("\nProfiling K₁ and β₁ individually in θ-space (comparison, using $(Threads.nthreads()) threads)...")
 t_profile_individuals_start = time()
 
@@ -1453,109 +1565,6 @@ for (i, (name, subscript)) in enumerate(zip(species_names, species_subscripts))
         show_title=false
     )
 end
-
-# ======================================================================
-# PROTEIN DYNAMICS VISUALIZATION
-# ======================================================================
-println("\n" * repeat("=", 70))
-println("PROTEIN DYNAMICS AT MLE")
-println(repeat("=", 70))
-
-# Solve full system at MLE to get both mRNA and protein trajectories
-sol_full_MLE = solve_repressilator(t_pred, θ_MLE, X0)
-mrna_MLE = extract_mrna(sol_full_MLE)
-proteins_MLE = extract_proteins(sol_full_MLE)
-
-println("\nGenerating protein dynamics plots...")
-
-# Plot individual mRNA trajectories with time markers
-mrna_names = ["m_1", "m_2", "m_3"]
-mrna_labels = ["mRNA 1", "mRNA 2", "mRNA 3"]
-mrna_colors = [:red, :green, :blue]
-
-for i in 1:3
-    plt = plot(t_pred, mrna_MLE[i, :],
-               xlabel="Time (arbitrary units)",
-               ylabel="Concentration (nM)",
-               title=mrna_labels[i] * " Dynamics at MLE",
-               label="MLE trajectory",
-               color=mrna_colors[i],
-               lw=2,
-               legend=:topright,
-               grid=true,
-               size=(800, 500))
-
-    # Add markers at observation time points
-    scatter!(plt, t_obs, mrna_MLE[i, [findfirst(t -> t >= t_obs_val, t_pred) for t_obs_val in t_obs]],
-             marker=:circle,
-             markersize=6,
-             color=mrna_colors[i],
-             label="Observation times",
-             markerstrokewidth=2,
-             markerstrokecolor=:black)
-
-    savefig(plt, joinpath(@__DIR__, "..", "figures", "repressilator_mrna$(i)_dynamics.png"))
-end
-
-# Plot individual protein trajectories with time markers
-protein_names = ["p_1", "p_2", "p_3"]
-protein_labels = ["Protein 1 (LacI)", "Protein 2 (TetR)", "Protein 3 (cI)"]
-
-for i in 1:3
-    plt = plot(t_pred, proteins_MLE[i, :],
-               xlabel="Time (arbitrary units)",
-               ylabel="Concentration (nM)",
-               title=protein_labels[i] * " Dynamics at MLE",
-               label="MLE trajectory",
-               color=:blue,
-               lw=2,
-               legend=:topright,
-               grid=true,
-               size=(800, 500))
-
-    # Add markers at observation time points to show time grid
-    scatter!(plt, t_obs, proteins_MLE[i, [findfirst(t -> t >= t_obs_val, t_pred) for t_obs_val in t_obs]],
-             marker=:circle,
-             markersize=6,
-             color=:blue,
-             label="Observation times",
-             markerstrokewidth=2,
-             markerstrokecolor=:black)
-
-    savefig(plt, joinpath(@__DIR__, "..", "figures", "repressilator_protein$(i)_dynamics.png"))
-end
-
-# Create combined 6-panel plot (3 mRNAs + 3 proteins)
-println("Creating combined mRNA + protein dynamics plot...")
-
-p_plots = []
-species_info = [
-    (mrna_MLE[1, :], "m_1", "mRNA 1", :red),
-    (mrna_MLE[2, :], "m_2", "mRNA 2", :green),
-    (mrna_MLE[3, :], "m_3", "mRNA 3", :blue),
-    (proteins_MLE[1, :], "p_1", "Protein 1", :darkred),
-    (proteins_MLE[2, :], "p_2", "Protein 2", :darkgreen),
-    (proteins_MLE[3, :], "p_3", "Protein 3", :darkblue)
-]
-
-for (trajectory, label, title, color) in species_info
-    p = plot(t_pred, trajectory,
-             xlabel="Time",
-             ylabel="Concentration (nM)",
-             title=title,
-             label=label,
-             color=color,
-             lw=2,
-             legend=false,
-             grid=true)
-    push!(p_plots, p)
-end
-
-combined_plot = plot(p_plots..., layout=(3, 2), size=(1200, 900),
-                     plot_title="Repressilator Dynamics: mRNA (left) and Protein (right)")
-savefig(combined_plot, joinpath(@__DIR__, "..", "figures", "repressilator_full_dynamics_6panel.png"))
-
-println("Dynamics visualization complete")
 
 println("\n" * repeat("=", 70))
 println("Analysis Complete")
