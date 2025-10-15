@@ -16,7 +16,7 @@ using DifferentialEquations
 using ForwardDiff
 
 # Set random seed for reproducibility
-Random.seed!(41)
+Random.seed!(1234)
 
 # Global index helpers for parameter groups (used throughout analysis)
 const BETA_INDICES = [7, 8, 9]
@@ -103,7 +103,8 @@ function repressilator!(dX, X, θ, t)
     n = 2.0
 
     # mRNA dynamics: basal + regulated transcription - degradation
-    # Gene i is repressed by protein i-1 (modulo 3)
+    # Gene i is repressed by protein i-1 with inhibition constant K_{i-1} (modulo 3)
+    # Per Eisenberg Eq. 12: p₀ = p₃ and K₀ = K₃ (cyclic indexing)
     dX[1] = α₀₁ + α₁ / (1 + (p₃/K₃)^n) - k_degm₁ * m₁
     dX[2] = α₀₂ + α₂ / (1 + (p₁/K₁)^n) - k_degm₂ * m₂
     dX[3] = α₀₃ + α₃ / (1 + (p₂/K₂)^n) - k_degm₃ * m₃
@@ -131,6 +132,12 @@ function extract_mrna(solution_matrix)
     return solution_matrix[1:3, :]
 end
 
+# Extract protein concentrations (all three)
+function extract_proteins(solution_matrix)
+    """Extract all three protein concentrations."""
+    return solution_matrix[4:6, :]
+end
+
 # Creates ϕ mapping function. Assume map to mRNA only (all three).
 function create_ϕ_mapping(t, X0)
     """Create ϕ mapping from parameters to mRNA observations."""
@@ -154,7 +161,7 @@ println("Expected identifiable: K₁/β₁, K₂/β₂, K₃/β₃ ratios")
 println(repeat("=", 70))
 
 # Time grid - observations at sparse time points
-T_end = 100.0
+T_end = 500.0  # Intermediate time span to see initial dynamics
 NT = 9
 t_obs = LinRange(0, T_end, NT)
 
@@ -232,8 +239,8 @@ println("  K₃/β₃ = $(K₃_true/β₃_true)")
 
 function predict_mRNA(θ, t_grid)
     sol_matrix = solve_repressilator(t_grid, θ, X0)
-    mRNA = extract_mrna(sol_matrix)  # 3×NT matrix
-    return vec(mRNA')  # Flatten to vector (time-major order)
+    mRNA = extract_mrna(sol_matrix)  # 3×NT matrix (rows=species, cols=time)
+    return vec(mRNA)  # Flatten in column-major order → [m1(t1), m2(t1), m3(t1), m1(t2), ...]
 end
 
 # --------------------------------------------------------
@@ -766,6 +773,7 @@ if size(N, 2) > 0
     end
 
     # Derive ψ-space bounds by mapping θ bounds through the log-linear transform
+    # For ψ = exp(A * log(θ)), we compute bounds in log space then exponentiate
     ψ_log_lower_bounds = similar(ψ_MLE)
     ψ_log_upper_bounds = similar(ψ_MLE)
     for i in 1:n_params
@@ -788,9 +796,8 @@ if size(N, 2) > 0
         ψ_log_lower_bounds[i] = lower_val
         ψ_log_upper_bounds[i] = upper_val
     end
-    expansion_margin = 2.0
-    ψ_log_lower_bounds .= min.(ψ_log_lower_bounds, ψ_log_MLE .- expansion_margin)
-    ψ_log_upper_bounds .= max.(ψ_log_upper_bounds, ψ_log_MLE .+ expansion_margin)
+
+    # Convert to ψ-space bounds (for profiling in monomial coordinates)
     ψ_lower_bounds = exp.(ψ_log_lower_bounds)
     ψ_upper_bounds = exp.(ψ_log_upper_bounds)
 
@@ -828,32 +835,29 @@ if size(N, 2) > 0
     println("  ψ[$ψ_K1_β1_index](MLE) = $(round(ψ_MLE[ψ_K1_β1_index], digits=6))")
     println("  True β₁/K₁ = $(round(θ_true[7]/θ_true[10], digits=6))  (inverse K₁/β₁ = $(round(θ_true[10]/θ_true[7], digits=2)))")
 
-    # Set biologically-informed bounds for β₁/K₁ ratio based on component bounds
-    # If K₁ ∈ [40, 100] and β₁ ∈ [0.01, 0.03], then:
-    # - β₁/K₁ ∈ [0.01/100, 0.03/40] = [0.0001, 0.00075]
-    # - K₁/β₁ ∈ [40/0.03, 100/0.01] = [1333, 10000]
+    # Report the automatically-derived bounds for the β₁/K₁ ratio
+    # These were already computed correctly in the loop above by applying the transformation
     β1_index_local = 7
     K1_index_local = 10
 
-    # Determine if this is β/K or K/β based on the transformation
+    # Determine if this is β/K or K/β based on the transformation coefficients
     v = N_perp_clean[:, ψ_K1_β1_index]
     beta_coef = v[β1_index_local]
     K_coef = v[K1_index_local]
 
+    # Extract the already-computed bounds for this ψ component
+    ratio_lower_psi = ψ_lower_bounds[ψ_K1_β1_index]
+    ratio_upper_psi = ψ_upper_bounds[ψ_K1_β1_index]
+
     if beta_coef > 0 && K_coef < 0
         # This is β₁/K₁ (β positive, K negative in log space)
-        ratio_min = θ_lower[β1_index_local] / θ_upper[K1_index_local]
-        ratio_max = θ_upper[β1_index_local] / θ_lower[K1_index_local]
-        println("  Identified as β₁/K₁ ratio: bounds [$(round(ratio_min, digits=6)), $(round(ratio_max, digits=4))]")
+        println("  Identified as β₁/K₁ ratio: ψ bounds [$(round(ratio_lower_psi, digits=6)), $(round(ratio_upper_psi, digits=6))]")
+        println("    (Derived from β₁ ∈ [$(θ_lower[β1_index_local]), $(θ_upper[β1_index_local])], K₁ ∈ [$(θ_lower[K1_index_local]), $(θ_upper[K1_index_local])])")
     else
         # This is K₁/β₁ (K positive, β negative in log space)
-        ratio_min = θ_lower[K1_index_local] / θ_upper[β1_index_local]
-        ratio_max = θ_upper[K1_index_local] / θ_lower[β1_index_local]
-        println("  Identified as K₁/β₁ ratio: bounds [$(round(ratio_min, digits=1)), $(round(ratio_max, digits=1))]")
+        println("  Identified as K₁/β₁ ratio: ψ bounds [$(round(ratio_lower_psi, digits=1)), $(round(ratio_upper_psi, digits=1))]")
+        println("    (Derived from K₁ ∈ [$(θ_lower[K1_index_local]), $(θ_upper[K1_index_local])], β₁ ∈ [$(θ_lower[β1_index_local]), $(θ_upper[β1_index_local])])")
     end
-
-    ψ_log_lower_bounds[ψ_K1_β1_index] = log(ratio_min)
-    ψ_log_upper_bounds[ψ_K1_β1_index] = log(ratio_max)
 
     # Create distribution function in ψ space for prediction intervals
     distrib_fine_ψ(ψ) = distrib_fine_θ(ψ_to_θ(ψ))
@@ -1170,23 +1174,23 @@ Threads.@threads for job in 1:2
         # Profile β₁/K₁ combination directly in ψ-space
         println("\n  Job 1: Profiling identifiable β₁/K₁ ratio...")
         nuisance_indices_ratio = setdiff(1:n_params, ψ_K1_β1_index)
-        nuisance_guess_ratio = ψ_log_MLE[nuisance_indices_ratio]
+        nuisance_guess_ratio = ψ_MLE[nuisance_indices_ratio]
 
         nuisance_extras_ratio = generate_initial_guesses(
-            ψ_log_lower_bounds[nuisance_indices_ratio],
-            ψ_log_upper_bounds[nuisance_indices_ratio],
+            ψ_lower_bounds[nuisance_indices_ratio],
+            ψ_upper_bounds[nuisance_indices_ratio],
             n_guesses)
 
-        ψ_ratio_log_values, lnlike_ratio_values = profile_target(
-            lnlike_ψ_log, ψ_K1_β1_index,
-            ψ_log_lower_bounds, ψ_log_upper_bounds,
+        ψ_ratio_values, lnlike_ratio_values = profile_target(
+            lnlike_ψ, ψ_K1_β1_index,
+            ψ_lower_bounds, ψ_upper_bounds,
             nuisance_guess_ratio;
             grid_steps=[CONFIG.grid_1d],
             ω_initial_extras=nuisance_extras_ratio,
             method=:LN_BOBYQA,
             optmaxtime=CONFIG.timeout)
 
-        additional_profiles[1] = (ψ_ratio_log_values, lnlike_ratio_values)
+        additional_profiles[1] = (ψ_ratio_values, lnlike_ratio_values)
     else
         # Profile best identified single parameter
         idx = findfirst(entry -> entry[4] == "single", varimax_results)
@@ -1195,31 +1199,27 @@ Threads.@threads for job in 1:2
             best_index, best_label, _, _ = best_single_entry
             println("\n  Job 2: Profiling best single parameter: " * best_label * " (ψ[" * string(best_index) * "])")
 
-            # Create tighter bounds
-            ψ_log_lower_single = copy(ψ_log_lower_bounds)
-            ψ_log_upper_single = copy(ψ_log_upper_bounds)
-            mle_val = ψ_log_MLE[best_index]
-            halfwidth = 2.0
-            ψ_log_lower_single[best_index] = max(ψ_log_lower_bounds[best_index], mle_val - halfwidth)
-            ψ_log_upper_single[best_index] = min(ψ_log_upper_bounds[best_index], mle_val + halfwidth)
+            # Use biological bounds directly (already correctly derived via transformation)
+            ψ_lower_single = copy(ψ_lower_bounds)
+            ψ_upper_single = copy(ψ_upper_bounds)
 
             nuisance_indices_single = setdiff(1:n_params, best_index)
-            nuisance_guess_single = ψ_log_MLE[nuisance_indices_single]
+            nuisance_guess_single = ψ_MLE[nuisance_indices_single]
             nuisance_extras_single = generate_initial_guesses(
-                ψ_log_lower_single[nuisance_indices_single],
-                ψ_log_upper_single[nuisance_indices_single],
+                ψ_lower_single[nuisance_indices_single],
+                ψ_upper_single[nuisance_indices_single],
                 CONFIG.n_guesses)
 
-            ψ_single_log_values, lnlike_single_values = profile_target(
-                lnlike_ψ_log, best_index,
-                ψ_log_lower_single, ψ_log_upper_single,
+            ψ_single_values, lnlike_single_values = profile_target(
+                lnlike_ψ, best_index,
+                ψ_lower_single, ψ_upper_single,
                 nuisance_guess_single;
                 grid_steps=[CONFIG.grid_1d],
                 ω_initial_extras=nuisance_extras_single,
                 method=:LN_BOBYQA,
                 optmaxtime=CONFIG.timeout)
 
-            additional_profiles[2] = (ψ_single_log_values, lnlike_single_values, best_index, best_label)
+            additional_profiles[2] = (ψ_single_values, lnlike_single_values, best_index, best_label)
         else
             additional_profiles[2] = nothing
         end
@@ -1227,21 +1227,23 @@ Threads.@threads for job in 1:2
 end
 
 # Extract ratio results
-ψ_ratio_log_values, lnlike_ratio_values = additional_profiles[1]
+ψ_ratio_values, lnlike_ratio_values = additional_profiles[1]
 
-ratio_log_vals = [ψ[ψ_K1_β1_index] for ψ in ψ_ratio_log_values]
-beta_over_K_values = exp.(ratio_log_vals)
+# Extract the ratio component from each ψ vector
+ratio_vals_psi = [ψ[ψ_K1_β1_index] for ψ in ψ_ratio_values]
+# Since ψ[13] = β₁/K₁ (with coefficients ±1 after scale_and_round), these are the actual ratio values
+beta_over_K_values = ratio_vals_psi
 K_over_beta_values = 1 ./ beta_over_K_values
 println("  β₁/K₁ range: [$(round(minimum(beta_over_K_values), digits=6)), $(round(maximum(beta_over_K_values), digits=6))]")
 println("  Equivalent K₁/β₁ range: [$(round(minimum(K_over_beta_values), digits=2)), $(round(maximum(K_over_beta_values), digits=2))]")
 println("  True β₁/K₁ = $(round(θ_true[β1_index]/θ_true[K1_index], digits=6))  (K₁/β₁ = $(round(θ_true[K1_index]/θ_true[β1_index], digits=2)))")
-println("  Raw ratio log grid: ", ratio_log_vals)
+println("  Raw ratio ψ grid: ", ratio_vals_psi)
 println("  Raw ratio lnlike: ", lnlike_ratio_values)
-ratio_log_mle = ψ_log_MLE[ψ_K1_β1_index]
-ratio_mle_distance = minimum(abs.(ratio_log_vals .- ratio_log_mle))
-println("  Distance from profiled grid to log-MLE: $(ratio_mle_distance)")
-if ratio_mle_distance > 1e-2
-    println("  ⚠ MLE log-value lies outside current grid resolution; consider increasing CONFIG.grid_1d or providing better initial guesses.")
+ratio_psi_mle = ψ_MLE[ψ_K1_β1_index]
+ratio_mle_distance = minimum(abs.(ratio_vals_psi .- ratio_psi_mle))
+println("  Distance from profiled grid to ψ-MLE: $(ratio_mle_distance)")
+if ratio_mle_distance > 0.01*ratio_psi_mle  # 1% relative tolerance
+    println("  ⚠ MLE ψ-value lies outside current grid resolution; consider increasing CONFIG.grid_1d or providing better initial guesses.")
 end
 
 # Plot 1D profiles for diagnostics (ratio plus individual parameters)
@@ -1287,13 +1289,14 @@ plot_1D_profile("repressilator",
 
 # Extract and plot single parameter results (from parallel computation)
 if additional_profiles[2] !== nothing
-    ψ_single_log_values, lnlike_single_values, best_index, best_label = additional_profiles[2]
+    ψ_single_values, lnlike_single_values, best_index, best_label = additional_profiles[2]
 
-    single_log_vals = [ψ[best_index] for ψ in ψ_single_log_values]
-    single_values = exp.(single_log_vals)
+    single_vals_psi = [ψ[best_index] for ψ in ψ_single_values]
+    # For single parameters that map 1:1 (like α₃), ψ[i] ≈ θ[i], so these are actual parameter values
+    single_values = single_vals_psi
     println("\nSingle parameter results:")
     println("  Parameter: " * best_label * " (ψ[" * string(best_index) * "])")
-    println("  Single parameter log grid: " , single_log_vals)
+    println("  Single parameter ψ grid: " , single_vals_psi)
     println("  Single parameter lnlike: " , lnlike_single_values)
 
     sort_idx = sortperm(single_values)
@@ -1339,7 +1342,7 @@ end
 
 # Prediction intervals using ψ-space distribution
 lower_ratio, upper_ratio, _ = construct_upper_lower_profile_wise_CIs_for_mean(
-    distrib_fine_ψ_log, ψ_ratio_log_values, lnlike_ratio_values; l_level=95, df=rank_J)
+    distrib_fine_ψ, ψ_ratio_values, lnlike_ratio_values; l_level=95, df=rank_J)
 
 # Optional: retain legacy 2D joint profile for validation if requested
 if CONFIG.do_2d
@@ -1374,8 +1377,12 @@ println("  K₁ individual:   ", round(width_K1, digits=4))
 println("  β₁ individual:   ", round(width_β1, digits=4))
 println("  β₁/K₁ identifiable: ", round(width_ratio, digits=4), "  (inverse K₁/β₁ shares the same prediction band)")
 
-# Reshape predictions for plotting (currently flattened)
-# Shape: 3 mRNA × NT_pred time points
+# Reshape predictions for plotting
+# Input: flattened in column-major (time-major) order from vec(mRNA)
+#        [m1(t1), m2(t1), m3(t1), m1(t2), m2(t2), m3(t2), ...]
+# Output: 3×NT matrix (rows = species, cols = time)
+# reshape() fills column-by-column: [m1(t1), m2(t1), m3(t1)] → column 1, etc.
+# This correctly separates the three species into rows
 reshape_pred(v) = reshape(v, 3, length(t_pred))
 
 lower_K1_mat = reshape_pred(lower_K1)
@@ -1385,6 +1392,19 @@ upper_β1_mat = reshape_pred(upper_β1)
 lower_ratio_mat = reshape_pred(lower_ratio)
 upper_ratio_mat = reshape_pred(upper_ratio)
 mle_mat = reshape_pred(pred_mean_MLE)
+
+# DEBUG: Check dimensions
+println("\n" * repeat("=", 70))
+println("DEBUG: Checking reshape dimensions")
+println(repeat("=", 70))
+println("pred_mean_MLE length: ", length(pred_mean_MLE))
+println("Expected: 3 * $(length(t_pred)) = ", 3 * length(t_pred))
+println("mle_mat size: ", size(mle_mat))
+println("Expected: (3, $(length(t_pred)))")
+println("mle_mat[1, 1:5]: ", mle_mat[1, 1:5])
+println("mle_mat[2, 1:5]: ", mle_mat[2, 1:5])
+println("mle_mat[3, 1:5]: ", mle_mat[3, 1:5])
+println(repeat("=", 70))
 
 # Extract actual noisy data (data is flattened in time-major order)
 data_mat = reshape(data, 3, NT)'  # NT×3
@@ -1411,6 +1431,134 @@ for (i, (name, subscript)) in enumerate(zip(species_names, species_subscripts))
         show_title=false
     )
 end
+
+# ======================================================================
+# PROTEIN DYNAMICS VISUALIZATION
+# ======================================================================
+println("\n" * repeat("=", 70))
+println("PROTEIN DYNAMICS AT MLE")
+println(repeat("=", 70))
+
+# Solve full system at MLE to get both mRNA and protein trajectories
+sol_full_MLE = solve_repressilator(t_pred, θ_MLE, X0)
+mrna_MLE = extract_mrna(sol_full_MLE)
+proteins_MLE = extract_proteins(sol_full_MLE)
+
+println("\nGenerating protein dynamics plots...")
+
+# Plot individual mRNA trajectories with time markers
+mrna_names = ["m_1", "m_2", "m_3"]
+mrna_labels = ["mRNA 1", "mRNA 2", "mRNA 3"]
+mrna_colors = [:red, :green, :blue]
+
+for i in 1:3
+    plt = plot(t_pred, mrna_MLE[i, :],
+               xlabel="Time (arbitrary units)",
+               ylabel="Concentration (nM)",
+               title=mrna_labels[i] * " Dynamics at MLE",
+               label="MLE trajectory",
+               color=mrna_colors[i],
+               lw=2,
+               legend=:topright,
+               grid=true,
+               size=(800, 500))
+
+    # Add markers at observation time points
+    scatter!(plt, t_obs, mrna_MLE[i, [findfirst(t -> t >= t_obs_val, t_pred) for t_obs_val in t_obs]],
+             marker=:circle,
+             markersize=6,
+             color=mrna_colors[i],
+             label="Observation times",
+             markerstrokewidth=2,
+             markerstrokecolor=:black)
+
+    savefig(plt, joinpath(@__DIR__, "..", "figures", "repressilator_mrna$(i)_dynamics.png"))
+end
+
+# Plot individual protein trajectories with time markers
+protein_names = ["p_1", "p_2", "p_3"]
+protein_labels = ["Protein 1 (LacI)", "Protein 2 (TetR)", "Protein 3 (cI)"]
+
+for i in 1:3
+    plt = plot(t_pred, proteins_MLE[i, :],
+               xlabel="Time (arbitrary units)",
+               ylabel="Concentration (nM)",
+               title=protein_labels[i] * " Dynamics at MLE",
+               label="MLE trajectory",
+               color=:blue,
+               lw=2,
+               legend=:topright,
+               grid=true,
+               size=(800, 500))
+
+    # Add markers at observation time points to show time grid
+    scatter!(plt, t_obs, proteins_MLE[i, [findfirst(t -> t >= t_obs_val, t_pred) for t_obs_val in t_obs]],
+             marker=:circle,
+             markersize=6,
+             color=:blue,
+             label="Observation times",
+             markerstrokewidth=2,
+             markerstrokecolor=:black)
+
+    savefig(plt, joinpath(@__DIR__, "..", "figures", "repressilator_protein$(i)_dynamics.png"))
+end
+
+# Create combined 6-panel plot (3 mRNAs + 3 proteins)
+println("Creating combined mRNA + protein phase portrait...")
+
+p_plots = []
+species_info = [
+    (mrna_MLE[1, :], "m_1", "mRNA 1", :red),
+    (mrna_MLE[2, :], "m_2", "mRNA 2", :green),
+    (mrna_MLE[3, :], "m_3", "mRNA 3", :blue),
+    (proteins_MLE[1, :], "p_1", "Protein 1", :darkred),
+    (proteins_MLE[2, :], "p_2", "Protein 2", :darkgreen),
+    (proteins_MLE[3, :], "p_3", "Protein 3", :darkblue)
+]
+
+for (trajectory, label, title, color) in species_info
+    p = plot(t_pred, trajectory,
+             xlabel="Time",
+             ylabel="Concentration (nM)",
+             title=title,
+             label=label,
+             color=color,
+             lw=2,
+             legend=false,
+             grid=true)
+    push!(p_plots, p)
+end
+
+combined_plot = plot(p_plots..., layout=(3, 2), size=(1200, 900),
+                     plot_title="Repressilator Dynamics: mRNA (left) and Protein (right)")
+savefig(combined_plot, joinpath(@__DIR__, "..", "figures", "repressilator_full_dynamics_6panel.png"))
+
+# Create phase portraits (protein vs protein)
+println("Creating protein-protein phase portraits...")
+
+phase_pairs = [(1, 2, "p_1", "p_2"), (2, 3, "p_2", "p_3"), (1, 3, "p_1", "p_3")]
+for (i, j, label_i, label_j) in phase_pairs
+    plt = plot(proteins_MLE[i, :], proteins_MLE[j, :],
+               xlabel=label_i * " (nM)",
+               ylabel=label_j * " (nM)",
+               title="Phase Portrait: " * label_j * " vs " * label_i,
+               label="Trajectory",
+               color=:purple,
+               lw=2,
+               legend=:topright,
+               grid=true,
+               size=(700, 700))
+
+    # Mark initial and final points
+    scatter!(plt, [proteins_MLE[i, 1]], [proteins_MLE[j, 1]],
+             marker=:circle, markersize=8, color=:green, label="Start")
+    scatter!(plt, [proteins_MLE[i, end]], [proteins_MLE[j, end]],
+             marker=:star, markersize=10, color=:red, label="End")
+
+    savefig(plt, joinpath(@__DIR__, "..", "figures", "repressilator_phase_p$(i)_vs_p$(j).png"))
+end
+
+println("Protein dynamics plots saved to figures/")
 
 println("\n" * repeat("=", 70))
 println("Analysis Complete")
