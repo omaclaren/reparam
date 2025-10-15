@@ -27,7 +27,7 @@ const PARAM_INDICES = collect(1:18)
 # CONFIGURATION: Profiling Settings
 # ========================================================================
 # Three modes: "test" (~2 min), "paper" (~10 min), "full" (~60 min)
-const PROFILE_MODE = "paper"  # Options: "test", "paper", "full"
+const PROFILE_MODE = "test"  # Options: "test", "paper", "full"
 
 # Mode configurations
 const PROFILE_CONFIGS = Dict(
@@ -1120,6 +1120,7 @@ end
 
 # Profile K₁ and β₁ in parallel using threading (for comparison)
 println("\nProfiling K₁ and β₁ individually in θ-space (comparison, using $(Threads.nthreads()) threads)...")
+t_profile_individuals_start = time()
 
 K1_index = 10
 β1_index = 7
@@ -1166,8 +1167,13 @@ end
 ψK1_values, lnlike_K1_values, lower_K1, upper_K1, K1_profile_vals = profile_results[1]
 ψβ1_values, lnlike_β1_values, lower_β1, upper_β1, β1_profile_vals = profile_results[2]
 
+t_profile_individuals_elapsed = time() - t_profile_individuals_start
+println("Individual parameter profiling complete!")
+println("  Time: $(round(t_profile_individuals_elapsed, digits=1)) seconds")
+
 # Profile ratio and best single parameter in parallel
 println("\nProfiling ratio and best single parameter in parallel (using $(Threads.nthreads()) threads)...")
+t_profile_ratio_start = time()
 
 # Pre-allocate for ratio + single parameter
 additional_profiles = Vector{Any}(undef, 2)
@@ -1228,6 +1234,10 @@ Threads.@threads for job in 1:2
         end
     end
 end
+
+t_profile_ratio_elapsed = time() - t_profile_ratio_start
+println("\nRatio and single parameter profiling complete!")
+println("  Time: $(round(t_profile_ratio_elapsed, digits=1)) seconds")
 
 # Extract ratio results
 ψ_ratio_values, lnlike_ratio_values = additional_profiles[1]
@@ -1371,6 +1381,15 @@ if CONFIG.do_2d
     ratio_values_joint = [exp(ψ[K1_index] - ψ[β1_index]) for ψ in ψK1β1_values]
     println("  Joint profile ratio range: [$(round(minimum(ratio_values_joint), digits=2)), $(round(maximum(ratio_values_joint), digits=2))]")
 end
+
+t_total_profiling = t_profile_individuals_elapsed + t_profile_ratio_elapsed
+println("\n" * repeat("=", 70))
+println("PROFILING SUMMARY")
+println(repeat("=", 70))
+println("Individual parameters (K₁, β₁): $(round(t_profile_individuals_elapsed, digits=1))s")
+println("Ratio + best single (β₁/K₁, k_dp): $(round(t_profile_ratio_elapsed, digits=1))s")
+println("Total profiling time: $(round(t_total_profiling, digits=1))s")
+println(repeat("=", 70))
 
 println("\nPrediction interval widths (mean across time/species):")
 width_K1 = mean(upper_K1 - lower_K1)
