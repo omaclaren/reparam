@@ -66,7 +66,7 @@ println("=" ^ 70)
 # --------------------------------------------------------
 # Model Definition: Repressilator (Eisenberg & Hayashi Setup)
 # --------------------------------------------------------
-# Eisenberg & Hayashi exact parameter setup with n=3 (Hill coefficient fixed)
+# Eisenberg & Hayashi exact parameter setup with n=2.5 (Hill coefficient fixed)
 #
 # For i=1,2,3 (modulo 3):
 #   ṁᵢ = α₀ᵢ + αᵢ/(1 + (pᵢ₋₁/Kᵢ₋₁)²) - k_degmᵢ·mᵢ
@@ -78,7 +78,7 @@ println("=" ^ 70)
 
 function repressilator!(dX, X, θ, t)
     """
-    Repressilator ODE system - Eisenberg & Hayashi formulation with n=3 fixed.
+    Repressilator ODE system - Eisenberg & Hayashi formulation with n=2.5 fixed.
 
     State vector X = [m₁, m₂, m₃, p₁, p₂, p₃]
     Parameter vector θ = [α₀₁, α₀₂, α₀₃, α₁, α₂, α₃,
@@ -99,8 +99,8 @@ function repressilator!(dX, X, θ, t)
     k_degm₁, k_degm₂, k_degm₃ = θ[13:15]  # mRNA degradation
     k_degp₁, k_degp₂, k_degp₃ = θ[16:18]  # Protein degradation
 
-    # Hill coefficient fixed at 3 (>2 for oscillations?)
-    n = 3.0
+    # Hill coefficient fixed at 2.5 (>2 for oscillations?)
+    n = 2.5
 
     # mRNA dynamics: basal + regulated transcription - degradation
     # Gene i is repressed by protein i-1 with inhibition constant K_{i-1} (modulo 3)
@@ -198,7 +198,7 @@ X0 = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 β₃_true = 0.015
 
 # Inhibition constants: [25, 35] nM (moderate range for steep Hill curve)
-# With n=3, system operates on steep part of curve, tolerates moderate leak
+# With n>2, system operates on steep part of curve, tolerates moderate leak
 K₁_true = 30.0
 K₂_true = 28.0
 K₃_true = 32.0
@@ -232,7 +232,7 @@ param_names = ["α₀₁", "α₀₂", "α₀₃",
           k_degm₁_true, k_degm₂_true, k_degm₃_true,
           k_degp₁_true, k_degp₂_true, k_degp₃_true]
 
-println("\nTrue parameter values (18 total, n=3 fixed):")
+println("\nTrue parameter values (18 total, n=2.5 fixed):")
 for (i, (name, val)) in enumerate(zip(param_names, θ_true))
     println("  $name = $val")
 end
@@ -288,7 +288,7 @@ distrib_fine_θ = θ -> MvNormal(predict_mRNA(θ, t_pred), σ_pred^2 * I(3*lengt
 distrib_fine_θ_log = θ_log -> distrib_fine_θ(exp.(θ_log))
 
 println("\nPrediction setup:")
-println("  Parameters: 18 (n=3 fixed in model)")
+println("  Parameters: 18 (n=2.5 fixed in model)")
 println("  Time points: $(length(t_pred)) over [0, $T_end]")
 println("  Observables: 3 mRNA species (m₁, m₂, m₃)")
 println("  Total prediction dimension: $(3*length(t_pred))")
@@ -371,8 +371,8 @@ lnlike_initial = lnlike_θ(θ_initial)
 lnlike_true_start = lnlike_θ(θ_true)
 
 println("\nInitial point evaluation:")
-println("  Starting from: 1.1×θ_true (midpoint of bounds)")
-println("  Log-likelihood at start: $(round(lnlike_initial, digits=2))")
+println("  Starting from: Geometric midpoint of bounds")
+println("  Log-likelihood at initial: $(round(lnlike_initial, digits=2))")
 println("  Log-likelihood at truth: $(round(lnlike_true_start, digits=2))")
 println("  Gap to close: $(round(lnlike_true_start - lnlike_initial, digits=2))")
 
@@ -454,16 +454,14 @@ println(repeat("=", 70))
 n_params = 18
 
 println("\n" * repeat("=", 70))
-println("Applying IIR with finite-difference invariance test...")
+println("Applying IIR (Invariant Image Reparameterization)")
 println(repeat("=", 70))
 
 t_iir_start = time()
 S, N, N_perp, rank_J = find_invariant_subspace(
-    ϕ_log, θ_log_MLE;  # ✓ CORRECT - using MLE
-    invariance_method=:finite_difference,
-    fd_epsilon=1e-5,
-    fd_n_probes=5
-    # rtolM defaults to √eps (same as rtolJ), scales automatically with Jacobian magnitude
+    ϕ_log, θ_log_MLE
+    # Uses default rtolM = 32√eps ≈ 4.8e-7, calibrated for stiff ODEs
+    # Hessian-based invariance test works with nested AD!
 )
 t_iir_elapsed = time() - t_iir_start
 println("\nIIR analysis time: $(round(t_iir_elapsed, digits=1)) seconds")
@@ -494,7 +492,7 @@ if size(N, 2) > 0
     println(repeat("=", 70))
 
     for j in 1:size(N, 2)
-        v = N[:, j]
+        local v = N[:, j]
         println("\nSVD Direction $j:")
 
         # Find significant coefficients
@@ -536,6 +534,106 @@ if size(N, 2) > 0
     println("\n" * repeat("=", 70))
     println("INVARIANT NULL SPACE (βK products)")
     println(repeat("=", 70))
+
+    # ======================================================================
+    # COORDINATE SYSTEM COMPARISON
+    # ======================================================================
+    # Pedagogical demonstration: rank is coordinate-independent, but
+    # null space invariance is coordinate-dependent!
+
+    println("\n" * repeat("=", 70))
+    println("COORDINATE SYSTEM COMPARISON: Log-space vs Original-space")
+    println(repeat("=", 70))
+    println("\nKey Question: Is the invariance property coordinate-dependent?")
+    println("We'll compare IIR analysis in two coordinate systems:")
+    println("  1. Log-parameter space (f = log) - what we just computed")
+    println("  2. Original-parameter space (no transform)")
+
+    # 1. Summarize log-space results (already computed above)
+    println("\n" * repeat("-", 70))
+    println("1. LOG-PARAMETER SPACE (f = log):")
+    println(repeat("-", 70))
+    println("  Jacobian rank: $rank_J/18")
+    n_invariant_log = size(N, 2)
+    n_total_null_log = 18 - rank_J
+    println("  Null space dimension: $n_total_null_log")
+    println("  Invariant null vectors: $n_invariant_log")
+    if n_invariant_log == n_total_null_log
+        println("  Invariance test: ✓ PASS (all $n_total_null_log null vectors are invariant)")
+    else
+        println("  Invariance test: ✗ PARTIAL ($n_invariant_log/$n_total_null_log null vectors invariant)")
+    end
+
+    # 2. Original-space analysis (NEW)
+    println("\n" * repeat("-", 70))
+    println("2. ORIGINAL-PARAMETER SPACE (no transform):")
+    println(repeat("-", 70))
+    println("  Computing Jacobian w.r.t. original parameters θ (not log θ)...")
+
+    # Define auxiliary map in original coordinates
+    ϕ_original = θ -> predict_mRNA(θ, t_obs)
+
+    # Run IIR analysis at the same point (θ_MLE in original space)
+    t_orig_start = time()
+    S_orig, N_orig, N_perp_orig, rank_orig = find_invariant_subspace(
+        ϕ_original, θ_MLE
+        # Uses default rtolM (same as log-space for fair comparison)
+    )
+    t_orig_elapsed = time() - t_orig_start
+
+    println("  Analysis time: $(round(t_orig_elapsed, digits=1)) seconds")
+    println("  Jacobian rank: $rank_orig/18")
+    n_invariant_orig = size(N_orig, 2)
+    n_total_null_orig = 18 - rank_orig
+    println("  Null space dimension: $n_total_null_orig")
+    println("  Invariant null vectors: $n_invariant_orig")
+    if n_invariant_orig == n_total_null_orig
+        println("  Invariance test: ✓ PASS (all $n_total_null_orig null vectors are invariant)")
+    else
+        println("  Invariance test: ✗ FAIL (only $n_invariant_orig/$n_total_null_orig null vectors invariant)")
+    end
+
+    # 3. Comparison and interpretation
+    println("\n" * repeat("-", 70))
+    println("3. COMPARISON AND INTERPRETATION:")
+    println(repeat("-", 70))
+
+    # Build comparison table
+    println("\n  Coordinate System      | Rank  | Null Dim | Invariant | Status")
+    println("  " * repeat("-", 66))
+    log_status = n_invariant_log == n_total_null_log ? "✓ PASS" : "✗ FAIL"
+    orig_status = n_invariant_orig == n_total_null_orig ? "✓ PASS" : "✗ FAIL"
+    println("  Log-space (f=log)      | $rank_J/18 |    $n_total_null_log     |    $n_invariant_log      | $log_status")
+    println("  Original-space         | $rank_orig/18 |    $n_total_null_orig     |    $n_invariant_orig      | $orig_status")
+
+    println("\n  Key Insights:")
+    if rank_J == rank_orig
+        println("    ✓ Rank is coordinate-independent: $rank_J == $rank_orig")
+        println("      → This is a topological property of the auxiliary map")
+    else
+        println("    ⚠ Unexpected: ranks differ ($rank_J vs $rank_orig)")
+    end
+
+    if n_invariant_log > n_invariant_orig
+        println("    ✗ Null space invariance IS coordinate-dependent!")
+        println("      → Log-space: $n_invariant_log/$n_total_null_log null vectors invariant")
+        println("      → Original-space: $n_invariant_orig/$n_total_null_orig null vectors invariant")
+        println("    → Log-transform gives minimal image (invariant null space)")
+        println("    → Original coordinates give only rank-deficient manifold")
+        println("    → Invariance test identifies 'right' coordinate system for monomials")
+    elseif n_invariant_log == n_invariant_orig && n_invariant_log == n_total_null_log
+        println("    ⚠ Unexpected: both coordinate systems have fully invariant null spaces")
+    else
+        println("    → Both coordinate systems show partial invariance")
+    end
+
+    println("\n  Why This Matters:")
+    println("    • Not all rank-deficient manifolds are minimal images")
+    println("    • SVD alone cannot distinguish them")
+    println("    • Invariance test (Algorithm 1) is essential, not optional")
+    println("    • For monomial reparameterizations, log-transform is principled choice")
+
+    println("\n" * repeat("=", 70))
 
     # Now examine N_perp to verify it contains K/β ratios
     println("\n" * repeat("=", 70))

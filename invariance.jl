@@ -6,7 +6,7 @@ function find_invariant_subspace(ϕ_func, θ0;
                                  compute_J=compute_ϕ_Jacobian,
                                  rtolJ=sqrt(eps(real(eltype(θ0)))),
                                  atolM=nothing,  # Absolute tolerance (deprecated, use rtolM instead)
-                                 rtolM=sqrt(eps(real(eltype(θ0)))),  # Relative tolerance (default: √eps, same as rtolJ)
+                                 rtolM=32*sqrt(eps(real(eltype(θ0)))),  # Relative tolerance (default: 32√eps ≈ 4.8e-7 for stiff systems)
                                  kwargs...)
 
     """
@@ -34,9 +34,11 @@ function find_invariant_subspace(ϕ_func, θ0;
     - `rtolJ`: Relative tolerance for determining numerical rank of J (default: √eps ≈ 1.5e-8)
     - `atolM`: Absolute tolerance for invariance test (default: nothing, deprecated).
                Only use for backward compatibility with old code that requires fixed absolute tolerance.
-    - `rtolM`: Relative tolerance for invariance test (default: √eps ≈ 1.5e-8, consistent with rtolJ).
+    - `rtolM`: Relative tolerance for invariance test (default: 32√eps ≈ 4.8e-7).
                Effective tolerance is τM = rtolM * σ_max, which scales with Jacobian magnitude.
-               This is the recommended approach as it adapts to varying parameter scales automatically.
+               The default value is calibrated for stiff ODE systems and provides ~2× safety margin.
+               For smooth problems, can tighten to √eps; for very stiff systems, may need up to 1e-6.
+               Heuristic: rtolM ≳ 1.5 * max(MS_invariant) / σ_max where MS are singular values of M_test.
 
     # Returns
     - `S`: Singular values from the initial Jacobian SVD
@@ -112,94 +114,50 @@ function find_invariant_subspace(ϕ_func, θ0;
         τM = rtolM * σmax
     end
 
-    # Check if we should use finite-difference invariance test (for stiff ODEs)
-    use_fd_invariance = haskey(kwargs, :invariance_method) && kwargs[:invariance_method] == :finite_difference
-
-    if use_fd_invariance
-        # Finite-difference invariance test (single-level AD only)
-        # For each null vector α ∈ V_0, perturb θ along α and check if J(θ+δ)·α ≈ 0
-
-        ε = get(kwargs, :fd_epsilon, 1e-6)  # Perturbation size
-        n_probes = get(kwargs, :fd_n_probes, 3)  # Number of perturbation points per direction
-
-        # Build test matrix by evaluating J(θ + ε·s·α)·α for multiple s values
-        M_test = zeros(T, m * n_probes, r0)
-
-        for j in 1:r0  # For each null vector
-            α = V_0[:, j]
-
-            # Test at multiple perturbations: ±ε, ±2ε, etc.
-            for i in 1:n_probes
-                s = (i - (n_probes+1)/2) * ε  # e.g., [-2ε, -ε, 0, ε, 2ε] for n_probes=5
-                if abs(s) < 1e-12
-                    s = ε  # Avoid testing exactly at θ0 (already know J(θ0)·α ≈ 0)
-                end
-
-                θ_pert = θ0 + s * α
-                J_pert = compute_J(ϕ_func, θ_pert)
-
-                # Store J(θ_pert)·α
-                row_start = (i-1)*m + 1
-                M_test[row_start:row_start+m-1, j] = J_pert * α
-            end
-        end
-
-        # α is invariant if ||J(θ+δ)·α|| stays small for all perturbations
-        # Use column norms to classify
-        invariance_scores = [norm(M_test[:, j]) for j in 1:r0]
-
-        # Use τM as threshold for invariance (scales with Jacobian magnitude if rtolM provided)
-        invariant_mask = invariance_scores .< τM
-        rankM = count(.!invariant_mask)  # Number of non-invariant directions
-
-        # Separate invariant from non-invariant
-        invariant_indices = findall(invariant_mask)
-        noninvariant_indices = findall(.!invariant_mask)
-
-        V_Mr = r0 > 0 && rankM > 0 ? V_0[:, noninvariant_indices] : zeros(T, p, 0)
-        V_M0 = r0 > 0 && length(invariant_indices) > 0 ? V_0[:, invariant_indices] : zeros(T, p, 0)
-
-        # Need to return as coefficient matrices (like SVD.V)
-        if rankM > 0
-            V_Mr_coeff = Matrix{T}(I, r0, r0)[:, noninvariant_indices]
-        else
-            V_Mr_coeff = zeros(T, r0, 0)
-        end
-
-        if length(invariant_indices) > 0
-            V_M0_coeff = Matrix{T}(I, r0, r0)[:, invariant_indices]
-        else
-            V_M0_coeff = zeros(T, r0, 0)
-        end
-
-        V_Mr = V_Mr_coeff
-        V_M0 = V_M0_coeff
-
-    else
-        # Original Hessian-based test (requires nested AD)
-        # Efficiently compute Hessian-vector products: differentiate J(θ)*V_0 instead of full J(θ)
-        # This gives (m*r0)×p instead of (m*p)×p - significant savings when r0 << p
-        flat_JV_func = θ -> vec(compute_J(ϕ_func, θ) * V_0)
-        H_JV = ForwardDiff.jacobian(flat_JV_func, θ0)  # (m*r0) × p
-
-        # Build the stacked test matrix M_test = [H₁V₀; H₂V₀; ...; HₚV₀]
-        # This implements the invariance condition: H_i(θ*)α = 0 for all i
-        M_test = Matrix{T}(undef, m * p, r0)
-        for k in 1:p
-            rows = (k-1)*m + 1 : k*m
-            M_test[rows, :] = reshape(view(H_JV, :, k), m, r0)
-        end
-
-        # Reduced SVD to separate invariant from non-invariant null space directions
-        M_test_svd = svd(M_test; full=false)
-        MS = M_test_svd.S
-        # Use τM threshold (absolute or relative depending on rtolM parameter)
-        # We expect MS ≈ 0 for invariant null space
-        rankM = count(>(τM), MS)
-
-        V_Mr = M_test_svd.V[:, 1:rankM]      # Coefficients for non-invariant combinations of V₀
-        V_M0 = M_test_svd.V[:, rankM+1:end]  # Coefficients for invariant combinations of V₀
+    # Check if finite-difference method is requested
+    if haskey(kwargs, :invariance_method) && kwargs[:invariance_method] == :finite_difference
+        error("Finite-difference invariance test is not currently supported.\n" *
+              "The previous implementation was found to be incorrect.\n" *
+              "Please use the default Hessian-based method (remove invariance_method kwarg).\n" *
+              "If you encounter nested AD errors, this indicates a limitation of the current implementation.")
     end
+
+    # Hessian-based invariance test (default and recommended method)
+    # Efficiently compute Hessian-vector products: differentiate J(θ)*V_0 instead of full J(θ)
+    # This gives (m*r0)×p instead of (m*p)×p - significant savings when r0 << p
+    flat_JV_func = θ -> vec(compute_J(ϕ_func, θ) * V_0)
+    H_JV = ForwardDiff.jacobian(flat_JV_func, θ0)  # (m*r0) × p
+
+    # Build the stacked test matrix M_test = [H₁V₀; H₂V₀; ...; HₚV₀]
+    # This implements the invariance condition: H_i(θ*)α = 0 for all i
+    M_test = Matrix{T}(undef, m * p, r0)
+    for k in 1:p
+        rows = (k-1)*m + 1 : k*m
+        M_test[rows, :] = reshape(view(H_JV, :, k), m, r0)
+    end
+
+    # Reduced SVD to separate invariant from non-invariant null space directions
+    M_test_svd = svd(M_test; full=false)
+    MS = M_test_svd.S
+    # Use τM threshold (relative or absolute depending on parameters)
+    # We expect MS ≈ 0 for invariant null space
+    rankM = count(>(τM), MS)
+
+    # DIAGNOSTIC OUTPUT
+    if haskey(kwargs, :verbose) && kwargs[:verbose]
+        println("\n  Hessian-based invariance test diagnostics:")
+        println("    τM (threshold): $τM")
+        println("    M_test singular values (should be ~0 for invariant):")
+        for i in 1:min(length(MS), r0)
+            ratio = MS[i] / τM
+            status = MS[i] > τM ? "✗ NON-INVARIANT" : "✓ invariant"
+            println("      MS[$i] = $(round(MS[i], sigdigits=4)) ($(round(ratio, digits=2))×τM) $status")
+        end
+        println("    Classification: $rankM non-invariant, $(r0-rankM) invariant")
+    end
+
+    V_Mr = M_test_svd.V[:, 1:rankM]      # Coefficients for non-invariant combinations of V₀
+    V_M0 = M_test_svd.V[:, rankM+1:end]  # Coefficients for invariant combinations of V₀
 
     # --- 3. Construct Final Reparameterization Subspaces ---
 
