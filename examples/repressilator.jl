@@ -26,28 +26,49 @@ const PARAM_INDICES = collect(1:18)
 # ========================================================================
 # CONFIGURATION: Profiling Settings
 # ========================================================================
-# Three modes: "test" (~2 min), "paper" (~10 min), "full" (~60 min)
-const PROFILE_MODE = "test"  # Options: "test", "paper", "full"
+# Six profile modes with increasing grid resolution and runtime
+const PROFILE_MODE = "paper"  # Options: "test", "paper", "high_quality", "publication", "ultra", "full"
 
 # Mode configurations
 const PROFILE_CONFIGS = Dict(
-    "test"  => (grid_1d=5, grid_2d=[3,3], timeout=10.0, n_guesses=1, do_2d=false),
-    "paper" => (grid_1d=15, grid_2d=[7,7], timeout=30.0, n_guesses=3, do_2d=false),
-    "full"  => (grid_1d=25, grid_2d=[10,10], timeout=60.0, n_guesses=3, do_2d=true)
+    # Quick testing - minimal grid for debugging
+    "test"  => (grid_1d=5, grid_2d=[3,3], timeout=10.0, n_guesses=1, do_2d=false, mle_guesses=5, mle_timeout=20.0),
+
+    # Development mode - fast iteration (~15-20 min for 3 profiles)
+    "paper" => (grid_1d=15, grid_2d=[7,7], timeout=40.0, n_guesses=3, do_2d=false, mle_guesses=9, mle_timeout=60.0),
+
+    # High-quality mode - balanced quality/speed (~25-35 min for 3 profiles)
+    "high_quality" => (grid_1d=21, grid_2d=[8,8], timeout=50.0, n_guesses=4, do_2d=false, mle_guesses=12, mle_timeout=75.0),
+
+    # Publication mode - smooth professional figures (~45-60 min for 3 profiles)
+    "publication" => (grid_1d=31, grid_2d=[11,11], timeout=60.0, n_guesses=5, do_2d=false, mle_guesses=12, mle_timeout=90.0),
+
+    # Ultra-fine mode - maximum resolution (~90-120 min for 3 profiles)
+    "ultra" => (grid_1d=51, grid_2d=[15,15], timeout=90.0, n_guesses=7, do_2d=false, mle_guesses=15, mle_timeout=120.0),
+
+    # Full mode - original with 2D profiling enabled
+    "full"  => (grid_1d=25, grid_2d=[10,10], timeout=60.0, n_guesses=3, do_2d=true, mle_guesses=12, mle_timeout=90.0)
 )
 
-# Parallelization note:
-# Current implementation uses sequential profiling with previous point's solution
-# as initial guess for next point (warm start). This improves convergence but
-# requires sequential execution.
+# Parallelization strategy:
 #
-# ALTERNATIVE: Use MLE as initial guess for all points → enables parallelization
-# - Each optimization becomes independent → can use Julia's @threads or Distributed
-# - Trade-off: potentially slower convergence per point, but massive speedup from parallel
-# - For 18-param ODE: ~6x speedup on 6-core machine could reduce "paper" mode from 4→<1 min
+# MLE ESTIMATION (point estimation):
+# - Uses MANY initial guesses (5-12 depending on mode) with LONGER timeout
+# - CAN be parallelized (not in threaded region yet)
+# - Rationale: MLE is the reference point - should be best we can find
+# - Profile peaks should never exceed MLE; if they do, we didn't try hard enough!
 #
-# To implement: modify profile_target() to accept parallel=true flag and use MLE
-# as ω_initial for all grid points instead of chaining solutions.
+# PROFILING (conditional optimization):
+# - Uses sequential warm-start (previous solution → next grid point)
+# - 3 parameters profiled in PARALLEL using Threads.@threads
+# - Each profile optimization is sequential (adaptive continuation)
+# - Rationale: Warm start improves convergence dramatically
+#
+# ALTERNATIVE (not implemented): Parallelize within each profile
+# - Use MLE as initial guess for all grid points → enables parallelization
+# - Each optimization becomes independent → can use Julia's @threads
+# - Trade-off: potentially slower convergence per point without warm start
+# - Would require modify profile_target() to accept parallel=true flag
 
 const CONFIG = PROFILE_CONFIGS[PROFILE_MODE]
 println("=" ^ 70)
@@ -56,6 +77,8 @@ println("  1D grid: $(CONFIG.grid_1d) points")
 println("  2D grid: $(CONFIG.grid_2d) points")
 println("  Timeout: $(CONFIG.timeout)s per optimization")
 println("  Initial guesses: $(CONFIG.n_guesses)")
+println("  MLE guesses: $(CONFIG.mle_guesses) (can be parallelized)")
+println("  MLE timeout: $(CONFIG.mle_timeout)s per guess")
 println("  2D profiling: $(CONFIG.do_2d)")
 est_time = CONFIG.do_2d ?
     (2 * CONFIG.grid_1d + prod(CONFIG.grid_2d)) * CONFIG.n_guesses * CONFIG.timeout / 60 :
@@ -162,7 +185,9 @@ println(repeat("=", 70))
 
 # Time grid - observations at sparse time points
 T_end = 10000.0  # ~1 oscillation cycle (period ≈ 9000s with biological params)
-NT = 9
+NT = 7  # Reduced from 9 to increase visual uncertainty in profile-wise predictions
+        # NT=7 gives 21 observations (3 species × 7 times) for 18 parameters (3 DoF)
+        # This balances identifiability with meaningful uncertainty visualization
 t_obs = LinRange(0, T_end, NT)
 
 # Fine grid for predictions and IIR analysis
@@ -389,25 +414,27 @@ lnlike_θ_log = θ_log -> lnlike_θ(exp.(θ_log))
 
 # Optimize to find MLE (empty target_indices means find MLE)
 target_indices = Int[]  # Empty for MLE
-n_guesses_mle = 3
+n_guesses_mle = CONFIG.mle_guesses
 grid_steps_mle = Int[]  # Empty for MLE
 
 # Generate multiple initial guesses
 nuisance_guesses_mle = generate_initial_guesses(θ_log_lower, θ_log_upper, n_guesses_mle)
 
-println("\nRunning optimization...")
-println("  (This may take up to 90 seconds with 3 initial guesses)")
+println("\nRunning MLE optimization...")
+println("  Using $(n_guesses_mle) initial guesses (sequential, NLopt not thread-safe)")
+println("  Timeout: $(CONFIG.mle_timeout)s per guess")
+println("  Expected wallclock time: ~$(round(n_guesses_mle * CONFIG.mle_timeout / 60, digits=1)) minutes")
 flush(stdout)
 
 t_mle_start = time()
 θ_log_MLE, lnlike_MLE = profile_target(
     lnlike_θ_log, target_indices,
     θ_log_lower, θ_log_upper,
-    θ_log_initial;
+    nuisance_guesses_mle[1];  # Use first generated guess (midpoint) as main initial
     grid_steps=grid_steps_mle,
-    ω_initial_extras=nuisance_guesses_mle,
+    ω_initial_extras=nuisance_guesses_mle[2:end],  # Rest as extras (avoid duplicate)
     method=:LN_BOBYQA,
-    optmaxtime=30.0)
+    optmaxtime=CONFIG.mle_timeout)
 t_mle_elapsed = time() - t_mle_start
 
 println("Optimization complete!")
@@ -1167,6 +1194,19 @@ if size(N, 2) > 0
     println("  Varimax: $var_singles single + $var_ratios β/K ratios + $(rank_J-var_singles-var_ratios) other = $rank_J total")
     println("  Varimax interpretability: $(var_singles+var_ratios)/$rank_J simple combinations ($(round(100*(var_singles+var_ratios)/rank_J, digits=1))%)")
 
+    # Export identifiability table to CSV
+    csv_path = joinpath(@__DIR__, "repressilator_identifiability_table.csv")
+    open(csv_path, "w") do io
+        println(io, "Rank,Combination,Sigma_eff,Type")
+        for rank in 1:rank_J
+            var_idx, var_mono, var_sigma, var_type = varimax_results[rank]
+            # Escape commas in monomial strings
+            mono_escaped = replace(var_mono, "," => ";")
+            println(io, "$rank,\"$mono_escaped\",$(round(var_sigma,digits=3)),$var_type")
+        end
+    end
+    println("\nIdentifiability table exported to: $csv_path")
+
     println("\nVarimax-rotated null directions (βK products):")
 
     for j in 1:size(N_varimax, 2)
@@ -1341,128 +1381,126 @@ println(repeat("=", 70))
 println("\n" * repeat("=", 70))
 println("STARTING PROFILE LIKELIHOOD ANALYSIS")
 println(repeat("=", 70))
-println("\nProfiling K₁ and β₁ individually in θ-space (comparison, using $(Threads.nthreads()) threads)...")
-t_profile_individuals_start = time()
+println("\nProfiling K₁, β₁, and β₁/K₁ ratio in parallel (using $(Threads.nthreads()) threads)...")
+t_profiling_start = time()
 
 K1_index = 10
 β1_index = 7
 n_guesses = CONFIG.n_guesses
 
-# Pre-allocate result containers
-profile_results = Vector{Any}(undef, 2)
+# Pre-allocate result containers for all three profiles
+all_profile_results = Vector{Any}(undef, 3)
 
-Threads.@threads for i in 1:2
-    param_index = i == 1 ? K1_index : β1_index
-    param_name = i == 1 ? "K₁" : "β₁"
+Threads.@threads for i in 1:3
+    if i == 1
+        # Profile K₁ in θ-space
+        println("\n1. Profiling K₁ (parameter $K1_index, non-identifiable)...")
 
-    println("\n$(i). Profiling $param_name (parameter $param_index, non-identifiable)...")
+        nuisance_indices = setdiff(1:n_params, K1_index)
+        nuisance_guess = θ_log_MLE[nuisance_indices]
+        nuisance_extras = generate_initial_guesses(
+            θ_log_lower[nuisance_indices],
+            θ_log_upper[nuisance_indices],
+            n_guesses)
 
-    nuisance_indices = setdiff(1:n_params, param_index)
-    nuisance_guess = θ_log_MLE[nuisance_indices]
+        ψ_values, lnlike_values, convergence_info = profile_target(
+            lnlike_θ_log, K1_index,
+            θ_log_lower, θ_log_upper,
+            nuisance_guess;
+            grid_steps=[CONFIG.grid_1d],
+            ω_initial_extras=nuisance_extras,
+            method=:LN_BOBYQA,
+            optmaxtime=CONFIG.timeout,
+            track_convergence=true)
 
-    nuisance_extras = generate_initial_guesses(
-        θ_log_lower[nuisance_indices],
-        θ_log_upper[nuisance_indices],
-        n_guesses)
+        profile_vals = [ψ[K1_index] for ψ in ψ_values]
+        println("  Profiled K₁ range: [$(round(exp(minimum(profile_vals)), digits=2)), $(round(exp(maximum(profile_vals)), digits=2))]")
 
-    ψ_values, lnlike_values = profile_target(
-        lnlike_θ_log, param_index,
-        θ_log_lower, θ_log_upper,
-        nuisance_guess;
-        grid_steps=[CONFIG.grid_1d],
-        ω_initial_extras=nuisance_extras,
-        method=:LN_BOBYQA,
-        optmaxtime=CONFIG.timeout)
+        lower, upper, _ = construct_upper_lower_profile_wise_CIs_for_mean(
+            distrib_fine_θ_log, ψ_values, lnlike_values; l_level=95, df=rank_J)
 
-    profile_vals = [ψ[param_index] for ψ in ψ_values]
-    println("  Profiled $param_name range: [$(round(exp(minimum(profile_vals)), digits=2)), $(round(exp(maximum(profile_vals)), digits=2))]")
+        all_profile_results[1] = (ψ_values, lnlike_values, lower, upper, profile_vals, convergence_info)
 
-    # Compute prediction intervals
-    lower, upper, _ = construct_upper_lower_profile_wise_CIs_for_mean(
-        distrib_fine_θ_log, ψ_values, lnlike_values; l_level=95, df=rank_J)
+    elseif i == 2
+        # Profile β₁ in θ-space
+        println("\n2. Profiling β₁ (parameter $β1_index, non-identifiable)...")
 
-    # Store results
-    profile_results[i] = (ψ_values, lnlike_values, lower, upper, profile_vals)
-end
+        nuisance_indices = setdiff(1:n_params, β1_index)
+        nuisance_guess = θ_log_MLE[nuisance_indices]
+        nuisance_extras = generate_initial_guesses(
+            θ_log_lower[nuisance_indices],
+            θ_log_upper[nuisance_indices],
+            n_guesses)
 
-# Extract results from parallel computation
-ψK1_values, lnlike_K1_values, lower_K1, upper_K1, K1_profile_vals = profile_results[1]
-ψβ1_values, lnlike_β1_values, lower_β1, upper_β1, β1_profile_vals = profile_results[2]
+        ψ_values, lnlike_values, convergence_info = profile_target(
+            lnlike_θ_log, β1_index,
+            θ_log_lower, θ_log_upper,
+            nuisance_guess;
+            grid_steps=[CONFIG.grid_1d],
+            ω_initial_extras=nuisance_extras,
+            method=:LN_BOBYQA,
+            optmaxtime=CONFIG.timeout,
+            track_convergence=true)
 
-t_profile_individuals_elapsed = time() - t_profile_individuals_start
-println("Individual parameter profiling complete!")
-println("  Time: $(round(t_profile_individuals_elapsed, digits=1)) seconds")
+        profile_vals = [ψ[β1_index] for ψ in ψ_values]
+        println("  Profiled β₁ range: [$(round(exp(minimum(profile_vals)), digits=2)), $(round(exp(maximum(profile_vals)), digits=2))]")
 
-# Profile ratio and best single parameter in parallel
-println("\nProfiling ratio and best single parameter in parallel (using $(Threads.nthreads()) threads)...")
-t_profile_ratio_start = time()
+        lower, upper, _ = construct_upper_lower_profile_wise_CIs_for_mean(
+            distrib_fine_θ_log, ψ_values, lnlike_values; l_level=95, df=rank_J)
 
-# Pre-allocate for ratio + single parameter
-additional_profiles = Vector{Any}(undef, 2)
+        all_profile_results[2] = (ψ_values, lnlike_values, lower, upper, profile_vals, convergence_info)
 
-Threads.@threads for job in 1:2
-    if job == 1
-        # Profile β₁/K₁ combination directly in ψ-space
-        println("\n  Job 1: Profiling identifiable β₁/K₁ ratio...")
+    else  # i == 3
+        # Profile β₁/K₁ ratio in ψ-space
+        println("\n3. Profiling β₁/K₁ ratio (identifiable combination in IIR coordinates)...")
+
         nuisance_indices_ratio = setdiff(1:n_params, ψ_K1_β1_index)
         nuisance_guess_ratio = ψ_MLE[nuisance_indices_ratio]
-
         nuisance_extras_ratio = generate_initial_guesses(
             ψ_lower_bounds[nuisance_indices_ratio],
             ψ_upper_bounds[nuisance_indices_ratio],
             n_guesses)
 
-        ψ_ratio_values, lnlike_ratio_values = profile_target(
+        ψ_ratio_values, lnlike_ratio_values, convergence_info_ratio = profile_target(
             lnlike_ψ, ψ_K1_β1_index,
             ψ_lower_bounds, ψ_upper_bounds,
             nuisance_guess_ratio;
             grid_steps=[CONFIG.grid_1d],
             ω_initial_extras=nuisance_extras_ratio,
             method=:LN_BOBYQA,
-            optmaxtime=CONFIG.timeout)
+            optmaxtime=CONFIG.timeout,
+            track_convergence=true)
 
-        additional_profiles[1] = (ψ_ratio_values, lnlike_ratio_values)
-    else
-        # Profile best identified single parameter
-        idx = findfirst(entry -> entry[4] == "single", varimax_results)
-        if idx !== nothing
-            best_single_entry = varimax_results[idx]
-            best_index, best_label, _, _ = best_single_entry
-            println("\n  Job 2: Profiling best single parameter: " * best_label * " (ψ[" * string(best_index) * "])")
+        # For ratio, we need to compute prediction intervals
+        lower_ratio, upper_ratio, _ = construct_upper_lower_profile_wise_CIs_for_mean(
+            distrib_fine_ψ, ψ_ratio_values, lnlike_ratio_values; l_level=95, df=rank_J)
 
-            # Use biological bounds directly (already correctly derived via transformation)
-            ψ_lower_single = copy(ψ_lower_bounds)
-            ψ_upper_single = copy(ψ_upper_bounds)
-
-            nuisance_indices_single = setdiff(1:n_params, best_index)
-            nuisance_guess_single = ψ_MLE[nuisance_indices_single]
-            nuisance_extras_single = generate_initial_guesses(
-                ψ_lower_single[nuisance_indices_single],
-                ψ_upper_single[nuisance_indices_single],
-                CONFIG.n_guesses)
-
-            ψ_single_values, lnlike_single_values = profile_target(
-                lnlike_ψ, best_index,
-                ψ_lower_single, ψ_upper_single,
-                nuisance_guess_single;
-                grid_steps=[CONFIG.grid_1d],
-                ω_initial_extras=nuisance_extras_single,
-                method=:LN_BOBYQA,
-                optmaxtime=CONFIG.timeout)
-
-            additional_profiles[2] = (ψ_single_values, lnlike_single_values, best_index, best_label)
-        else
-            additional_profiles[2] = nothing
-        end
+        all_profile_results[3] = (ψ_ratio_values, lnlike_ratio_values, lower_ratio, upper_ratio, convergence_info_ratio)
     end
 end
 
-t_profile_ratio_elapsed = time() - t_profile_ratio_start
-println("\nRatio and single parameter profiling complete!")
-println("  Time: $(round(t_profile_ratio_elapsed, digits=1)) seconds")
+t_profiling_elapsed = time() - t_profiling_start
+println("\nAll profiling complete!")
+println("  Time: $(round(t_profiling_elapsed, digits=1)) seconds")
 
-# Extract ratio results
-ψ_ratio_values, lnlike_ratio_values = additional_profiles[1]
+# Extract results from parallel computation
+ψK1_values, lnlike_K1_values, lower_K1, upper_K1, K1_profile_vals, convergence_K1 = all_profile_results[1]
+ψβ1_values, lnlike_β1_values, lower_β1, upper_β1, β1_profile_vals, convergence_β1 = all_profile_results[2]
+ψ_ratio_values, lnlike_ratio_values, lower_ratio, upper_ratio, convergence_ratio = all_profile_results[3]
+
+# Display convergence diagnostics
+println("\nConvergence Diagnostics:")
+for (name, conv_info) in [("K₁", convergence_K1), ("β₁", convergence_β1), ("β₁/K₁ ratio", convergence_ratio)]
+    counts = Dict{Symbol, Int}()
+    for status in conv_info
+        counts[status] = get(counts, status, 0) + 1
+    end
+    println("  $name ($(length(conv_info)) grid points):")
+    for (status, count) in sort(collect(counts), by=x->x[2], rev=true)
+        pct = round(100 * count / length(conv_info), digits=1)
+        println("    $status: $count ($pct%)")
+    end
+end
 
 # Extract the ratio component from each ψ vector
 ratio_vals_psi = [ψ[ψ_K1_β1_index] for ψ in ψ_ratio_values]
@@ -1522,63 +1560,6 @@ plot_1D_profile("repressilator",
     ψ_MLE=θ_MLE[β1_index],
     save_dir=joinpath(@__DIR__, "..", "figures") * "/")
 
-# Extract and plot single parameter results (from parallel computation)
-if additional_profiles[2] !== nothing
-    ψ_single_values, lnlike_single_values, best_index, best_label = additional_profiles[2]
-
-    single_vals_psi = [ψ[best_index] for ψ in ψ_single_values]
-    # For single parameters that map 1:1 (like α₃), ψ[i] ≈ θ[i], so these are actual parameter values
-    single_values = single_vals_psi
-    println("\nSingle parameter results:")
-    println("  Parameter: " * best_label * " (ψ[" * string(best_index) * "])")
-    println("  Single parameter ψ grid: " , single_vals_psi)
-    println("  Single parameter lnlike: " , lnlike_single_values)
-
-    sort_idx = sortperm(single_values)
-    single_values_sorted = single_values[sort_idx]
-    lnlike_single_sorted = lnlike_single_values[sort_idx]
-    lnlike_single_norm = lnlike_single_sorted .- maximum(lnlike_single_sorted)
-
-    ψ_true = θ_to_ψ(θ_true)
-
-    # Convert Unicode subscripts to LaTeX for plotting
-    function unicode_to_latex(s)
-        # Replace Greek letters with subscripts
-        s = replace(s, "α₀₁" => "\\alpha_{01}")
-        s = replace(s, "α₀₂" => "\\alpha_{02}")
-        s = replace(s, "α₀₃" => "\\alpha_{03}")
-        s = replace(s, "α₁" => "\\alpha_{1}")
-        s = replace(s, "α₂" => "\\alpha_{2}")
-        s = replace(s, "α₃" => "\\alpha_{3}")
-        s = replace(s, "β₁" => "\\beta_{1}")
-        s = replace(s, "β₂" => "\\beta_{2}")
-        s = replace(s, "β₃" => "\\beta_{3}")
-        s = replace(s, "K₁" => "K_{1}")
-        s = replace(s, "K₂" => "K_{2}")
-        s = replace(s, "K₃" => "K_{3}")
-        s = replace(s, "k_degm₁" => "k_{degm1}")
-        s = replace(s, "k_degm₂" => "k_{degm2}")
-        s = replace(s, "k_degm₃" => "k_{degm3}")
-        s = replace(s, "k_degp₁" => "k_{degp1}")
-        s = replace(s, "k_degp₂" => "k_{degp2}")
-        s = replace(s, "k_degp₃" => "k_{degp3}")
-        return s
-    end
-
-    best_label_latex = unicode_to_latex(best_label)
-
-    plot_1D_profile("repressilator",
-        single_values_sorted, lnlike_single_norm, best_label_latex;
-        varname_save=string("psi", best_index, "_single"),
-        ψ_true=ψ_true[best_index],
-        ψ_MLE=ψ_MLE[best_index],
-        save_dir=joinpath(@__DIR__, "..", "figures") * "/")
-end
-
-# Prediction intervals using ψ-space distribution
-lower_ratio, upper_ratio, _ = construct_upper_lower_profile_wise_CIs_for_mean(
-    distrib_fine_ψ, ψ_ratio_values, lnlike_ratio_values; l_level=95, df=rank_J)
-
 # Optional: retain legacy 2D joint profile for validation if requested
 if CONFIG.do_2d
     println("\n(Optional) Running 2D joint profile of (β₁, K₁) in θ-space for validation...")
@@ -1604,14 +1585,100 @@ if CONFIG.do_2d
     println("  Joint profile ratio range: [$(round(minimum(ratio_values_joint), digits=2)), $(round(maximum(ratio_values_joint), digits=2))]")
 end
 
-t_total_profiling = t_profile_individuals_elapsed + t_profile_ratio_elapsed
 println("\n" * repeat("=", 70))
 println("PROFILING SUMMARY")
 println(repeat("=", 70))
-println("Individual parameters (K₁, β₁): $(round(t_profile_individuals_elapsed, digits=1))s")
-println("Ratio + best single (β₁/K₁, k_dp): $(round(t_profile_ratio_elapsed, digits=1))s")
-println("Total profiling time: $(round(t_total_profiling, digits=1))s")
+println("All three profiles (K₁, β₁, β₁/K₁ ratio) in parallel: $(round(t_profiling_elapsed, digits=1))s")
 println(repeat("=", 70))
+
+# Save profile data immediately after profiling to CSV files
+using CSV, DataFrames, Dates
+
+# Create results directory
+results_dir = joinpath(@__DIR__, "repressilator_results")
+mkpath(results_dir)
+
+# Extract ratio_profile_vals for saving
+ratio_profile_vals = [ψ[ψ_K1_β1_index] for ψ in ψ_ratio_values]
+
+# Save metadata
+open(joinpath(results_dir, "metadata.txt"), "w") do f
+    println(f, "Repressilator Profile Likelihood Results")
+    println(f, "Generated: ", Dates.now())
+    println(f, "Mode: $PROFILE_MODE")
+    println(f, "Grid points: $(CONFIG.grid_1d)")
+    println(f, "Initial guesses: $(CONFIG.n_guesses)")
+    println(f, "Timeout per optimization: $(CONFIG.timeout)s")
+    println(f, "\nMLE log-likelihood: $(round(lnlike_θ(θ_MLE), digits=4))")
+    println(f, "True log-likelihood: $(round(lnlike_θ(θ_true), digits=4))")
+    println(f, "\nMLE parameter values:")
+    param_names = ["α₀₁", "α₀₂", "α₀₃", "α₁", "α₂", "α₃", "β₁", "β₂", "β₃",
+                   "K₁", "K₂", "K₃", "k_degm₁", "k_degm₂", "k_degm₃",
+                   "k_degp₁", "k_degp₂", "k_degp₃"]
+    for (i, name) in enumerate(param_names)
+        println(f, "  $name = $(round(θ_MLE[i], digits=6))")
+    end
+end
+
+# Save K₁ profile
+K1_df = DataFrame(
+    parameter_value = exp.(K1_profile_vals),
+    log_likelihood = lnlike_K1_values
+)
+CSV.write(joinpath(results_dir, "K1_profile.csv"), K1_df)
+
+# Save β₁ profile
+beta1_df = DataFrame(
+    parameter_value = exp.(β1_profile_vals),
+    log_likelihood = lnlike_β1_values
+)
+CSV.write(joinpath(results_dir, "beta1_profile.csv"), beta1_df)
+
+# Save β₁/K₁ ratio profile
+ratio_df = DataFrame(
+    ratio_value = ratio_profile_vals,
+    log_likelihood = lnlike_ratio_values
+)
+CSV.write(joinpath(results_dir, "K1_beta1_ratio_profile.csv"), ratio_df)
+
+# Save prediction bounds (reshape to time × species matrices)
+# lower_K1, upper_K1 are vectors of length (n_time × n_species)
+n_time = length(t_pred)
+n_species = 3
+
+# Reshape from flattened column-major order [m1(t1), m2(t1), m3(t1), m1(t2), ...]
+# to time × species matrices
+lower_K1_matrix = reshape(lower_K1, (n_species, n_time))' # transpose to get time × species
+upper_K1_matrix = reshape(upper_K1, (n_species, n_time))'
+lower_β1_matrix = reshape(lower_β1, (n_species, n_time))'
+upper_β1_matrix = reshape(upper_β1, (n_species, n_time))'
+lower_ratio_matrix = reshape(lower_ratio, (n_species, n_time))'
+upper_ratio_matrix = reshape(upper_ratio, (n_species, n_time))'
+
+CSV.write(joinpath(results_dir, "prediction_bounds_K1_lower.csv"),
+          DataFrame(lower_K1_matrix, [:m1, :m2, :m3]))
+CSV.write(joinpath(results_dir, "prediction_bounds_K1_upper.csv"),
+          DataFrame(upper_K1_matrix, [:m1, :m2, :m3]))
+CSV.write(joinpath(results_dir, "prediction_bounds_beta1_lower.csv"),
+          DataFrame(lower_β1_matrix, [:m1, :m2, :m3]))
+CSV.write(joinpath(results_dir, "prediction_bounds_beta1_upper.csv"),
+          DataFrame(upper_β1_matrix, [:m1, :m2, :m3]))
+CSV.write(joinpath(results_dir, "prediction_bounds_ratio_lower.csv"),
+          DataFrame(lower_ratio_matrix, [:m1, :m2, :m3]))
+CSV.write(joinpath(results_dir, "prediction_bounds_ratio_upper.csv"),
+          DataFrame(upper_ratio_matrix, [:m1, :m2, :m3]))
+
+# Save time grid
+time_df = DataFrame(time = t_pred)
+CSV.write(joinpath(results_dir, "time_grid.csv"), time_df)
+
+# Save MLE prediction mean
+pred_mean_MLE_matrix = reshape(pred_mean_MLE, (n_species, n_time))'
+CSV.write(joinpath(results_dir, "prediction_MLE.csv"),
+          DataFrame(pred_mean_MLE_matrix, [:m1, :m2, :m3]))
+
+println("\n✓ Profile data saved to: $results_dir")
+println("  Files: metadata.txt, *_profile.csv, prediction_bounds_*.csv, time_grid.csv, prediction_MLE.csv")
 
 println("\nPrediction interval widths (mean across time/species):")
 width_K1 = mean(upper_K1 - lower_K1)
@@ -1653,27 +1720,39 @@ println(repeat("=", 70))
 # Extract actual noisy data (data is flattened in time-major order)
 data_mat = reshape(data, 3, NT)'  # NT×3
 
-# Plot predictions for all three mRNA species
+# Plot individual prediction intervals for each parameter and observable
 species_names = ["m_{1}", "m_{2}", "m_{3}"]
 species_subscripts = ["1", "2", "3"]
+param_info = [
+    (K1_values, "K1", "K_{1}"),
+    (β1_values, "beta1", "\\beta_{1}"),
+    (K_over_beta_values, "K1_over_beta1_ratio", "K_{1}/\\beta_{1}")
+]
 
-for (i, (name, subscript)) in enumerate(zip(species_names, species_subscripts))
-    ci_intervals = [
-        (lower_K1_mat[i,:], upper_K1_mat[i,:], "K₁ individual", :red),
-        (lower_β1_mat[i,:], upper_β1_mat[i,:], "β₁ individual", :orange),
-        (lower_ratio_mat[i,:], upper_ratio_mat[i,:], "β₁/K₁ identifiable (IIR)", :blue)
-    ]
+# Create individual plots: 3 observables × 3 parameters = 9 plots
+pred_upper_limit = 50.0  # Set y-axis upper limit for better visualization
+for (i, (obs_name, obs_sub)) in enumerate(zip(species_names, species_subscripts))
+    for (param_vals, param_save, param_latex) in param_info
+        # Determine which CI bounds to use
+        if param_save == "K1"
+            lower, upper = lower_K1_mat[i,:], upper_K1_mat[i,:]
+        elseif param_save == "beta1"
+            lower, upper = lower_β1_mat[i,:], upper_β1_mat[i,:]
+        else  # ratio
+            lower, upper = lower_ratio_mat[i,:], upper_ratio_mat[i,:]
+        end
 
-    plot_profile_wise_CI_comparison(
-        t_pred, mle_mat[i,:],
-        ci_intervals,
-        "repressilator_$(subscript)", "$name", "t", "t";
-        data_indep=t_obs, data_dep=data_mat[:, i],
-        title="Repressilator $name: Individual vs Ratio Prediction Intervals",
-        save_dir=joinpath(@__DIR__, "..", "figures") * "/",
-        show_legend=false,
-        show_title=false
-    )
+        plot_profile_wise_CI_for_mean(
+            t_pred, lower, upper, mle_mat[i,:],
+            "repressilator", obs_name, "t", "t";
+            data_indep=t_obs, data_dep=data_mat[:, i],
+            target=param_latex,
+            target_save=param_save,
+            save_dir=joinpath(@__DIR__, "..", "figures") * "/",
+            include_legend=false,
+            ylims=(0, pred_upper_limit)
+        )
+    end
 end
 
 println("\n" * repeat("=", 70))

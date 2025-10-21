@@ -1,4 +1,10 @@
 # ----------------------------------------------------------------
+# Note: NLopt is not thread-safe
+# ----------------------------------------------------------------
+# Multi-start optimization runs sequentially to avoid NLopt threading issues.
+# For parallelization, use Distributed.jl with separate processes instead.
+
+# ----------------------------------------------------------------
 # Likelihood in Original (xy) Coordinates (dimension independent)
 # ----------------------------------------------------------------
 function construct_lnlike_xy(distrib_xy, data; dist_type=:uni)
@@ -121,8 +127,8 @@ end
 
 function profile_target(lnlike_θ, ψ_indices, θ_bounds_lower, θ_bounds_upper, ω_initial;
     grid_steps=100, ω_initial_extras::Union{Nothing, Vector{Vector{Float64}}}=nothing,
-    method=:LD_TNEWTON_PRECOND, local_method=:LD_TNEWTON_PRECOND, xtol_rel=1e-9, ftol_rel=1e-9, 
-    optmaxtime=120, popsize=50)
+    method=:LD_TNEWTON_PRECOND, local_method=:LD_TNEWTON_PRECOND, xtol_rel=1e-9, ftol_rel=1e-9,
+    optmaxtime=120, popsize=50, track_convergence=false)
     """
     Construct profile likelihood by maximizing over nuisance parameters.
 
@@ -196,14 +202,14 @@ function profile_target(lnlike_θ, ψ_indices, θ_bounds_lower, θ_bounds_upper,
             return Float64[], lnlike_θ([])
         end
         
-        # Try multiple starting points if provided
-        best_lnlike = -Inf
-        best_ω = similar(ω_initial)
-
+        # Try multiple starting points sequentially (NLopt is not thread-safe)
         starting_points = [ω_initial]
         if !isnothing(ω_initial_extras)
             append!(starting_points, ω_initial_extras)
         end
+
+        best_lnlike = -Inf
+        best_ω = similar(ω_initial)
 
         for ω₀ in starting_points
             opt.max_objective = construct_lnlike_to_max(lnlike_θ)
@@ -240,6 +246,11 @@ function profile_target(lnlike_θ, ψ_indices, θ_bounds_lower, θ_bounds_upper,
     # Get indices for reconstructing full parameter vector
     ψω_to_θ_indices = construct_ψω_to_θ_indices(dim_all, ψ_indices, ω_indices)
 
+    # Initialize convergence tracking if requested
+    if track_convergence
+        convergence_outcomes = Vector{Symbol}(undef, length(ψ_combinations))
+    end
+
     # Profile over grid
     for (i, ψᵢ) in enumerate(ψ_combinations)
         ψω_to_θ = ψω -> ψω[ψω_to_θ_indices]
@@ -247,24 +258,39 @@ function profile_target(lnlike_θ, ψ_indices, θ_bounds_lower, θ_bounds_upper,
             # Optimize nuisance parameters
             best_lnlike = -Inf
             best_ω = similar(ω_initial)
+            converged_to = :NOT_TRACKED  # Default if tracking disabled
 
             starting_points = [ω_initial]
             if !isnothing(ω_initial_extras)
+                # After first grid point, use adaptive continuation for extra guesses
+                if i > 1
+                    ω_initial_extras = generate_initial_guesses(
+                        ω_bounds_lower, ω_bounds_upper, length(ω_initial_extras);
+                        reference_point=ω_initial)
+                end
                 append!(starting_points, ω_initial_extras)
             end
 
+            # Try multiple starting points sequentially (NLopt is not thread-safe)
             for ω₀ in starting_points
-                # Construct log-likelihood function for fixed current interest parameter value
                 opt.max_objective = construct_lnlike_to_max(ω -> lnlike_θ(ψω_to_θ([ψᵢ..., ω...])))
-                (lnlike_opt, ωᵢ_opt) = optimize(opt, ω₀)
+                (lnlike_opt, ωᵢ_opt, return_code) = optimize(opt, ω₀)
                 if lnlike_opt > best_lnlike
                     best_lnlike = lnlike_opt
                     best_ω = ωᵢ_opt
+                    if track_convergence
+                        converged_to = return_code
+                    end
                 end
             end
 
             θ_values[i] = ψω_to_θ([ψᵢ..., best_ω...])
             lnlike_ψ_values[i] = best_lnlike
+
+            # Store convergence outcome if tracking
+            if track_convergence
+                convergence_outcomes[i] = converged_to
+            end
 
             # Update initial guess for next iteration
             ω_initial = best_ω
@@ -273,13 +299,22 @@ function profile_target(lnlike_θ, ψ_indices, θ_bounds_lower, θ_bounds_upper,
             # Pure gridding case
             θ_values[i] = ψω_to_θ([ψᵢ...])
             lnlike_ψ_values[i] = lnlike_θ(θ_values[i])
+
+            # No optimization needed, mark as N/A
+            if track_convergence
+                convergence_outcomes[i] = :NO_OPTIMIZATION
+            end
         end
     end
 
     # Normalize likelihood values
     lnlike_ψ_values = lnlike_ψ_values .- maximum(lnlike_ψ_values)
 
-    return θ_values, lnlike_ψ_values
+    if track_convergence
+        return θ_values, lnlike_ψ_values, convergence_outcomes
+    else
+        return θ_values, lnlike_ψ_values
+    end
 end
 
 function construct_upper_lower_profile_wise_CIs_for_mean(

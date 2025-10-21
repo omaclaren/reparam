@@ -40,12 +40,13 @@ function plot_1D_profile(model_name, ψ_values, lnlike_ψ_values, varname;
 
     # Convert to likelihood scale
     like_ψ_values = exp.(lnlike_ψ_values)
-    
+
     # Create plot
-    plt = plot(ψ_values, exp.(lnlike_ψ_values), 
-              xlabel=latexstring(varname), 
+    plt = plot(ψ_values, exp.(lnlike_ψ_values),
+              xlabel=latexstring(varname),
               ylabel="profile likelihood",
-              color=:black, lw=2, legend=false, grid=false)
+              color=:black, lw=2, legend=false, grid=false,
+              ylims=(0, 1.1))
     
     # Add maximum likelihood line
     if length(ψ_MLE) > 0
@@ -304,7 +305,7 @@ function plot_profile_wise_CI_for_mean(indep_var, lower, upper, mle,
                  indep_varname, indep_varname_save;
                  data_indep=nothing, data_dep=nothing, true_mean=nothing, 
                  target="", target_save="", save_dir="./figures/", fmt=:png, dpi=600,
-                 verbose_labels=false, include_legend=false)
+                 verbose_labels=false, include_legend=false, ylims=nothing)
     """
     Plot confidence intervals for mean function based on profile likelihood.
 
@@ -323,7 +324,10 @@ function plot_profile_wise_CI_for_mean(indep_var, lower, upper, mle,
     - target_save: Target parameter name for saving (optional)
     - save_dir: Directory for saving plot (default: "./")
     - fmt: File type for saving (default: :png)
+    - dpi: Resolution for saved plot (default: 600)
     - verbose_labels: Whether to add additional information to legend (default: false)
+    - include_legend: Whether to include legend in plot (default: false)
+    - ylims: Y-axis limits as a tuple (min, max) (optional)
     """
     # Determine labels based on include_legend and verbose_labels
     ci_label    = include_legend ? latexstring("CI ("*target*")") : ""
@@ -331,14 +335,15 @@ function plot_profile_wise_CI_for_mean(indep_var, lower, upper, mle,
     data_label  = include_legend ? (verbose_labels ? "Data"  : "") : ""
     truth_label = include_legend ? (verbose_labels ? "Truth" : "") : ""
 
+    extra_kwargs = isnothing(ylims) ? (;) : (; ylims=ylims)
     plt = plot(indep_var, lower, lw=0,
-              fillrange=upper, fillalpha=0.20, color=:purple,
-              xlabel=latexstring(indep_varname),
-              ylabel=latexstring(dep_varname),
-              xlims=(indep_var[1], indep_var[end]),
-              label=ci_label, 
-              legend=:topright, grid=false)
-
+          fillrange=upper, fillalpha=0.20, color=:purple,
+          xlabel=latexstring(indep_varname),
+          ylabel=latexstring(dep_varname),
+          xlims=(indep_var[1], indep_var[end]),
+          label=ci_label, 
+          legend=:topright, grid=false;
+          extra_kwargs...)
     
     plot!(indep_var, mle, lw=2, linecolor=:purple4, label=mle_label)
     
