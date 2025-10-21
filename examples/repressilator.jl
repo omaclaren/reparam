@@ -185,8 +185,8 @@ println(repeat("=", 70))
 
 # Time grid - observations at sparse time points
 T_end = 10000.0  # ~1 oscillation cycle (period ≈ 9000s with biological params)
-NT = 7  # Reduced from 9 to increase visual uncertainty in profile-wise predictions
-        # NT=7 gives 21 observations (3 species × 7 times) for 18 parameters (3 DoF)
+NT = 8  # Reduced from 9 to increase visual uncertainty in profile-wise predictions
+        # NT=8 gives 24 observations (3 species × 8 times) for 18 parameters (6 DoF)
         # This balances identifiability with meaningful uncertainty visualization
 t_obs = LinRange(0, T_end, NT)
 
