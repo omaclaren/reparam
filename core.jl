@@ -125,6 +125,244 @@ function construct_ellipse_lnlike_approx(lnlike, θ_est; method_type=:auto, retu
     end
 end
 
+"""
+    profile_point(lnlike_θ, ψ_fixed, ψ_indices, θ_bounds_lower, θ_bounds_upper, ω_initial;
+                  ω_initial_extras=nothing, method=:LN_BOBYQA, local_method=:LD_TNEWTON_PRECOND,
+                  xtol_rel=1e-9, ftol_rel=1e-9, optmaxtime=60.0, popsize=50, track_convergence=false)
+
+Optimize log-likelihood at a single fixed point in interest parameter space.
+
+This is the primitive operation for profile likelihood: given fixed values for
+parameters of interest (ψ_fixed), find the values of nuisance parameters (ω)
+that maximize the likelihood. Uses multi-start sequential optimization.
+
+# Arguments
+- `lnlike_θ`: Log-likelihood function taking full parameter vector θ
+- `ψ_fixed`: Fixed values for interest parameters (vector matching length of ψ_indices)
+- `ψ_indices`: Indices of interest parameters in full θ vector
+- `θ_bounds_lower`: Lower bounds for all parameters
+- `θ_bounds_upper`: Upper bounds for all parameters
+- `ω_initial`: Initial guess for nuisance parameters
+- `ω_initial_extras`: Additional starting guesses for nuisance parameters (default: nothing)
+- `method`: NLopt method for optimization (default: :LN_BOBYQA)
+- `local_method`: Local method if using global optimizer (default: :LD_TNEWTON_PRECOND)
+- `xtol_rel`: Relative tolerance in parameters (default: 1e-9)
+- `ftol_rel`: Relative tolerance in function value (default: 1e-9)
+- `optmaxtime`: Maximum time per optimization in seconds (default: 60.0)
+- `popsize`: Population size for global methods (default: 50)
+- `track_convergence`: Whether to track NLopt return codes (default: false)
+
+# Returns
+- `θ_opt`: Optimal full parameter vector
+- `ω_opt`: Optimal nuisance parameter values
+- `lnlike_opt`: Optimized log-likelihood value
+- `converged_to`: NLopt return code (if track_convergence=true, else :NOT_TRACKED)
+
+# Notes
+- All starting points are tried sequentially (NLopt is not thread-safe)
+- Returns best result across all starting points
+- If no nuisance parameters (dim_ω=0), returns ψ_fixed with its likelihood
+"""
+function profile_point(lnlike_θ, ψ_fixed::Vector{Float64}, ψ_indices::Vector{Int},
+                       θ_bounds_lower, θ_bounds_upper, ω_initial::Vector{Float64};
+                       ω_initial_extras::Union{Nothing, Vector{Vector{Float64}}}=nothing,
+                       method=:LN_BOBYQA, local_method=:LD_TNEWTON_PRECOND,
+                       xtol_rel=1e-9, ftol_rel=1e-9, optmaxtime=60.0, popsize=50,
+                       track_convergence=false)
+
+    # Get dimensions and indices
+    dim_all = length(θ_bounds_lower)
+    ω_indices = setdiff(1:dim_all, ψ_indices)
+    dim_ω = length(ω_indices)
+
+    # Build index mapping for reconstructing full θ vector
+    ψω_to_θ_indices = construct_ψω_to_θ_indices(dim_all, ψ_indices, ω_indices)
+    ψω_to_θ = ψω -> ψω[ψω_to_θ_indices]
+
+    # Pure gridding case (no nuisance parameters)
+    if dim_ω == 0
+        θ_opt = ψω_to_θ(ψ_fixed)
+        lnlike_opt = lnlike_θ(θ_opt)
+        converged_to = :NO_OPTIMIZATION
+        return θ_opt, Float64[], lnlike_opt, converged_to
+    end
+
+    # Extract bounds for nuisance parameters
+    ω_bounds_lower = θ_bounds_lower[ω_indices]
+    ω_bounds_upper = θ_bounds_upper[ω_indices]
+
+    # Setup NLopt optimizer
+    opt = if method in [:G_MLSL_LDS, :G_MLSL]
+        # Global optimization with local refinement
+        opt = Opt(method, dim_ω)
+        local_opt = Opt(local_method, dim_ω)
+        local_opt.maxtime = optmaxtime
+        local_opt.lower_bounds = ω_bounds_lower
+        local_opt.upper_bounds = ω_bounds_upper
+        local_opt.xtol_rel = xtol_rel
+        local_opt.ftol_rel = ftol_rel
+        local_optimizer!(opt, local_opt)
+        opt.population = popsize
+        opt
+    else
+        # Direct optimization methods
+        opt = Opt(method, dim_ω)
+        if method in (:GN_DIRECT, :GN_DIRECT_L, :GN_DIRECT_L_RAND)
+            opt.population = popsize
+        end
+        opt
+    end
+
+    # Set common optimizer options
+    opt.maxtime = optmaxtime
+    opt.lower_bounds = ω_bounds_lower
+    opt.upper_bounds = ω_bounds_upper
+    opt.xtol_rel = xtol_rel
+    opt.ftol_rel = ftol_rel
+
+    # Prepare starting points (ω_initial + extras)
+    starting_points = [ω_initial]
+    if !isnothing(ω_initial_extras)
+        append!(starting_points, ω_initial_extras)
+    end
+
+    # Try multiple starting points sequentially (NLopt is not thread-safe)
+    best_lnlike = -Inf
+    best_ω = similar(ω_initial)
+    converged_to = :NOT_TRACKED
+
+    for ω₀ in starting_points
+        # Define objective: maximize likelihood with ψ fixed at ψ_fixed
+        opt.max_objective = construct_lnlike_to_max(ω -> lnlike_θ(ψω_to_θ([ψ_fixed..., ω...])))
+
+        # Optimize
+        (lnlike_opt, ω_opt, return_code) = optimize(opt, ω₀)
+
+        # Keep best result
+        if lnlike_opt > best_lnlike
+            best_lnlike = lnlike_opt
+            best_ω = ω_opt
+            if track_convergence
+                converged_to = return_code
+            end
+        end
+    end
+
+    # Reconstruct full parameter vector
+    θ_opt = ψω_to_θ([ψ_fixed..., best_ω...])
+
+    return θ_opt, best_ω, best_lnlike, converged_to
+end
+
+
+"""
+    profile_grid_sequential(lnlike_θ, ψ_grid, ψ_indices, θ_bounds_lower, θ_bounds_upper, ω_initial;
+                           ω_initial_extras=nothing, method=:LN_BOBYQA, local_method=:LD_TNEWTON_PRECOND,
+                           xtol_rel=1e-9, ftol_rel=1e-9, optmaxtime=60.0, popsize=50, track_convergence=false)
+
+Execute profile likelihood over a pre-defined grid with adaptive continuation.
+
+Iterates through grid points in the order provided, using the optimized nuisance
+parameters from each point as the starting guess for the next. This "adaptive
+continuation" significantly speeds up optimization in smooth regions of parameter space.
+
+# Arguments
+- `lnlike_θ`: Log-likelihood function taking full parameter vector θ
+- `ψ_grid`: Vector of interest parameter vectors (each element is a Vector{Float64})
+- `ψ_indices`: Indices of interest parameters in full θ vector
+- `θ_bounds_lower`: Lower bounds for all parameters
+- `θ_bounds_upper`: Upper bounds for all parameters
+- `ω_initial`: Initial guess for nuisance parameters (used for first grid point)
+- `ω_initial_extras`: Additional starting guesses for nuisance parameters
+- `method`: NLopt method for optimization (default: :LN_BOBYQA)
+- `local_method`: Local method if using global optimizer
+- `xtol_rel`: Relative tolerance in parameters (default: 1e-9)
+- `ftol_rel`: Relative tolerance in function value (default: 1e-9)
+- `optmaxtime`: Maximum time per optimization in seconds (default: 60.0)
+- `popsize`: Population size for global methods (default: 50)
+- `track_convergence`: Whether to track NLopt return codes (default: false)
+
+# Returns
+- `θ_values`: Vector of optimal parameter vectors (length = length(ψ_grid))
+- `lnlike_values`: Vector of log-likelihood values (unnormalized)
+- `convergence_info`: Vector of convergence outcomes (if track_convergence=true)
+
+# Notes
+- Grid points are evaluated in the order provided
+- After the first point, ω_initial_extras (if provided) are regenerated around
+  the adaptive continuation point for better local exploration
+- Results are NOT normalized (caller should normalize if desired)
+"""
+function profile_grid_sequential(lnlike_θ, ψ_grid::Vector{Vector{Float64}}, ψ_indices::Vector{Int},
+                                 θ_bounds_lower, θ_bounds_upper, ω_initial::Vector{Float64};
+                                 ω_initial_extras::Union{Nothing, Vector{Vector{Float64}}}=nothing,
+                                 method=:LN_BOBYQA, local_method=:LD_TNEWTON_PRECOND,
+                                 xtol_rel=1e-9, ftol_rel=1e-9, optmaxtime=60.0, popsize=50,
+                                 track_convergence=false)
+
+    # Get dimensions
+    dim_all = length(θ_bounds_lower)
+    ω_indices = setdiff(1:dim_all, ψ_indices)
+    dim_ω = length(ω_indices)
+    n_grid = length(ψ_grid)
+
+    # Extract bounds for nuisance parameters (for regenerating extras)
+    ω_bounds_lower = θ_bounds_lower[ω_indices]
+    ω_bounds_upper = θ_bounds_upper[ω_indices]
+
+    # Pre-allocate result arrays
+    θ_values = Vector{Vector{Float64}}(undef, n_grid)
+    lnlike_values = Vector{Float64}(undef, n_grid)
+    if track_convergence
+        convergence_info = Vector{Symbol}(undef, n_grid)
+    end
+
+    # Track current nuisance initial guess for adaptive continuation
+    ω_current = ω_initial
+    ω_extras_current = ω_initial_extras
+
+    # Loop over grid points in order
+    for (i, ψᵢ) in enumerate(ψ_grid)
+        # Optimize at this grid point
+        θ_opt, ω_opt, lnlike_opt, conv = profile_point(
+            lnlike_θ, ψᵢ, ψ_indices,
+            θ_bounds_lower, θ_bounds_upper, ω_current;
+            ω_initial_extras=ω_extras_current,
+            method=method, local_method=local_method,
+            xtol_rel=xtol_rel, ftol_rel=ftol_rel,
+            optmaxtime=optmaxtime, popsize=popsize,
+            track_convergence=track_convergence
+        )
+
+        # Store results
+        θ_values[i] = θ_opt
+        lnlike_values[i] = lnlike_opt
+        if track_convergence
+            convergence_info[i] = conv
+        end
+
+        # Adaptive continuation: use optimized ω as next starting point
+        ω_current = ω_opt
+
+        # After first grid point, regenerate extras around continuation point
+        # This provides local exploration while maintaining continuation benefit
+        if i > 1 && !isnothing(ω_initial_extras) && dim_ω > 0
+            ω_extras_current = generate_initial_guesses(
+                ω_bounds_lower, ω_bounds_upper, length(ω_initial_extras);
+                reference_point=ω_current
+            )
+        end
+    end
+
+    # Return results (unnormalized)
+    if track_convergence
+        return θ_values, lnlike_values, convergence_info
+    else
+        return θ_values, lnlike_values
+    end
+end
+
+
 function profile_target(lnlike_θ, ψ_indices, θ_bounds_lower, θ_bounds_upper, ω_initial;
     grid_steps=100, ω_initial_extras::Union{Nothing, Vector{Vector{Float64}}}=nothing,
     method=:LD_TNEWTON_PRECOND, local_method=:LD_TNEWTON_PRECOND, xtol_rel=1e-9, ftol_rel=1e-9,
@@ -154,166 +392,89 @@ function profile_target(lnlike_θ, ψ_indices, θ_bounds_lower, θ_bounds_upper,
     Returns:
     - θ_values: Array of parameter vectors in original ordering
     - lnlike_ψ_values: Profile log-likelihood values (normalized to max of 0)
+
+    Notes:
+    - This function now delegates to profile_grid_sequential() for the actual work
+    - The layered architecture enables future distributed execution (see profile_grid_distributed)
     """
-    # Get dimensions and indices
-    dim_all = length(θ_bounds_lower)
-    ω_indices = setdiff(1:dim_all, ψ_indices)
-    dim_ψ = length(ψ_indices)
-    dim_ω = length(ω_indices)
+    # Ensure ψ_indices is Vector{Int} (handles empty [], scalar Int, and Vector{Any} cases)
+    ψ_indices_int = ψ_indices isa AbstractVector ? convert(Vector{Int}, ψ_indices) : [Int(ψ_indices)]
 
-    # Extract bounds for nuisance parameters
-    ω_bounds_lower = θ_bounds_lower[ω_indices]
-    ω_bounds_upper = θ_bounds_upper[ω_indices]
+    # Get dimensions
+    dim_ψ = length(ψ_indices_int)
 
-    # Optimizer setup for nuisance parameters
-    if dim_ω > 0 
-        opt = if method in [:G_MLSL_LDS, :G_MLSL]
-            # Global optimization with local refinement
-            opt = Opt(method, dim_ω)
-            local_opt = Opt(local_method, dim_ω)
-            local_opt.maxtime = optmaxtime
-            local_opt.lower_bounds = ω_bounds_lower
-            local_opt.upper_bounds = ω_bounds_upper
-            local_opt.xtol_rel = xtol_rel
-            local_opt.ftol_rel = ftol_rel
-            local_optimizer!(opt, local_opt)
-            opt.population = popsize
-            opt
-        else
-            # Direct optimization methods
-            opt = Opt(method, dim_ω)
-            if method in (:GN_DIRECT, :GN_DIRECT_L, :GN_DIRECT_L_RAND)
-                opt.population = popsize
-            end
-            opt
-        end
-
-        # Set common optimizer options
-        opt.maxtime = optmaxtime
-        opt.lower_bounds = ω_bounds_lower
-        opt.upper_bounds = ω_bounds_upper
-        opt.xtol_rel = xtol_rel
-        opt.ftol_rel = ftol_rel
-    end
-
-    # Check for point estimation case (no interest parameters)
+    # Special case: Point estimation (no interest parameters, just find MLE)
     if dim_ψ == 0
+        dim_all = length(θ_bounds_lower)
+        ω_indices = setdiff(1:dim_all, ψ_indices_int)
+        dim_ω = length(ω_indices)
+
+        # No parameters at all
         if dim_ω == 0
             return Float64[], lnlike_θ([])
         end
-        
-        # Try multiple starting points sequentially (NLopt is not thread-safe)
-        starting_points = [ω_initial]
-        if !isnothing(ω_initial_extras)
-            append!(starting_points, ω_initial_extras)
-        end
 
-        best_lnlike = -Inf
-        best_ω = similar(ω_initial)
-
-        for ω₀ in starting_points
-            opt.max_objective = construct_lnlike_to_max(lnlike_θ)
-            (lnlike_opt, ω_opt) = optimize(opt, ω₀)
-            if lnlike_opt > best_lnlike
-                best_lnlike = lnlike_opt
-                best_ω = ω_opt
-            end
-        end
-
-        return best_ω, best_lnlike
-
+        # Use profile_point for MLE (empty ψ_indices_int)
+        θ_opt, _, lnlike_opt, _ = profile_point(
+            lnlike_θ, Float64[], ψ_indices_int,
+            θ_bounds_lower, θ_bounds_upper, ω_initial;
+            ω_initial_extras=ω_initial_extras,
+            method=method, local_method=local_method,
+            xtol_rel=xtol_rel, ftol_rel=ftol_rel,
+            optmaxtime=optmaxtime, popsize=popsize,
+            track_convergence=false
+        )
+        return θ_opt, lnlike_opt
     end
 
-    # Set up grids for parameters of interest
-    ψ_bounds_lower = θ_bounds_lower[ψ_indices]
-    ψ_bounds_upper = θ_bounds_upper[ψ_indices]
+    # Build Cartesian grid for interest parameters
+    ψ_bounds_lower = θ_bounds_lower[ψ_indices_int]
+    ψ_bounds_upper = θ_bounds_upper[ψ_indices_int]
+
     ψ_grids = Vector{Vector{Float64}}(undef, dim_ψ)
     for i in 1:dim_ψ
         if length(grid_steps) == 1
-            ψ_grids[i] = LinRange(ψ_bounds_lower[i], ψ_bounds_upper[i], grid_steps[1])
+            ψ_grids[i] = collect(LinRange(ψ_bounds_lower[i], ψ_bounds_upper[i], grid_steps[1]))
         else
-            ψ_grids[i] = LinRange(ψ_bounds_lower[i], ψ_bounds_upper[i], grid_steps[i])
+            ψ_grids[i] = collect(LinRange(ψ_bounds_lower[i], ψ_bounds_upper[i], grid_steps[i]))
         end
     end
 
-    # Get Cartesian product of interest parameter grid
+    # Convert Cartesian product to vector of vectors
     ψ_combinations = Base.product(ψ_grids...)
+    ψ_grid = vec([collect(ψᵢ) for ψᵢ in ψ_combinations])
 
-    # Setup storage for results
-    θ_values = Vector{Vector{Float64}}(undef, length(ψ_combinations))
-    lnlike_ψ_values = Vector{Float64}(undef, length(ψ_combinations))
-
-    # Get indices for reconstructing full parameter vector
-    ψω_to_θ_indices = construct_ψω_to_θ_indices(dim_all, ψ_indices, ω_indices)
-
-    # Initialize convergence tracking if requested
+    # Delegate to sequential grid runner
     if track_convergence
-        convergence_outcomes = Vector{Symbol}(undef, length(ψ_combinations))
-    end
-
-    # Profile over grid
-    for (i, ψᵢ) in enumerate(ψ_combinations)
-        ψω_to_θ = ψω -> ψω[ψω_to_θ_indices]
-        if dim_ω > 0
-            # Optimize nuisance parameters
-            best_lnlike = -Inf
-            best_ω = similar(ω_initial)
-            converged_to = :NOT_TRACKED  # Default if tracking disabled
-
-            starting_points = [ω_initial]
-            if !isnothing(ω_initial_extras)
-                # After first grid point, use adaptive continuation for extra guesses
-                if i > 1
-                    ω_initial_extras = generate_initial_guesses(
-                        ω_bounds_lower, ω_bounds_upper, length(ω_initial_extras);
-                        reference_point=ω_initial)
-                end
-                append!(starting_points, ω_initial_extras)
-            end
-
-            # Try multiple starting points sequentially (NLopt is not thread-safe)
-            for ω₀ in starting_points
-                opt.max_objective = construct_lnlike_to_max(ω -> lnlike_θ(ψω_to_θ([ψᵢ..., ω...])))
-                (lnlike_opt, ωᵢ_opt, return_code) = optimize(opt, ω₀)
-                if lnlike_opt > best_lnlike
-                    best_lnlike = lnlike_opt
-                    best_ω = ωᵢ_opt
-                    if track_convergence
-                        converged_to = return_code
-                    end
-                end
-            end
-
-            θ_values[i] = ψω_to_θ([ψᵢ..., best_ω...])
-            lnlike_ψ_values[i] = best_lnlike
-
-            # Store convergence outcome if tracking
-            if track_convergence
-                convergence_outcomes[i] = converged_to
-            end
-
-            # Update initial guess for next iteration
-            ω_initial = best_ω
-
-        else
-            # Pure gridding case
-            θ_values[i] = ψω_to_θ([ψᵢ...])
-            lnlike_ψ_values[i] = lnlike_θ(θ_values[i])
-
-            # No optimization needed, mark as N/A
-            if track_convergence
-                convergence_outcomes[i] = :NO_OPTIMIZATION
-            end
-        end
-    end
-
-    # Normalize likelihood values
-    lnlike_ψ_values = lnlike_ψ_values .- maximum(lnlike_ψ_values)
-
-    if track_convergence
-        return θ_values, lnlike_ψ_values, convergence_outcomes
+        θ_values, lnlike_values, convergence_outcomes = profile_grid_sequential(
+            lnlike_θ, ψ_grid, ψ_indices_int,
+            θ_bounds_lower, θ_bounds_upper, ω_initial;
+            ω_initial_extras=ω_initial_extras,
+            method=method, local_method=local_method,
+            xtol_rel=xtol_rel, ftol_rel=ftol_rel,
+            optmaxtime=optmaxtime, popsize=popsize,
+            track_convergence=true
+        )
     else
-        return θ_values, lnlike_ψ_values
+        θ_values, lnlike_values = profile_grid_sequential(
+            lnlike_θ, ψ_grid, ψ_indices_int,
+            θ_bounds_lower, θ_bounds_upper, ω_initial;
+            ω_initial_extras=ω_initial_extras,
+            method=method, local_method=local_method,
+            xtol_rel=xtol_rel, ftol_rel=ftol_rel,
+            optmaxtime=optmaxtime, popsize=popsize,
+            track_convergence=false
+        )
+    end
+
+    # Normalize likelihood values (as before)
+    lnlike_values = lnlike_values .- maximum(lnlike_values)
+
+    # Return in original format
+    if track_convergence
+        return θ_values, lnlike_values, convergence_outcomes
+    else
+        return θ_values, lnlike_values
     end
 end
 
