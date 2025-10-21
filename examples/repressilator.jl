@@ -1504,12 +1504,28 @@ end
 
 # Extract the ratio component from each ψ vector
 ratio_vals_psi = [ψ[ψ_K1_β1_index] for ψ in ψ_ratio_values]
-# Since ψ[13] = β₁/K₁ (with coefficients ±1 after scale_and_round), these are the actual ratio values
-beta_over_K_values = ratio_vals_psi
-K_over_beta_values = 1 ./ beta_over_K_values
-println("  β₁/K₁ range: [$(round(minimum(beta_over_K_values), digits=6)), $(round(maximum(beta_over_K_values), digits=6))]")
-println("  Equivalent K₁/β₁ range: [$(round(minimum(K_over_beta_values), digits=2)), $(round(maximum(K_over_beta_values), digits=2))]")
-println("  True β₁/K₁ = $(round(θ_true[β1_index]/θ_true[K1_index], digits=6))  (K₁/β₁ = $(round(θ_true[K1_index]/θ_true[β1_index], digits=2)))")
+
+# Determine which ratio form we're profiling based on transformation coefficients
+# This is generic - works regardless of which form Varimax happens to find
+v_ratio = N_perp_clean[:, ψ_K1_β1_index]
+beta_coef_check = v_ratio[β1_index]
+K_coef_check = v_ratio[K1_index]
+
+if beta_coef_check < 0 && K_coef_check > 0
+    # This is K₁/β₁ (β negative, K positive → K/β after exp)
+    K_over_beta_values = ratio_vals_psi
+    beta_over_K_values = 1 ./ K_over_beta_values
+    println("  K₁/β₁ range: [$(round(minimum(K_over_beta_values), digits=1)), $(round(maximum(K_over_beta_values), digits=1))]")
+    println("  Equivalent β₁/K₁ range: [$(round(minimum(beta_over_K_values), digits=6)), $(round(maximum(beta_over_K_values), digits=6))]")
+    println("  True K₁/β₁ = $(round(θ_true[K1_index]/θ_true[β1_index], digits=2))  (β₁/K₁ = $(round(θ_true[β1_index]/θ_true[K1_index], digits=6)))")
+else
+    # This is β₁/K₁ (β positive, K negative → β/K after exp)
+    beta_over_K_values = ratio_vals_psi
+    K_over_beta_values = 1 ./ beta_over_K_values
+    println("  β₁/K₁ range: [$(round(minimum(beta_over_K_values), digits=6)), $(round(maximum(beta_over_K_values), digits=6))]")
+    println("  Equivalent K₁/β₁ range: [$(round(minimum(K_over_beta_values), digits=1)), $(round(maximum(K_over_beta_values), digits=1))]")
+    println("  True β₁/K₁ = $(round(θ_true[β1_index]/θ_true[K1_index], digits=6))  (K₁/β₁ = $(round(θ_true[K1_index]/θ_true[β1_index], digits=2)))")
+end
 println("  Raw ratio ψ grid: ", ratio_vals_psi)
 println("  Raw ratio lnlike: ", lnlike_ratio_values)
 ratio_psi_mle = ψ_MLE[ψ_K1_β1_index]
@@ -1730,7 +1746,7 @@ param_info = [
 ]
 
 # Create individual plots: 3 observables × 3 parameters = 9 plots
-pred_upper_limit = 50.0  # Set y-axis upper limit for better visualization
+pred_upper_limit = 60.0  # Set y-axis upper limit for better visualization
 for (i, (obs_name, obs_sub)) in enumerate(zip(species_names, species_subscripts))
     for (param_vals, param_save, param_latex) in param_info
         # Determine which CI bounds to use
