@@ -1,0 +1,639 @@
+✓ ReparamTools module included
+======================================================================
+PROFILE MODE: paper
+  1D grid: 15 points
+  2D grid: [7, 7] points
+  Timeout: 30.0s per optimization
+  Initial guesses: 3
+  2D profiling: false
+  Estimated runtime: ~45 minutes
+======================================================================
+======================================================================
+Repressilator Model (Eisenberg & Hayashi Setup)
+18 Free Parameters (n fixed at 3)
+Expected identifiable: K₁/β₁, K₂/β₂, K₃/β₃ ratios
+======================================================================
+
+True parameter values (18 total, n=2.5 fixed):
+  α₀₁ = 0.008
+  α₀₂ = 0.009
+  α₀₃ = 0.01
+  α₁ = 1.0
+  α₂ = 1.2
+  α₃ = 1.5
+  β₁ = 0.02
+  β₂ = 0.025
+  β₃ = 0.015
+  K₁ = 30.0
+  K₂ = 28.0
+  K₃ = 32.0
+  k_degm₁ = 0.006
+  k_degm₂ = 0.0055
+  k_degm₃ = 0.0065
+  k_degp₁ = 0.0012
+  k_degp₂ = 0.0011
+  k_degp₃ = 0.0013
+
+Expected identifiable combinations:
+  K₁/β₁ = 1500.0
+  K₂/β₂ = 1120.0
+  K₃/β₃ = 2133.3333333333335
+
+Data generated:
+  Time points: 9
+  Observables: 3 mRNAs (m₁, m₂, m₃)
+  Total observations: 27
+  Noise level σ = 1.0
+PROFILE-WISE PREDICTION: Individual vs Ratio Comparison
+======================================================================
+
+Prediction setup:
+  Parameters: 18 (n=2.5 fixed in model)
+  Time points: 501 over [0, 10000.0]
+  Observables: 3 mRNA species (m₁, m₂, m₃)
+  Total prediction dimension: 1503
+  Noise level: σ = 1.0
+
+----------------------------------------------------------------------
+Option B: Individual Parameters vs Identifiable Ratio
+----------------------------------------------------------------------
+
+======================================================================
+FINDING MLE
+======================================================================
+
+Setting biologically-informed parameter bounds:
+
+Optimization setup:
+  Method: LN_BOBYQA (gradient-free, bound-constrained)
+  Parameters: 18
+  Initial guesses: 3 (from midpoint and random)
+  Max time: 30 seconds per guess
+  Bounds: Biologically-informed ranges (see Elowitz & Leibler 2000)
+  Starting point: Geometric midpoint of bound ranges
+
+Initial point evaluation:
+  Starting from: Geometric midpoint of bounds
+  Log-likelihood at initial: -1835.93
+  Log-likelihood at truth: -41.76
+  Gap to close: 1794.17
+
+Running optimization...
+  (This may take up to 90 seconds with 3 initial guesses)
+Optimization complete!
+  Time: 100.1 seconds
+
+MLE verification:
+  Log-likelihood at true parameters: -41.7638
+  Log-likelihood at MLE: -34.1783
+  Improvement: 7.5855
+
+MLE parameter values:
+  α₀₁ = 0.006087 (true: 0.008, error: 23.9%)
+  α₀₂ = 0.009441 (true: 0.009, error: 4.9%)
+  α₀₃ = 0.006641 (true: 0.01, error: 33.6%)
+  α₁ = 0.8 (true: 1.0, error: 20.0%)
+  α₂ = 1.143 (true: 1.2, error: 4.8%)
+  α₃ = 1.255 (true: 1.5, error: 16.3%)
+  β₁ = 0.01461 (true: 0.02, error: 27.0%)
+  β₂ = 0.0245 (true: 0.025, error: 2.0%)
+  β₃ = 0.01041 (true: 0.015, error: 30.6%)
+  K₁ = 20.75 (true: 30.0, error: 30.8%)
+  K₂ = 21.22 (true: 28.0, error: 24.2%)
+  K₃ = 31.47 (true: 32.0, error: 1.6%)
+  k_degm₁ = 0.008 (true: 0.006, error: 33.3%)
+  k_degm₂ = 0.006447 (true: 0.0055, error: 17.2%)
+  k_degm₃ = 0.004437 (true: 0.0065, error: 31.7%)
+  k_degp₁ = 0.001288 (true: 0.0012, error: 7.4%)
+  k_degp₂ = 0.001123 (true: 0.0011, error: 2.1%)
+  k_degp₃ = 0.001276 (true: 0.0013, error: 1.8%)
+
+======================================================================
+Applying IIR at MLE (18 parameters)
+======================================================================
+
+======================================================================
+Applying IIR (Invariant Image Reparameterization)
+======================================================================
+
+IIR analysis time: 37.1 seconds
+
+Singular values of Jacobian (in log-space):
+  σ[1] = 3199.28
+  σ[2] = 1271.78
+  σ[3] = 848.292
+  σ[4] = 645.102
+  σ[5] = 327.49
+  σ[6] = 281.078
+  σ[7] = 164.365
+  σ[8] = 124.433
+  σ[9] = 100.282
+  σ[10] = 79.124
+  ...
+  σ[16] = 9.80563e-6
+  σ[17] = 2.07793e-6
+  σ[18] = 1.39996e-6
+
+Invariant Subspace Analysis:
+  Jacobian rank: 15 / 18
+  Expected rank: 15 or 16 (with 2-3 non-identifiable combinations)
+  Identifiable directions: 15
+  Non-identifiable directions: 3
+┌ Warning: Assignment to `beta_coef` in soft scope is ambiguous because a global variable by the same name exists: `beta_coef` will be treated as a new local. Disambiguate by using `local beta_coef` to suppress this warning or `global beta_coef` to assign to the existing global variable.
+└ @ ~/Git-Working/reparam/examples/repressilator.jl:512
+┌ Warning: Assignment to `K_coef` in soft scope is ambiguous because a global variable by the same name exists: `K_coef` will be treated as a new local. Disambiguate by using `local K_coef` to suppress this warning or `global K_coef` to assign to the existing global variable.
+└ @ ~/Git-Working/reparam/examples/repressilator.jl:513
+┌ Warning: Assignment to `v` in soft scope is ambiguous because a global variable by the same name exists: `v` will be treated as a new local. Disambiguate by using `local v` to suppress this warning or `global v` to assign to the existing global variable.
+└ @ ~/Git-Working/reparam/examples/repressilator.jl:681
+┌ Warning: Assignment to `beta_coef` in soft scope is ambiguous because a global variable by the same name exists: `beta_coef` will be treated as a new local. Disambiguate by using `local beta_coef` to suppress this warning or `global beta_coef` to assign to the existing global variable.
+└ @ ~/Git-Working/reparam/examples/repressilator.jl:685
+┌ Warning: Assignment to `K_coef` in soft scope is ambiguous because a global variable by the same name exists: `K_coef` will be treated as a new local. Disambiguate by using `local K_coef` to suppress this warning or `global K_coef` to assign to the existing global variable.
+└ @ ~/Git-Working/reparam/examples/repressilator.jl:686
+┌ Warning: Assignment to `v` in soft scope is ambiguous because a global variable by the same name exists: `v` will be treated as a new local. Disambiguate by using `local v` to suppress this warning or `global v` to assign to the existing global variable.
+└ @ ~/Git-Working/reparam/examples/repressilator.jl:703
+┌ Warning: Assignment to `beta_coef` in soft scope is ambiguous because a global variable by the same name exists: `beta_coef` will be treated as a new local. Disambiguate by using `local beta_coef` to suppress this warning or `global beta_coef` to assign to the existing global variable.
+└ @ ~/Git-Working/reparam/examples/repressilator.jl:705
+┌ Warning: Assignment to `K_coef` in soft scope is ambiguous because a global variable by the same name exists: `K_coef` will be treated as a new local. Disambiguate by using `local K_coef` to suppress this warning or `global K_coef` to assign to the existing global variable.
+└ @ ~/Git-Working/reparam/examples/repressilator.jl:706
+┌ Warning: Assignment to `v` in soft scope is ambiguous because a global variable by the same name exists: `v` will be treated as a new local. Disambiguate by using `local v` to suppress this warning or `global v` to assign to the existing global variable.
+└ @ ~/Git-Working/reparam/examples/repressilator.jl:723
+┌ Warning: Assignment to `v` in soft scope is ambiguous because a global variable by the same name exists: `v` will be treated as a new local. Disambiguate by using `local v` to suppress this warning or `global v` to assign to the existing global variable.
+└ @ ~/Git-Working/reparam/examples/repressilator.jl:769
+┌ Warning: Assignment to `beta_coef` in soft scope is ambiguous because a global variable by the same name exists: `beta_coef` will be treated as a new local. Disambiguate by using `local beta_coef` to suppress this warning or `global beta_coef` to assign to the existing global variable.
+└ @ ~/Git-Working/reparam/examples/repressilator.jl:772
+┌ Warning: Assignment to `K_coef` in soft scope is ambiguous because a global variable by the same name exists: `K_coef` will be treated as a new local. Disambiguate by using `local K_coef` to suppress this warning or `global K_coef` to assign to the existing global variable.
+└ @ ~/Git-Working/reparam/examples/repressilator.jl:773
+┌ Warning: Assignment to `v` in soft scope is ambiguous because a global variable by the same name exists: `v` will be treated as a new local. Disambiguate by using `local v` to suppress this warning or `global v` to assign to the existing global variable.
+└ @ ~/Git-Working/reparam/examples/repressilator.jl:790
+┌ Warning: Assignment to `v` in soft scope is ambiguous because a global variable by the same name exists: `v` will be treated as a new local. Disambiguate by using `local v` to suppress this warning or `global v` to assign to the existing global variable.
+└ @ ~/Git-Working/reparam/examples/repressilator.jl:1186
+┌ Warning: Assignment to `beta_coef` in soft scope is ambiguous because a global variable by the same name exists: `beta_coef` will be treated as a new local. Disambiguate by using `local beta_coef` to suppress this warning or `global beta_coef` to assign to the existing global variable.
+└ @ ~/Git-Working/reparam/examples/repressilator.jl:1193
+┌ Warning: Assignment to `K_coef` in soft scope is ambiguous because a global variable by the same name exists: `K_coef` will be treated as a new local. Disambiguate by using `local K_coef` to suppress this warning or `global K_coef` to assign to the existing global variable.
+└ @ ~/Git-Working/reparam/examples/repressilator.jl:1194
+
+======================================================================
+NON-IDENTIFIABLE (INVARIANT) DIRECTIONS - SVD Basis (Mixed)
+Expected structure: Products of K/β ratios
+======================================================================
+
+SVD Direction 1:
+  Significant coefficients:
+    β₁: 0.505
+    β₂: -0.489
+    β₃: -0.076
+    K₁: 0.505
+    K₂: -0.489
+    K₃: -0.076
+  Pattern check (βK product if coefficients match):
+    β1: 0.505, K1: 0.505 → ✓ Same
+    β2: -0.489, K2: -0.489 → ✓ Same
+    β3: -0.076, K3: -0.076 → ✓ Same
+  → Confirms βK product structure (invariant null space)!
+
+SVD Direction 2:
+  Significant coefficients:
+    β₁: -0.319
+    β₂: -0.404
+    β₃: 0.484
+    K₁: -0.319
+    K₂: -0.404
+    K₃: 0.484
+  Pattern check (βK product if coefficients match):
+    β1: -0.319, K1: -0.319 → ✓ Same
+    β2: -0.404, K2: -0.404 → ✓ Same
+    β3: 0.484, K3: 0.484 → ✓ Same
+  → Confirms βK product structure (invariant null space)!
+
+SVD Direction 3:
+  Significant coefficients:
+    β₁: 0.379
+    β₂: 0.312
+    β₃: 0.51
+    K₁: 0.379
+    K₂: 0.312
+    K₃: 0.51
+  Pattern check (βK product if coefficients match):
+    β1: 0.379, K1: 0.379 → ✓ Same
+    β2: 0.312, K2: 0.312 → ✓ Same
+    β3: 0.51, K3: 0.51 → ✓ Same
+  → Confirms βK product structure (invariant null space)!
+
+======================================================================
+INVARIANT NULL SPACE (βK products)
+======================================================================
+
+======================================================================
+COORDINATE SYSTEM COMPARISON: Log-space vs Original-space
+======================================================================
+
+Key Question: Is the invariance property coordinate-dependent?
+We'll compare IIR analysis in two coordinate systems:
+  1. Log-parameter space (f = log) - what we just computed
+  2. Original-parameter space (no transform)
+
+----------------------------------------------------------------------
+1. LOG-PARAMETER SPACE (f = log):
+----------------------------------------------------------------------
+  Jacobian rank: 15/18
+  Null space dimension: 3
+  Invariant null vectors: 3
+  Invariance test: ✓ PASS (all 3 null vectors are invariant)
+
+----------------------------------------------------------------------
+2. ORIGINAL-PARAMETER SPACE (no transform):
+----------------------------------------------------------------------
+  Computing Jacobian w.r.t. original parameters θ (not log θ)...
+  Analysis time: 34.3 seconds
+  Jacobian rank: 15/18
+  Null space dimension: 3
+  Invariant null vectors: 0
+  Invariance test: ✗ FAIL (only 0/3 null vectors invariant)
+
+----------------------------------------------------------------------
+3. COMPARISON AND INTERPRETATION:
+----------------------------------------------------------------------
+
+  Coordinate System      | Rank  | Null Dim | Invariant | Status
+  ------------------------------------------------------------------
+  Log-space (f=log)      | 15/18 |    3     |    3      | ✓ PASS
+  Original-space         | 15/18 |    3     |    0      | ✗ FAIL
+
+  Key Insights:
+    ✓ Rank is coordinate-independent: 15 == 15
+      → This is a topological property of the auxiliary map
+    ✗ Null space invariance IS coordinate-dependent!
+      → Log-space: 3/3 null vectors invariant
+      → Original-space: 0/3 null vectors invariant
+    → Log-transform gives minimal image (invariant null space)
+    → Original coordinates give only rank-deficient manifold
+    → Invariance test identifies 'right' coordinate system for monomials
+
+  Why This Matters:
+    • Not all rank-deficient manifolds are minimal images
+    • SVD alone cannot distinguish them
+    • Invariance test (Algorithm 1) is essential, not optional
+    • For monomial reparameterizations, log-transform is principled choice
+
+======================================================================
+
+======================================================================
+COMPLEMENT SPACE N_perp (Should contain K/β ratios)
+======================================================================
+Dimensions: (18, 15)
+
+Applying Varimax rotation to N_perp...
+
+Searching for K/β ratio patterns in N_perp...
+  Direction 4: β1=0.707, K1=-0.707
+    → K1/β1 ratio pattern!
+  Direction 7: β3=0.707, K3=-0.707
+    → K3/β3 ratio pattern!
+  Direction 15: β2=0.707, K2=-0.707
+    → K2/β2 ratio pattern!
+
+Found 3 K/β ratio patterns in N_perp ✓
+
+======================================================================
+DEGREE OF IDENTIFIABILITY Analysis
+======================================================================
+
+Original SVD basis (N_perp):
+  All singular values (identifiable directions):
+    σ[1] = 3199.279
+    σ[2] = 1271.779
+    σ[3] = 848.292
+    σ[4] = 645.102
+    σ[5] = 327.49
+    σ[6] = 281.078
+    σ[7] = 164.365
+    σ[8] = 124.433
+    σ[9] = 100.282
+    σ[10] = 79.124
+    σ[11] = 56.727
+    σ[12] = 48.635
+    σ[13] = 34.278
+    σ[14] = 15.838
+    σ[15] = 10.806
+  Condition number: 296.06
+
+  Checking SVD basis for K/β ratio patterns:
+    SVD[2] (σ=1271.779): K3/β3 ratio (β=-0.361, K=0.361)
+    SVD[3] (σ=848.292): K2/β2 ratio (β=0.305, K=-0.305)
+    SVD[4] (σ=645.102): K1/β1 ratio (β=-0.362, K=0.362)
+    SVD[7] (σ=164.365): K3/β3 ratio (β=-0.444, K=0.444)
+    SVD[9] (σ=100.282): K2/β2 ratio (β=-0.32, K=0.32)
+    SVD[10] (σ=79.124): K2/β2 ratio (β=0.358, K=-0.358)
+    SVD[13] (σ=34.278): K1/β1 ratio (β=0.369, K=-0.369)
+
+Varimax-rotated N_perp basis:
+  Effective singular values ||J·v|| for each rotated direction:
+    K1/β1 (Direction 4): σ_eff = 1308.259
+    K2/β2 (Direction 15): σ_eff = 1219.264
+    K3/β3 (Direction 7): σ_eff = 742.482
+
+  Effective σ range for all N_perp_varimax: [74.171, 2027.238]
+  Effective σ range for K/β ratios: [742.482, 1308.259]
+  K/β ratios condition number: 1.76
+
+======================================================================
+REPARAMETERIZATION COMPARISON: SVD vs Varimax
+======================================================================
+
+SVD-based transformation matrix A_svd:
+  Dimensions: (18, 18)
+  First 15 rows (identifiable): from N_perp
+  Last 3 rows (non-identifiable): from N
+
+  Non-identifiable directions (SVD basis):
+    ψ[16] = 0.0, -0.0, 0.0, -0.0, 0.0, 0.0, 0.505, -0.489, -0.076, 0.505, -0.489, -0.076, -0.0, -0.0, -0.0, 0.0, 0.0, 0.0
+    ψ[17] = 0.0, -0.0, 0.0, -0.0, -0.0, -0.0, -0.319, -0.404, 0.484, -0.319, -0.404, 0.484, -0.0, 0.0, -0.0, 0.0, -0.0, 0.0
+    ψ[18] = -0.0, 0.0, 0.0, -0.0, -0.0, 0.0, 0.379, 0.312, 0.51, 0.379, 0.312, 0.51, -0.0, 0.0, 0.0, -0.0, -0.0, -0.0
+
+======================================================================
+Applying Varimax rotation separately to N_perp and N...
+======================================================================
+
+Applying scale_and_round to Varimax-rotated bases...
+  (Note: This rescales for clean exponents but doesn't change identifiability)
+  (Warning: This breaks orthonormality - A_varimax is for presentation only)
+
+Varimax-based transformation matrix A_varimax:
+  Dimensions: (18, 18)
+
+======================================================================
+CREATING IIR TRANSFORMATIONS FOR PROFILING
+======================================================================
+
+MLE in ψ coordinates:
+  ψ[1] = 0.0044
+  ψ[2] = 0.0094
+  ψ[3] = 0.0066
+  ψ[4] = 0.0007
+  ψ[5] = 0.008
+
+Likelihood in ψ space created
+  lnlike_ψ(ψ_MLE) = -34.1783
+  lnlike_θ(θ_MLE) = -34.1783
+  Match: true
+
+Found β₁/K₁ combination at N_perp column 4 (score 0.0).
+  β₁/K₁ combination is ψ[4] in IIR coordinates
+  ψ[4](MLE) = 0.000704
+  True β₁/K₁ = 0.000667  (inverse K₁/β₁ = 1500.0)
+  Identified as β₁/K₁ ratio: ψ bounds [0.00025, 0.0015]
+    (Derived from β₁ ∈ [0.01, 0.03], K₁ ∈ [20.0, 40.0])
+
+Distribution in ψ space created for predictions
+
+  Non-identifiable directions (Varimax basis):
+    ψ[16] = -0.0, -0.0, -0.0, -0.0, -0.0, -0.0, 1.0, -0.0, -0.0, 1.0, -0.0, -0.0, -0.0, -0.0, -0.0, -0.0, -0.0, -0.0
+    ψ[17] = -0.0, -0.0, -0.0, -0.0, -0.0, -0.0, -0.0, 1.0, -0.0, -0.0, 1.0, -0.0, -0.0, -0.0, -0.0, -0.0, -0.0, -0.0
+    ψ[18] = -0.0, -0.0, -0.0, -0.0, -0.0, -0.0, -0.0, -0.0, 1.0, -0.0, -0.0, 1.0, -0.0, -0.0, -0.0, -0.0, -0.0, -0.0
+
+======================================================================
+SYMBOLIC MONOMIAL COMPARISONS
+======================================================================
+
+Non-identifiable monomials (SVD basis):
+  ψ[16] = β₁^0.5·β₂^-0.49·β₃^-0.08·K₁^0.5·K₂^-0.49·K₃^-0.08
+  ψ[17] = β₁^-0.32·β₂^-0.4·β₃^0.48·K₁^-0.32·K₂^-0.4·K₃^0.48
+  ψ[18] = β₁^0.38·β₂^0.31·β₃^0.51·K₁^0.38·K₂^0.31·K₃^0.51
+
+Non-identifiable monomials (Varimax basis):
+  ψ[16] = β₁·K₁
+  ψ[17] = β₂·K₂
+  ψ[18] = β₃·K₃
+
+======================================================================
+IDENTIFIABILITY COMPARISON: SVD vs Varimax monomials
+======================================================================
+
+SVD non-identifiable combinations:
+  ψ[16] = β₁^0.5·β₂^-0.49·β₃^-0.08·K₁^0.5·K₂^-0.49·K₃^-0.08
+    ||J·v|| = 1.0e-5 (should be ≈0 for non-identifiable)
+  ψ[17] = β₁^-0.32·β₂^-0.4·β₃^0.48·K₁^-0.32·K₂^-0.4·K₃^0.48
+    ||J·v|| = 2.0e-6 (should be ≈0 for non-identifiable)
+  ψ[18] = β₁^0.38·β₂^0.31·β₃^0.51·K₁^0.38·K₂^0.31·K₃^0.51
+    ||J·v|| = 1.0e-6 (should be ≈0 for non-identifiable)
+
+Varimax non-identifiable combinations (after scale_and_round):
+  ψ[16] = β₁·K₁
+    ||J·v|| = 1.1e-5 (should be ≈0 for non-identifiable)
+  ψ[17] = β₂·K₂
+    ||J·v|| = 9.0e-6 (should be ≈0 for non-identifiable)
+  ψ[18] = β₃·K₃
+    ||J·v|| = 3.0e-6 (should be ≈0 for non-identifiable)
+
+======================================================================
+IDENTIFIABLE DIRECTIONS (N_perp): SVD vs Varimax
+======================================================================
+
+SVD identifiable combinations (all 15):
+  ψ[1] = α₁^-0.22·α₂^0.2·β₁^-0.27·β₂^0.25·K₁^0.27·K₂^-0.25·k_dm₂^-0.45·k_dp₁^-0.16·k_dp₂^-0.63
+    σ_eff = 3199.279
+  ψ[2] = α₀₂^-0.2·α₀₃^-0.16·α₁^0.21·α₂^0.27·α₃^-0.11·β₁^-0.19·β₃^-0.36·K₁^0.19·K₃^0.36·k_dm₁^-0.27·k_dm₃^0.29·k_dp₁^0.13·k_dp₃^0.53
+    σ_eff = 1271.779
+  ψ[3] = α₀₂^0.4·α₀₃^0.1·α₁^0.15·α₂^-0.14·α₃^-0.36·β₂^0.3·K₂^-0.3·k_dm₁^0.12·k_dm₃^0.3·k_dp₁^0.59
+    σ_eff = 848.292
+  ψ[4] = α₀₂^-0.17·α₂^0.14·α₃^0.23·β₁^-0.36·β₂^-0.21·β₃^0.25·K₁^0.36·K₂^0.21·K₃^-0.25·k_dm₃^-0.12·k_dp₁^0.58·k_dp₂^0.19
+    σ_eff = 645.102
+  ψ[5] = α₀₂^0.17·α₁^0.25·α₂^-0.52·α₃^0.4·k_dm₃^-0.25·k_dp₁^0.12·k_dp₂^-0.32·k_dp₃^0.52
+    σ_eff = 327.49
+  ψ[6] = α₀₂^-0.28·α₀₃^-0.15·α₁^0.48·α₃^-0.18·k_dm₁^-0.42·k_dm₂^0.17·k_dm₃^-0.18·k_dp₁^0.16·k_dp₂^-0.4·k_dp₃^-0.45
+    σ_eff = 281.078
+  ψ[7] = α₀₁^0.12·α₀₂^0.28·α₀₃^0.31·β₁^-0.12·β₃^-0.44·K₁^0.12·K₃^0.44·k_dm₂^-0.16·k_dm₃^-0.46·k_dp₁^0.19·k_dp₂^0.13·k_dp₃^-0.27
+    σ_eff = 164.365
+  ψ[8] = α₀₂^-0.39·α₁^-0.44·β₃^-0.22·K₃^0.22·k_dm₁^0.31·k_dm₂^0.45·k_dp₁^0.28·k_dp₂^-0.36
+    σ_eff = 124.433
+  ψ[9] = α₀₂^0.2·α₀₃^0.15·α₂^0.42·α₃^-0.41·β₁^0.17·β₂^-0.32·K₁^-0.17·K₂^0.32·k_dm₁^0.17·k_dm₃^-0.31·k_dp₁^0.11·k_dp₂^-0.29·k_dp₃^0.31
+    σ_eff = 100.282
+  ψ[10] = α₀₂^-0.15·α₂^0.11·α₃^-0.24·β₁^-0.13·β₂^0.36·β₃^0.15·K₁^0.13·K₂^-0.36·K₃^-0.15·k_dm₂^0.38·k_dm₃^-0.57·k_dp₁^-0.11·k_dp₂^0.17·k_dp₃^0.22
+    σ_eff = 79.124
+  ψ[11] = α₀₂^-0.35·α₂^-0.57·α₃^-0.52·β₁^-0.17·β₂^-0.1·K₁^0.17·K₂^0.1·k_dm₁^0.28·k_dm₂^-0.32·k_dp₁^-0.1
+    σ_eff = 56.727
+  ψ[12] = α₀₃^-0.25·α₁^-0.61·α₂^-0.19·α₃^-0.21·β₁^0.14·K₁^-0.14·k_dm₁^-0.61·k_dm₂^-0.14·k_dp₁^0.17
+    σ_eff = 48.635
+  ψ[13] = α₀₁^-0.1·α₀₂^-0.38·α₀₃^-0.12·α₁^0.14·α₂^0.14·α₃^0.18·β₁^0.37·β₂^0.22·K₁^-0.37·K₂^-0.22·k_dm₁^0.18·k_dm₂^-0.49·k_dm₃^-0.22·k_dp₁^0.22·k_dp₂^0.16
+    σ_eff = 34.278
+  ψ[14] = α₀₁^0.3·α₀₂^-0.31·α₀₃^0.78·β₃^0.14·K₃^-0.14·k_dm₁^-0.32·k_dm₂^-0.13·k_dm₃^0.16·k_dp₃^0.11
+    σ_eff = 15.838
+  ψ[15] = α₀₁^-0.92·α₀₃^0.34·k_dm₁^-0.1
+    σ_eff = 10.806
+
+Varimax identifiable combinations - K/β ratios:
+  Comparing before/after scale_and_round:
+  (Note: ||J·v||/||v|| is the identifiability measure - should stay constant)
+
+  ψ[4] (K1/β1) = β₁·K₁⁻¹
+    Varimax:        ||v||=1.0, ||J·v||=1308.259, σ_eff=||J·v||/||v||=1308.259
+    After scaling:  ||v||=1.414, ||J·v||=1850.158, σ_eff=||J·v||/||v||=1308.259
+
+  ψ[15] (K2/β2) = β₂⁻¹·K₂
+    Varimax:        ||v||=1.0, ||J·v||=1219.264, σ_eff=||J·v||/||v||=1219.264
+    After scaling:  ||v||=1.414, ||J·v||=1724.3, σ_eff=||J·v||/||v||=1219.264
+
+  ψ[7] (K3/β3) = β₃⁻¹·K₃
+    Varimax:        ||v||=1.0, ||J·v||=742.482, σ_eff=||J·v||/||v||=742.482
+    After scaling:  ||v||=1.414, ||J·v||=1050.027, σ_eff=||J·v||/||v||=742.482
+
+  All other Varimax identifiable directions:
+  ψ[1] = k_dm₃
+    σ_eff = 474.128
+  ψ[2] = α₀₂
+    σ_eff = 486.517
+  ψ[3] = α₀₃
+    σ_eff = 292.133
+  ψ[5] = k_dm₁
+    σ_eff = 399.716
+  ψ[6] = k_dp₂
+    σ_eff = 2027.238
+  ψ[8] = k_dp₃
+    σ_eff = 719.307
+  ψ[9] = k_dm₂
+    σ_eff = 1442.994
+  ψ[10] = α₂
+    σ_eff = 754.906
+  ψ[11] = α₀₁
+    σ_eff = 74.171
+  ψ[12] = α₃
+    σ_eff = 472.06
+  ψ[13] = α₁
+    σ_eff = 780.242
+  ψ[14] = k_dp₁
+    σ_eff = 817.551
+
+======================================================================
+SORTED IDENTIFIABILITY COMPARISON: SVD vs Varimax
+======================================================================
+
+Rank | SVD Combination (σ_eff) | Varimax Combination (σ_eff) | Type
+----------------------------------------------------------------------
+ 1 | α₁^-0.22·α₂^0.2·β₁^-0.... (3199.3) | k_dp₂                (2027.2) | single
+ 2 | α₀₂^-0.2·α₀₃^-0.16·α₁^... (1271.8) | k_dm₂                (1443.0) | single
+ 3 | α₀₂^0.4·α₀₃^0.1·α₁^0.1... (848.3 ) | β₁·K₁⁻¹              (1308.3) | β/K ratio
+ 4 | α₀₂^-0.17·α₂^0.14·α₃^0... (645.1 ) | β₂⁻¹·K₂              (1219.3) | β/K ratio
+ 5 | α₀₂^0.17·α₁^0.25·α₂^-0... (327.5 ) | k_dp₁                (817.6 ) | single
+ 6 | α₀₂^-0.28·α₀₃^-0.15·α₁... (281.1 ) | α₁                   (780.2 ) | single
+ 7 | α₀₁^0.12·α₀₂^0.28·α₀₃^... (164.4 ) | α₂                   (754.9 ) | single
+ 8 | α₀₂^-0.39·α₁^-0.44·β₃^... (124.4 ) | β₃⁻¹·K₃              (742.5 ) | β/K ratio
+ 9 | α₀₂^0.2·α₀₃^0.15·α₂^0.... (100.3 ) | k_dp₃                (719.3 ) | single
+10 | α₀₂^-0.15·α₂^0.11·α₃^-... (79.1  ) | α₀₂                  (486.5 ) | single
+11 | α₀₂^-0.35·α₂^-0.57·α₃^... (56.7  ) | k_dm₃                (474.1 ) | single
+12 | α₀₃^-0.25·α₁^-0.61·α₂^... (48.6  ) | α₃                   (472.1 ) | single
+13 | α₀₁^-0.1·α₀₂^-0.38·α₀₃... (34.3  ) | k_dm₁                (399.7 ) | single
+14 | α₀₁^0.3·α₀₂^-0.31·α₀₃^... (15.8  ) | α₀₃                  (292.1 ) | single
+15 | α₀₁^-0.92·α₀₃^0.34·k_d... (10.8  ) | α₀₁                  (74.2  ) | single
+
+----------------------------------------------------------------------
+Summary:
+  SVD: 15 mixed + 0 single = 15 total
+  Varimax: 12 single + 3 β/K ratios + 0 other = 15 total
+  Varimax interpretability: 15/15 simple combinations (100.0%)
+
+Identifiability table exported to: /Users/omac010/Git-Working/reparam/examples/repressilator_identifiability_table.csv
+
+Varimax-rotated null directions (βK products):
+
+Varimax Direction 1:
+  All coefficients: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -0.707, 0.0, 0.0, -0.707, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  → (β1·K1) product
+    MLE:  K1 = 20.7456, β1 = 0.0146
+    True: K1 = 30.0, β1 = 0.02
+    β1·K1 (MLE) = 0.3 (in invariant null space)
+    β1/K1 (MLE) = 0.000704 (identifiable combination)
+    K1/β1 (MLE) = 1420.13 (inverse)
+    β1/K1 (true) = 0.000667
+    K1/β1 (true) = 1500.0  (Eisenberg reference)
+
+Varimax Direction 2:
+  All coefficients: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -0.707, 0.0, 0.0, -0.707, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  → (β2·K2) product
+    MLE:  K2 = 21.2203, β2 = 0.0245
+    True: K2 = 28.0, β2 = 0.025
+    β2·K2 (MLE) = 0.52 (in invariant null space)
+    β2/K2 (MLE) = 0.001155 (identifiable combination)
+    K2/β2 (MLE) = 866.02 (inverse)
+    β2/K2 (true) = 0.000893
+    K2/β2 (true) = 1120.0  (Eisenberg reference)
+
+Varimax Direction 3:
+  All coefficients: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -0.707, 0.0, 0.0, -0.707, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  → (β3·K3) product
+    MLE:  K3 = 31.4741, β3 = 0.0104
+    True: K3 = 32.0, β3 = 0.015
+    β3·K3 (MLE) = 0.33 (in invariant null space)
+    β3/K3 (MLE) = 0.000331 (identifiable combination)
+    K3/β3 (MLE) = 3023.57 (inverse)
+    β3/K3 (true) = 0.000469
+    K3/β3 (true) = 2133.33  (Eisenberg reference)
+
+======================================================================
+MLE DYNAMICS VISUALIZATION
+======================================================================
+
+Generating MLE trajectory plots before starting profiling...
+(Review these plots to verify dynamics before continuing)
+Creating combined mRNA + protein dynamics plot with true trajectories...
+
+MLE dynamics plots saved to figures/
+  - Individual mRNA plots (3)
+  - Individual protein plots (3)
+  - Combined 6-panel plot
+
+⏸  REVIEW PLOTS BEFORE CONTINUING TO PROFILING
+   (Press Ctrl+C to interrupt if dynamics look incorrect)
+======================================================================
+
+======================================================================
+STARTING PROFILE LIKELIHOOD ANALYSIS
+======================================================================
+
+Profiling K₁, β₁, and β₁/K₁ ratio in parallel (using 6 threads)...
+
+3. Profiling β₁/K₁ ratio (identifiable combination in IIR coordinates)...
+
+1. Profiling K₁ (parameter 10, non-identifiable)...
+
+2. Profiling β₁ (parameter 7, non-identifiable)...
+  Profiled K₁ range: [20.0, 40.0]
+  Profiled β₁ range: [0.01, 0.03]
+
+All profiling complete!
+  Time: 1684.3 seconds
+  β₁/K₁ range: [0.00025, 0.0015]
+  Equivalent K₁/β₁ range: [666.67, 4000.0]
+  True β₁/K₁ = 0.000667  (K₁/β₁ = 1500.0)
+  Raw ratio ψ grid: [0.00025, 0.0003392857142857143, 0.0004285714285714285, 0.0005178571428571427, 0.000607142857142857, 0.0006964285714285713, 0.0007857142857142854, 0.0008749999999999997, 0.000964285714285714, 0.0010535714285714282, 0.0011428571428571425, 0.0012321428571428568, 0.0013214285714285708, 0.0014107142857142851, 0.0014999999999999994]
+  Raw ratio lnlike: [-27.820220863480706, -7.042479515844796, -2.8782257530625017, -1.0584023315614317, -0.5401865835878894, -0.4122364817926538, -0.25458299576263954, -0.04751262257851607, 0.0, -0.2792914746026085, -0.6684996621518806, -1.0778337034991523, -1.592184794093427, -2.091137559815188, -2.7004907197792605]
+  Distance from profiled grid to ψ-MLE: 7.732041993165875e-6
+  ⚠ MLE ψ-value lies outside current grid resolution; consider increasing CONFIG.grid_1d or providing better initial guesses.
+
+======================================================================
+PROFILING SUMMARY
+======================================================================
+All three profiles (K₁, β₁, β₁/K₁ ratio) in parallel: 1684.3s
+======================================================================
+
+✓ Profile data saved to: /Users/omac010/Git-Working/reparam/examples/repressilator_profile_results.jld2
+
+Prediction interval widths (mean across time/species):
+  K₁ individual:   0.758
+  β₁ individual:   0.6563
+  β₁/K₁ identifiable: 2.1015  (inverse K₁/β₁ shares the same prediction band)
+
+======================================================================
+DEBUG: Checking reshape dimensions
+======================================================================
+pred_mean_MLE length: 1503
+Expected: 3 * 501 = 1503
+mle_mat size: (3, 501)
+Expected: (3, 501)
+mle_mat[1, 1:5]: [1.0, 15.745449624944596, 28.06294381109242, 37.07774495816302, 41.99237020041225]
+mle_mat[2, 1:5]: [0.0, 21.60205243181614, 39.754810919694805, 51.17202803307024, 54.31859710138501]
+mle_mat[3, 1:5]: [0.0, 24.01352778801017, 40.99794138581544, 44.873477668612665, 43.368232883578145]
+======================================================================
+
+======================================================================
+Analysis Complete
+======================================================================

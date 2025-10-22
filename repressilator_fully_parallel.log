@@ -1,0 +1,126 @@
+✓ ReparamTools module included
+======================================================================
+PROFILE MODE: paper
+  1D grid: 15 points
+  2D grid: [7, 7] points
+  Timeout: 40.0s per optimization
+  Initial guesses: 3
+  2D profiling: false
+  Estimated runtime: ~60 minutes
+======================================================================
+======================================================================
+Repressilator Model (Eisenberg & Hayashi Setup)
+18 Free Parameters (n fixed at 3)
+Expected identifiable: K₁/β₁, K₂/β₂, K₃/β₃ ratios
+======================================================================
+
+True parameter values (18 total, n=2.5 fixed):
+  α₀₁ = 0.008
+  α₀₂ = 0.009
+  α₀₃ = 0.01
+  α₁ = 1.0
+  α₂ = 1.2
+  α₃ = 1.5
+  β₁ = 0.02
+  β₂ = 0.025
+  β₃ = 0.015
+  K₁ = 30.0
+  K₂ = 28.0
+  K₃ = 32.0
+  k_degm₁ = 0.006
+  k_degm₂ = 0.0055
+  k_degm₃ = 0.0065
+  k_degp₁ = 0.0012
+  k_degp₂ = 0.0011
+  k_degp₃ = 0.0013
+
+Expected identifiable combinations:
+  K₁/β₁ = 1500.0
+  K₂/β₂ = 1120.0
+  K₃/β₃ = 2133.3333333333335
+
+Data generated:
+  Time points: 9
+  Observables: 3 mRNAs (m₁, m₂, m₃)
+  Total observations: 27
+  Noise level σ = 1.0
+PROFILE-WISE PREDICTION: Individual vs Ratio Comparison
+======================================================================
+
+Prediction setup:
+  Parameters: 18 (n=2.5 fixed in model)
+  Time points: 501 over [0, 10000.0]
+  Observables: 3 mRNA species (m₁, m₂, m₃)
+  Total prediction dimension: 1503
+  Noise level: σ = 1.0
+
+----------------------------------------------------------------------
+Option B: Individual Parameters vs Identifiable Ratio
+----------------------------------------------------------------------
+
+======================================================================
+FINDING MLE
+======================================================================
+
+Setting biologically-informed parameter bounds:
+
+Optimization setup:
+  Method: LN_BOBYQA (gradient-free, bound-constrained)
+  Parameters: 18
+  Initial guesses: 3 (from midpoint and random)
+  Max time: 30 seconds per guess
+  Bounds: Biologically-informed ranges (see Elowitz & Leibler 2000)
+  Starting point: Geometric midpoint of bound ranges
+
+Initial point evaluation:
+  Starting from: Geometric midpoint of bounds
+  Log-likelihood at initial: -1835.93
+  Log-likelihood at truth: -41.76
+  Gap to close: 1794.17
+
+Running optimization...
+  (This may take up to 90 seconds with 3 initial guesses)
+ERROR: LoadError: TaskFailedException
+
+    nested task error: MethodError: Cannot `convert` an object of type 
+      Tuple{Float64,Array{Float64,1},Symbol} to an object of type 
+      Tuple{Float64,Array{Float64,1}}
+    This error has been manually thrown, explicitly, so the method may exist but be intentionally marked as unimplemented.
+    
+    Closest candidates are:
+      convert(::Type{T}, ::NTuple{N, Any}) where {N, T<:Tuple}
+       @ Base essentials.jl:601
+      (::Type{T})(::Tuple) where T<:Tuple
+       @ Base tuple.jl:450
+      (::Type{T})(::Any) where T<:Tuple
+       @ Base tuple.jl:455
+      ...
+    
+    Stacktrace:
+     [1] _tuple_error(T::Type, x::Tuple{Float64, Vector{Float64}, Symbol})
+       @ Base ./essentials.jl:598
+     [2] convert(::Type{Tuple{Float64, Vector{Float64}}}, x::Tuple{Float64, Vector{Float64}, Symbol})
+       @ Base ./essentials.jl:605
+     [3] setindex!(A::Vector{Tuple{Float64, Vector{Float64}}}, x::Tuple{Float64, Vector{Float64}, Symbol}, i::Int64)
+       @ Base ./array.jl:987
+     [4] macro expansion
+       @ ~/Git-Working/reparam/core.jl:217 [inlined]
+     [5] (::Main.ReparamTools.var"#16#threadsfor_fun#48"{Main.ReparamTools.var"#16#threadsfor_fun#44#49"{var"#9#10", Int64, UnitRange{Int64}}})(tid::Int64; onethread::Bool)
+       @ Main.ReparamTools ./threadingconstructs.jl:253
+     [6] #16#threadsfor_fun
+       @ ./threadingconstructs.jl:220 [inlined]
+     [7] (::Base.Threads.var"#1#2"{Main.ReparamTools.var"#16#threadsfor_fun#48"{Main.ReparamTools.var"#16#threadsfor_fun#44#49"{var"#9#10", Int64, UnitRange{Int64}}}, Int64})()
+       @ Base.Threads ./threadingconstructs.jl:154
+
+...and 3 more exceptions.
+
+Stacktrace:
+ [1] threading_run(fun::Main.ReparamTools.var"#16#threadsfor_fun#48"{Main.ReparamTools.var"#16#threadsfor_fun#44#49"{var"#9#10", Int64, UnitRange{Int64}}}, static::Bool)
+   @ Base.Threads ./threadingconstructs.jl:173
+ [2] macro expansion
+   @ ./threadingconstructs.jl:190 [inlined]
+ [3] profile_target(lnlike_θ::var"#9#10", ψ_indices::Vector{Int64}, θ_bounds_lower::Vector{Float64}, θ_bounds_upper::Vector{Float64}, ω_initial::Vector{Float64}; grid_steps::Vector{Int64}, ω_initial_extras::Vector{Vector{Float64}}, method::Symbol, local_method::Symbol, xtol_rel::Float64, ftol_rel::Float64, optmaxtime::Float64, popsize::Int64, track_convergence::Bool)
+   @ Main.ReparamTools ~/Git-Working/reparam/core.jl:209
+ [4] top-level scope
+   @ ~/Git-Working/reparam/examples/repressilator.jl:403
+in expression starting at /Users/omac010/Git-Working/reparam/examples/repressilator.jl:403

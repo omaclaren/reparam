@@ -1,0 +1,112 @@
+# Simple test to check if both coordinate systems really give same invariance result
+# Using stat_model which is much faster
+
+if !@isdefined(ReparamTools)
+    include("ReparamTools.jl")
+end
+
+using .ReparamTools
+using LinearAlgebra
+using ForwardDiff
+
+println("="^70)
+println("COORDINATE INVARIANCE TEST: stat_model (Poisson limit)")
+println("="^70)
+
+# Simple auxiliary map: ϕ(n,p) = [np, np]
+ϕ_xy = xy -> [xy[1]*xy[2], xy[1]*xy[2]]
+
+# Test point
+xy_test = [100.0, 0.1]  # n=100, p=0.1, so np=10
+xy_log_test = log.(xy_test)
+
+println("\nTest point:")
+println("  θ = ", xy_test, " (n, p)")
+println("  log(θ) = ", round.(xy_log_test, digits=3))
+
+# Log-space auxiliary map
+ϕ_log = xy_log -> ϕ_xy(exp.(xy_log))
+
+println("\n" * "="^70)
+println("1. LOG-SPACE ANALYSIS")
+println("="^70)
+
+S_log, N_log, N_perp_log, rank_log = find_invariant_subspace(
+    ϕ_log, xy_log_test;
+    invariance_method=:finite_difference,
+    verbose=true
+)
+
+println("Rank: $rank_log/2")
+println("Null space dimension: ", size(N_log, 2))
+println("Invariant vectors: ", size(N_log, 2))
+
+if size(N_log, 2) > 0
+    println("\nNull space vectors (log-space):")
+    for j in 1:size(N_log, 2)
+        v = N_log[:, j]
+        println("  v$j = [n: $(round(v[1], digits=3)), p: $(round(v[2], digits=3))]")
+        println("    → exp(v · log(θ)) gives direction: n^$(round(v[1],digits=2)) * p^$(round(v[2],digits=2))")
+    end
+end
+
+println("\n" * "="^70)
+println("2. ORIGINAL-SPACE ANALYSIS")
+println("="^70)
+
+S_orig, N_orig, N_perp_orig, rank_orig = find_invariant_subspace(
+    ϕ_xy, xy_test;
+    invariance_method=:finite_difference,
+    verbose=true
+)
+
+println("Rank: $rank_orig/2")
+println("Null space dimension: ", size(N_orig, 2))
+println("Invariant vectors: ", size(N_orig, 2))
+
+if size(N_orig, 2) > 0
+    println("\nNull space vectors (original-space):")
+    for j in 1:size(N_orig, 2)
+        v = N_orig[:, j]
+        println("  v$j = [n: $(round(v[1], digits=3)), p: $(round(v[2], digits=3))]")
+        println("    → direction: $(round(v[1],digits=2))*n + $(round(v[2],digits=2))*p")
+    end
+end
+
+println("\n" * "="^70)
+println("3. COMPARISON")
+println("="^70)
+
+println("\n  Coordinate System | Rank | Null Dim | Invariant | Status")
+println("  " * "-"^58)
+
+n_null_log = size(N_log, 2)
+n_total_null_log = 2 - rank_log
+log_status = n_null_log == n_total_null_log ? "✓ PASS" : "✗ FAIL"
+
+n_null_orig = size(N_orig, 2)
+n_total_null_orig = 2 - rank_orig
+orig_status = n_null_orig == n_total_null_orig ? "✓ PASS" : "✗ FAIL"
+
+println("  Log-space (f=log)  | $rank_log/2  |    $(n_total_null_log)     |    $n_null_log      | $log_status")
+println("  Original-space     | $rank_orig/2  |    $(n_total_null_orig)     |    $n_null_orig      | $orig_status")
+
+println("\nInterpretation:")
+if n_null_log == n_total_null_log && n_null_orig < n_total_null_orig
+    println("  ✓ As expected: log-space has invariant null space")
+    println("  ✓ Original-space does NOT have fully invariant null space")
+    println("  → This confirms coordinate-dependence of invariance!")
+elseif n_null_log == n_total_null_log && n_null_orig == n_total_null_orig
+    println("  ⚠ Unexpected: BOTH have fully invariant null spaces")
+    println("  → This suggests something special about this model")
+else
+    println("  ? Unclear result - needs investigation")
+end
+
+println("\n" * "="^70)
+println("Expected for this model:")
+println("  - Log-space: rank 1/2, null space = [1, 1] (product np)")
+println("  - Original-space: rank 1/2, but null space NOT invariant")
+println("  - The null space direction [1,1] in log-space means: n^1 * p^1 = np")
+println("  - In original space, a linear null direction doesn't capture products!")
+println("="^70)

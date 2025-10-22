@@ -1,0 +1,56 @@
+======================================================================
+MINIMAL INVARIANCE SCORE COMPARISON
+======================================================================
+
+Using MLE from previous run
+Time points: 7 (for speed)
+
+
+======================================================================
+----------------------------------------------------------------------
+LOG-SPACE COORDINATE SYSTEM
+----------------------------------------------------------------------
+Computing Jacobian...
+  Jacobian: 21 × 18
+  σ_max: 1522.0
+  Rank: 15/18, Null dim: 3
+Running invariance test (ε=1.0e-5, 5 probes)...
+  Tolerance: τM = 2.267e-5
+
+  Invariance scores:
+    Vec 1: 1.28e-5 (0.56×τM) ✓
+    Vec 2: 6.175e-7 (0.03×τM) ✓
+    Vec 3: 8.663e-8 (0.0×τM) ✓
+
+  Result: 3/3 pass
+
+======================================================================
+----------------------------------------------------------------------
+ORIGINAL-SPACE COORDINATE SYSTEM
+----------------------------------------------------------------------
+Computing Jacobian...
+  Jacobian: 21 × 18
+  σ_max: 533400.0
+  Rank: 15/18, Null dim: 3
+Running invariance test (ε=1.0e-5, 5 probes)...
+  Tolerance: τM = 0.007949
+
+  Invariance scores:
+    Vec 1: 2.6e-6 (0.0×τM) ✓
+    Vec 2: 6.282e-8 (0.0×τM) ✓
+    Vec 3: 2.338e-9 (0.0×τM) ✓
+
+  Result: 3/3 pass
+
+======================================================================
+COMPARISON
+======================================================================
+
+Invariance score ratios (original/log):
+  Vec 1: 0.2× ← similar
+  Vec 2: 0.1× ← similar
+  Vec 3: 0.03× ← similar
+
+Interpretation:
+  ⚠ Both coordinate systems show similar invariance (ratio < 2)
+  → This is unexpected and suggests special structure

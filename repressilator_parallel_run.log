@@ -1,0 +1,82 @@
+✓ ReparamTools module included
+======================================================================
+PROFILE MODE: paper
+  1D grid: 15 points
+  2D grid: [7, 7] points
+  Timeout: 40.0s per optimization
+  Initial guesses: 3
+  2D profiling: false
+  Estimated runtime: ~60 minutes
+======================================================================
+======================================================================
+Repressilator Model (Eisenberg & Hayashi Setup)
+18 Free Parameters (n fixed at 3)
+Expected identifiable: K₁/β₁, K₂/β₂, K₃/β₃ ratios
+======================================================================
+
+True parameter values (18 total, n=2.5 fixed):
+  α₀₁ = 0.008
+  α₀₂ = 0.009
+  α₀₃ = 0.01
+  α₁ = 1.0
+  α₂ = 1.2
+  α₃ = 1.5
+  β₁ = 0.02
+  β₂ = 0.025
+  β₃ = 0.015
+  K₁ = 30.0
+  K₂ = 28.0
+  K₃ = 32.0
+  k_degm₁ = 0.006
+  k_degm₂ = 0.0055
+  k_degm₃ = 0.0065
+  k_degp₁ = 0.0012
+  k_degp₂ = 0.0011
+  k_degp₃ = 0.0013
+
+Expected identifiable combinations:
+  K₁/β₁ = 1500.0
+  K₂/β₂ = 1120.0
+  K₃/β₃ = 2133.3333333333335
+
+Data generated:
+  Time points: 9
+  Observables: 3 mRNAs (m₁, m₂, m₃)
+  Total observations: 27
+  Noise level σ = 1.0
+PROFILE-WISE PREDICTION: Individual vs Ratio Comparison
+======================================================================
+
+Prediction setup:
+  Parameters: 18 (n=2.5 fixed in model)
+  Time points: 501 over [0, 10000.0]
+  Observables: 3 mRNA species (m₁, m₂, m₃)
+  Total prediction dimension: 1503
+  Noise level: σ = 1.0
+
+----------------------------------------------------------------------
+Option B: Individual Parameters vs Identifiable Ratio
+----------------------------------------------------------------------
+
+======================================================================
+FINDING MLE
+======================================================================
+
+Setting biologically-informed parameter bounds:
+
+Optimization setup:
+  Method: LN_BOBYQA (gradient-free, bound-constrained)
+  Parameters: 18
+  Initial guesses: 3 (from midpoint and random)
+  Max time: 30 seconds per guess
+  Bounds: Biologically-informed ranges (see Elowitz & Leibler 2000)
+  Starting point: Geometric midpoint of bound ranges
+
+Initial point evaluation:
+  Starting from: Geometric midpoint of bounds
+  Log-likelihood at initial: -1835.93
+  Log-likelihood at truth: -41.76
+  Gap to close: 1794.17
+
+Running optimization...
+  (This may take up to 90 seconds with 3 initial guesses)

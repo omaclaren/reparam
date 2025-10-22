@@ -1,0 +1,234 @@
+✓ ReparamTools module included
+======================================================================
+PROFILE MODE: test
+  1D grid: 5 points
+  2D grid: [3, 3] points
+  Timeout: 10.0s per optimization
+  Initial guesses: 1
+  2D profiling: false
+  Estimated runtime: ~2 minutes
+======================================================================
+======================================================================
+Repressilator Model (Eisenberg & Hayashi Setup)
+18 Free Parameters (n fixed at 3)
+Expected identifiable: K₁/β₁, K₂/β₂, K₃/β₃ ratios
+======================================================================
+
+True parameter values (18 total, n=2.5 fixed):
+  α₀₁ = 0.008
+  α₀₂ = 0.009
+  α₀₃ = 0.01
+  α₁ = 1.0
+  α₂ = 1.2
+  α₃ = 1.5
+  β₁ = 0.02
+  β₂ = 0.025
+  β₃ = 0.015
+  K₁ = 30.0
+  K₂ = 28.0
+  K₃ = 32.0
+  k_degm₁ = 0.006
+  k_degm₂ = 0.0055
+  k_degm₃ = 0.0065
+  k_degp₁ = 0.0012
+  k_degp₂ = 0.0011
+  k_degp₃ = 0.0013
+
+Expected identifiable combinations:
+  K₁/β₁ = 1500.0
+  K₂/β₂ = 1120.0
+  K₃/β₃ = 2133.3333333333335
+
+Data generated:
+  Time points: 9
+  Observables: 3 mRNAs (m₁, m₂, m₃)
+  Total observations: 27
+  Noise level σ = 1.0
+PROFILE-WISE PREDICTION: Individual vs Ratio Comparison
+======================================================================
+
+Prediction setup:
+  Parameters: 18 (n=2.5 fixed in model)
+  Time points: 501 over [0, 10000.0]
+  Observables: 3 mRNA species (m₁, m₂, m₃)
+  Total prediction dimension: 1503
+  Noise level: σ = 1.0
+
+----------------------------------------------------------------------
+Option B: Individual Parameters vs Identifiable Ratio
+----------------------------------------------------------------------
+
+======================================================================
+FINDING MLE
+======================================================================
+
+Setting biologically-informed parameter bounds:
+
+Optimization setup:
+  Method: LN_BOBYQA (gradient-free, bound-constrained)
+  Parameters: 18
+  Initial guesses: 3 (from midpoint and random)
+  Max time: 30 seconds per guess
+  Bounds: Biologically-informed ranges (see Elowitz & Leibler 2000)
+  Starting point: Geometric midpoint of bound ranges
+
+Initial point evaluation:
+  Starting from: Geometric midpoint of bounds
+  Log-likelihood at initial: -1835.93
+  Log-likelihood at truth: -41.76
+  Gap to close: 1794.17
+
+Running optimization...
+  (This may take up to 90 seconds with 3 initial guesses)
+Optimization complete!
+  Time: 104.1 seconds
+
+MLE verification:
+  Log-likelihood at true parameters: -41.7638
+  Log-likelihood at MLE: -34.1795
+  Improvement: 7.5843
+
+MLE parameter values:
+  α₀₁ = 0.006087 (true: 0.008, error: 23.9%)
+  α₀₂ = 0.009356 (true: 0.009, error: 4.0%)
+  α₀₃ = 0.006697 (true: 0.01, error: 33.0%)
+  α₁ = 0.8 (true: 1.0, error: 20.0%)
+  α₂ = 1.135 (true: 1.2, error: 5.4%)
+  α₃ = 1.251 (true: 1.5, error: 16.6%)
+  β₁ = 0.0146 (true: 0.02, error: 27.0%)
+  β₂ = 0.02448 (true: 0.025, error: 2.1%)
+  β₃ = 0.01044 (true: 0.015, error: 30.4%)
+  K₁ = 20.79 (true: 30.0, error: 30.7%)
+  K₂ = 21.17 (true: 28.0, error: 24.4%)
+  K₃ = 31.53 (true: 32.0, error: 1.5%)
+  k_degm₁ = 0.008 (true: 0.006, error: 33.3%)
+  k_degm₂ = 0.006434 (true: 0.0055, error: 17.0%)
+  k_degm₃ = 0.004441 (true: 0.0065, error: 31.7%)
+  k_degp₁ = 0.001288 (true: 0.0012, error: 7.3%)
+  k_degp₂ = 0.001122 (true: 0.0011, error: 2.0%)
+  k_degp₃ = 0.001277 (true: 0.0013, error: 1.8%)
+
+======================================================================
+Applying IIR at MLE (18 parameters)
+======================================================================
+
+======================================================================
+Applying IIR with finite-difference invariance test...
+======================================================================
+
+IIR analysis time: 9.9 seconds
+
+Singular values of Jacobian (in log-space):
+  σ[1] = 3197.83
+  σ[2] = 1274.16
+  σ[3] = 847.417
+  σ[4] = 643.136
+  σ[5] = 327.254
+  σ[6] = 280.721
+  σ[7] = 164.308
+  σ[8] = 124.214
+  σ[9] = 100.322
+  σ[10] = 79.0698
+  ...
+  σ[16] = 7.86508e-6
+  σ[17] = 2.03806e-6
+  σ[18] = 1.63644e-6
+
+Invariant Subspace Analysis:
+  Jacobian rank: 15 / 18
+  Expected rank: 15 or 16 (with 2-3 non-identifiable combinations)
+  Identifiable directions: 18
+  Non-identifiable directions: 0
+┌ Warning: Assignment to `v` in soft scope is ambiguous because a global variable by the same name exists: `v` will be treated as a new local. Disambiguate by using `local v` to suppress this warning or `global v` to assign to the existing global variable.
+└ @ ~/Git-Working/reparam/examples/repressilator.jl:497
+┌ Warning: Assignment to `beta_coef` in soft scope is ambiguous because a global variable by the same name exists: `beta_coef` will be treated as a new local. Disambiguate by using `local beta_coef` to suppress this warning or `global beta_coef` to assign to the existing global variable.
+└ @ ~/Git-Working/reparam/examples/repressilator.jl:514
+┌ Warning: Assignment to `K_coef` in soft scope is ambiguous because a global variable by the same name exists: `K_coef` will be treated as a new local. Disambiguate by using `local K_coef` to suppress this warning or `global K_coef` to assign to the existing global variable.
+└ @ ~/Git-Working/reparam/examples/repressilator.jl:515
+┌ Warning: Assignment to `v` in soft scope is ambiguous because a global variable by the same name exists: `v` will be treated as a new local. Disambiguate by using `local v` to suppress this warning or `global v` to assign to the existing global variable.
+└ @ ~/Git-Working/reparam/examples/repressilator.jl:685
+┌ Warning: Assignment to `beta_coef` in soft scope is ambiguous because a global variable by the same name exists: `beta_coef` will be treated as a new local. Disambiguate by using `local beta_coef` to suppress this warning or `global beta_coef` to assign to the existing global variable.
+└ @ ~/Git-Working/reparam/examples/repressilator.jl:689
+┌ Warning: Assignment to `K_coef` in soft scope is ambiguous because a global variable by the same name exists: `K_coef` will be treated as a new local. Disambiguate by using `local K_coef` to suppress this warning or `global K_coef` to assign to the existing global variable.
+└ @ ~/Git-Working/reparam/examples/repressilator.jl:690
+┌ Warning: Assignment to `v` in soft scope is ambiguous because a global variable by the same name exists: `v` will be treated as a new local. Disambiguate by using `local v` to suppress this warning or `global v` to assign to the existing global variable.
+└ @ ~/Git-Working/reparam/examples/repressilator.jl:707
+┌ Warning: Assignment to `beta_coef` in soft scope is ambiguous because a global variable by the same name exists: `beta_coef` will be treated as a new local. Disambiguate by using `local beta_coef` to suppress this warning or `global beta_coef` to assign to the existing global variable.
+└ @ ~/Git-Working/reparam/examples/repressilator.jl:709
+┌ Warning: Assignment to `K_coef` in soft scope is ambiguous because a global variable by the same name exists: `K_coef` will be treated as a new local. Disambiguate by using `local K_coef` to suppress this warning or `global K_coef` to assign to the existing global variable.
+└ @ ~/Git-Working/reparam/examples/repressilator.jl:710
+┌ Warning: Assignment to `v` in soft scope is ambiguous because a global variable by the same name exists: `v` will be treated as a new local. Disambiguate by using `local v` to suppress this warning or `global v` to assign to the existing global variable.
+└ @ ~/Git-Working/reparam/examples/repressilator.jl:727
+┌ Warning: Assignment to `v` in soft scope is ambiguous because a global variable by the same name exists: `v` will be treated as a new local. Disambiguate by using `local v` to suppress this warning or `global v` to assign to the existing global variable.
+└ @ ~/Git-Working/reparam/examples/repressilator.jl:773
+┌ Warning: Assignment to `beta_coef` in soft scope is ambiguous because a global variable by the same name exists: `beta_coef` will be treated as a new local. Disambiguate by using `local beta_coef` to suppress this warning or `global beta_coef` to assign to the existing global variable.
+└ @ ~/Git-Working/reparam/examples/repressilator.jl:776
+┌ Warning: Assignment to `K_coef` in soft scope is ambiguous because a global variable by the same name exists: `K_coef` will be treated as a new local. Disambiguate by using `local K_coef` to suppress this warning or `global K_coef` to assign to the existing global variable.
+└ @ ~/Git-Working/reparam/examples/repressilator.jl:777
+┌ Warning: Assignment to `v` in soft scope is ambiguous because a global variable by the same name exists: `v` will be treated as a new local. Disambiguate by using `local v` to suppress this warning or `global v` to assign to the existing global variable.
+└ @ ~/Git-Working/reparam/examples/repressilator.jl:794
+┌ Warning: Assignment to `v` in soft scope is ambiguous because a global variable by the same name exists: `v` will be treated as a new local. Disambiguate by using `local v` to suppress this warning or `global v` to assign to the existing global variable.
+└ @ ~/Git-Working/reparam/examples/repressilator.jl:1177
+┌ Warning: Assignment to `beta_coef` in soft scope is ambiguous because a global variable by the same name exists: `beta_coef` will be treated as a new local. Disambiguate by using `local beta_coef` to suppress this warning or `global beta_coef` to assign to the existing global variable.
+└ @ ~/Git-Working/reparam/examples/repressilator.jl:1184
+┌ Warning: Assignment to `K_coef` in soft scope is ambiguous because a global variable by the same name exists: `K_coef` will be treated as a new local. Disambiguate by using `local K_coef` to suppress this warning or `global K_coef` to assign to the existing global variable.
+└ @ ~/Git-Working/reparam/examples/repressilator.jl:1185
+
+⚠ WARNING: No invariant null space found!
+This suggests the model doesn't have IIR-compatible invariant structure.
+
+======================================================================
+MLE DYNAMICS VISUALIZATION
+======================================================================
+
+Generating MLE trajectory plots before starting profiling...
+(Review these plots to verify dynamics before continuing)
+Creating combined mRNA + protein dynamics plot with true trajectories...
+
+MLE dynamics plots saved to figures/
+  - Individual mRNA plots (3)
+  - Individual protein plots (3)
+  - Combined 6-panel plot
+
+⏸  REVIEW PLOTS BEFORE CONTINUING TO PROFILING
+   (Press Ctrl+C to interrupt if dynamics look incorrect)
+======================================================================
+
+======================================================================
+STARTING PROFILE LIKELIHOOD ANALYSIS
+======================================================================
+
+Profiling K₁ and β₁ individually in θ-space (comparison, using 1 threads)...
+
+1. Profiling K₁ (parameter 10, non-identifiable)...
+  Profiled K₁ range: [20.0, 40.0]
+
+2. Profiling β₁ (parameter 7, non-identifiable)...
+  Profiled β₁ range: [0.01, 0.03]
+Individual parameter profiling complete!
+  Time: 171.3 seconds
+
+Profiling ratio and best single parameter in parallel (using 1 threads)...
+
+  Job 1: Profiling identifiable β₁/K₁ ratio...
+ERROR: LoadError: TaskFailedException
+
+    nested task error: UndefVarError: `ψ_K1_β1_index` not defined in `Main`
+    Suggestion: check for spelling errors or missing imports.
+    Stacktrace:
+     [1] macro expansion
+       @ ~/Git-Working/reparam/examples/repressilator.jl:1411 [inlined]
+     [2] (::var"#325#threadsfor_fun#60"{var"#325#threadsfor_fun#58#61"{UnitRange{Int64}}})(tid::Int64; onethread::Bool)
+       @ Main ./threadingconstructs.jl:253
+     [3] #325#threadsfor_fun
+       @ ./threadingconstructs.jl:220 [inlined]
+     [4] (::Base.Threads.var"#1#2"{var"#325#threadsfor_fun#60"{var"#325#threadsfor_fun#58#61"{UnitRange{Int64}}}, Int64})()
+       @ Base.Threads ./threadingconstructs.jl:154
+Stacktrace:
+ [1] threading_run(fun::var"#325#threadsfor_fun#60"{var"#325#threadsfor_fun#58#61"{UnitRange{Int64}}}, static::Bool)
+   @ Base.Threads ./threadingconstructs.jl:173
+ [2] macro expansion
+   @ ./threadingconstructs.jl:190 [inlined]
+ [3] top-level scope
+   @ ~/Git-Working/reparam/examples/repressilator.jl:189
+in expression starting at /Users/omac010/Git-Working/reparam/examples/repressilator.jl:1407
