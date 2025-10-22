@@ -436,11 +436,12 @@ function profile_grid_distributed(lnlike_θ, ψ_grid::Vector{Vector{Float64}}, �
         )
     end
 
-    # Determine number of chunks
+    # Determine number of chunks (don't exceed grid size)
+    n_grid = length(ψ_grid)
     n_chunks_actual = isnothing(n_chunks) ? n_workers : n_chunks
+    n_chunks_actual = min(n_chunks_actual, n_grid)  # Clamp to grid size
 
     # Split grid into contiguous chunks
-    n_grid = length(ψ_grid)
     chunk_size = div(n_grid, n_chunks_actual)
     remainder = n_grid % n_chunks_actual
 
