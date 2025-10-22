@@ -156,7 +156,7 @@ for i in 1:dim_all
     plot_1D_profile(model_name, ψ_values, lnlike_ψ_values,
         varnames["ψ"*string(i)];
         varname_save=varnames["ψ"*string(i)*"_save"],
-        ψ_true=xy_true[i], ψ_MLE=xy_MLE[i], save_dir="../figures/")
+        ψ_true=xy_true[i], ψ_MLE=xy_MLE[i], save_dir="./figures/")
 end
 
 # 2D Profiles - selective pairs to manage runtime
@@ -743,7 +743,7 @@ for i in 1:dim_all
     plot_1D_profile(model_name, ψ_values, lnlike_ψ_values,
         varnames["ψ"*string(i)];
         varname_save=varnames["ψ"*string(i)*"_save"],
-        ψ_true=final_true[i], ψ_MLE=final_MLE_opt[i], save_dir="../figures/")
+        ψ_true=final_true[i], ψ_MLE=final_MLE_opt[i], save_dir="./figures/")
 
     println("  Profile ", i, ": complete")
 end
