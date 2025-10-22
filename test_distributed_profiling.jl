@@ -81,9 +81,7 @@ println("\n=== Testing Distributed Profiling ===")
     θ_lower, θ_upper, ω_initial;
     method=:LN_BOBYQA,
     optmaxtime=10.0,
-    n_chunks=2,
-    chunk_strategy=:stripes,
-    track_convergence=false
+    n_chunks=2
 )
 
 # Test sequential for comparison

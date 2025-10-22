@@ -366,101 +366,19 @@ end
 
 
 """
-    partition_grid_for_continuation(ψ_grid, n_chunks; strategy=:stripes)
-
-Partition a grid of interest parameter values into chunks for distributed execution.
-
-The partitioning strategy balances two goals:
-1. Load balancing: distribute work evenly across workers
-2. Continuation benefit: preserve adaptive continuation within chunks
-
-# Arguments
-- `ψ_grid`: Vector of parameter vectors to partition
-- `n_chunks`: Number of chunks to create (typically nworkers())
-- `strategy`: Partitioning strategy (default: :stripes)
-  - `:stripes`: Preserve ordering within each chunk (good for 1D grids)
-  - `:blocks`: Spatial blocks (for higher-dim grids, loses more continuation)
-  - `:round_robin`: Interleave points (balanced, minimal continuation)
-
-# Returns
-Tuple of (chunks, indices) where:
-- `chunks`: Vector of chunks, each chunk is Vector{Vector{Float64}}
-- `indices`: Vector of index vectors matching chunks (for reordering results)
-
-# Example
-```julia
-# For 2D grid (β₁, K₁) with 21×21 = 441 points, 4 workers
-# :stripes divides into 4 strips of ~110 points each
-# Worker 1: points 1-110, Worker 2: points 111-220, etc.
-chunks, indices = partition_grid_for_continuation(ψ_grid, 4; strategy=:stripes)
-```
-"""
-function partition_grid_for_continuation(ψ_grid::Vector{Vector{Float64}}, n_chunks::Int;
-                                         strategy::Symbol=:stripes)
-    n_grid = length(ψ_grid)
-
-    if n_chunks >= n_grid
-        # More chunks than grid points - each chunk gets at most 1 point
-        chunks = [[ψ] for ψ in ψ_grid]
-        indices = [[i] for i in 1:n_grid]
-        return chunks, indices
-    end
-
-    if strategy == :stripes || strategy == :blocks
-        # Simple stripe partitioning: divide grid into contiguous chunks
-        chunk_size = div(n_grid, n_chunks)
-        remainder = n_grid % n_chunks
-
-        chunks = Vector{Vector{Vector{Float64}}}(undef, n_chunks)
-        indices = Vector{Vector{Int}}(undef, n_chunks)
-        start_idx = 1
-
-        for i in 1:n_chunks
-            # Give first 'remainder' chunks one extra point
-            this_chunk_size = chunk_size + (i <= remainder ? 1 : 0)
-            end_idx = start_idx + this_chunk_size - 1
-
-            chunks[i] = ψ_grid[start_idx:end_idx]
-            indices[i] = collect(start_idx:end_idx)
-            start_idx = end_idx + 1
-        end
-
-        return chunks, indices
-
-    elseif strategy == :round_robin
-        # Interleave points across chunks
-        chunks = [Vector{Vector{Float64}}() for _ in 1:n_chunks]
-        indices = [Vector{Int}() for _ in 1:n_chunks]
-
-        for (i, ψ) in enumerate(ψ_grid)
-            chunk_idx = mod1(i, n_chunks)
-            push!(chunks[chunk_idx], ψ)
-            push!(indices[chunk_idx], i)
-        end
-
-        return chunks, indices
-
-    else
-        error("Unknown partitioning strategy: $strategy. Use :stripes, :blocks, or :round_robin")
-    end
-end
-
-
-"""
     profile_grid_distributed(lnlike_θ, ψ_grid, ψ_indices, θ_bounds_lower, θ_bounds_upper, ω_initial;
                             ω_initial_extras=nothing, method=:LN_BOBYQA, local_method=:LD_TNEWTON_PRECOND,
                             xtol_rel=1e-9, ftol_rel=1e-9, optmaxtime=60.0, popsize=50,
-                            n_chunks=nothing, chunk_strategy=:stripes, track_convergence=false)
+                            n_chunks=nothing, track_convergence=false)
 
 Execute profile likelihood over a grid using distributed parallel execution.
 
-Partitions the grid into chunks and evaluates each chunk on a separate worker process
-using `pmap`. Within each chunk, adaptive continuation is preserved. Between chunks,
-continuation is lost (optimization starts from ω_initial).
+Splits grid into contiguous chunks, runs each chunk via `pmap` using `profile_grid_sequential()`,
+and concatenates results. Adaptive continuation works within each chunk but not between chunks.
 
 # Arguments
 - `lnlike_θ`: Log-likelihood function (must be serializable)
-- `ψ_grid`: Vector of interest parameter vectors
+- `ψ_grid`: Vector of interest parameter vectors (from any dimensionality: 1D, 2D, 3D, ...)
 - `ψ_indices`: Indices of interest parameters
 - `θ_bounds_lower`, `θ_bounds_upper`: Parameter bounds (must be serializable)
 - `ω_initial`: Initial guess for nuisance parameters
@@ -470,7 +388,6 @@ continuation is lost (optimization starts from ω_initial).
 - `optmaxtime`: Time limit per optimization (seconds)
 - `popsize`: Population size for global methods
 - `n_chunks`: Number of chunks (default: nworkers())
-- `chunk_strategy`: Partitioning strategy (default: :stripes)
 - `track_convergence`: Whether to track convergence (default: false)
 
 # Returns
@@ -479,32 +396,20 @@ continuation is lost (optimization starts from ω_initial).
 - `convergence_info`: Convergence outcomes (if track_convergence=true)
 
 # Notes
-- Requires workers to be already started (e.g., `addprocs(4)`)
-- Each worker must have ReparamTools loaded (`@everywhere using ReparamTools`)
-- Grid order is preserved in returned results
-- Speedup ≈ nworkers() × (chunk_continuation_factor)
+- Requires workers: `addprocs(4); @everywhere using ReparamTools`
+- Chunks are contiguous slices of ψ_grid
+- Continuation preserved WITHIN chunks, lost BETWEEN chunks
 - For 21×21 grid with 4 workers: ~14.7 hrs sequential → ~4 hrs distributed
-
-# Warm-start behavior
-- All chunks start from the same ω_initial
-- Adaptive continuation works WITHIN each chunk but NOT between chunks
-- This means first point of each chunk may find different local maxima
-- For :stripes strategy (default), chunks are contiguous so this is minimal issue
-- For :round_robin, interleaved points lose most continuation benefit
-- If this is a concern, use sequential execution or increase ω_initial_extras
 
 # Example
 ```julia
-# Start workers
 using Distributed
 addprocs(4)
 @everywhere using ReparamTools
 
-# Run distributed profiling
 θ_vals, ll_vals = profile_grid_distributed(
     lnlike_θ, ψ_grid, ψ_indices,
-    θ_lower, θ_upper, ω_init;
-    n_chunks=4, chunk_strategy=:stripes
+    θ_lower, θ_upper, ω_init; n_chunks=4
 )
 ```
 """
@@ -514,7 +419,6 @@ function profile_grid_distributed(lnlike_θ, ψ_grid::Vector{Vector{Float64}}, �
                                   method=:LN_BOBYQA, local_method=:LD_TNEWTON_PRECOND,
                                   xtol_rel=1e-9, ftol_rel=1e-9, optmaxtime=60.0, popsize=50,
                                   n_chunks::Union{Nothing, Int}=nothing,
-                                  chunk_strategy::Symbol=:stripes,
                                   track_convergence=false)
 
     # Check workers available
@@ -535,10 +439,20 @@ function profile_grid_distributed(lnlike_θ, ψ_grid::Vector{Vector{Float64}}, �
     # Determine number of chunks
     n_chunks_actual = isnothing(n_chunks) ? n_workers : n_chunks
 
-    # Partition grid into chunks (with indices for reordering)
-    chunks, chunk_indices = partition_grid_for_continuation(ψ_grid, n_chunks_actual; strategy=chunk_strategy)
+    # Split grid into contiguous chunks
+    n_grid = length(ψ_grid)
+    chunk_size = div(n_grid, n_chunks_actual)
+    remainder = n_grid % n_chunks_actual
 
-    println("Distributed profiling: $(length(ψ_grid)) points → $n_chunks_actual chunks on $n_workers workers")
+    chunks = Vector{Vector{Vector{Float64}}}(undef, n_chunks_actual)
+    start_idx = 1
+    for i in 1:n_chunks_actual
+        this_size = chunk_size + (i <= remainder ? 1 : 0)
+        chunks[i] = ψ_grid[start_idx:start_idx+this_size-1]
+        start_idx += this_size
+    end
+
+    println("Distributed profiling: $n_grid points → $n_chunks_actual chunks on $n_workers workers")
     println("Chunk sizes: ", [length(c) for c in chunks])
 
     # Evaluate each chunk in parallel using pmap
@@ -555,31 +469,15 @@ function profile_grid_distributed(lnlike_θ, ψ_grid::Vector{Vector{Float64}}, �
         )
     end
 
-    # Merge results back into original grid order using indices
-    # results is Vector of tuples: (θ_values, lnlike_values) or (θ_values, lnlike_values, conv_info)
-    n_total = length(ψ_grid)
-    θ_values = Vector{Vector{Float64}}(undef, n_total)
-    lnlike_values = Vector{Float64}(undef, n_total)
-
+    # Concatenate results (chunks were contiguous slices, so just join them)
     if track_convergence
-        convergence_info = Vector{Symbol}(undef, n_total)
-        for (i, (chunk_θ, chunk_ll, chunk_conv)) in enumerate(results)
-            # Use chunk_indices to place results in correct positions
-            for (j, orig_idx) in enumerate(chunk_indices[i])
-                θ_values[orig_idx] = chunk_θ[j]
-                lnlike_values[orig_idx] = chunk_ll[j]
-                convergence_info[orig_idx] = chunk_conv[j]
-            end
-        end
+        θ_values = vcat([r[1] for r in results]...)
+        lnlike_values = vcat([r[2] for r in results]...)
+        convergence_info = vcat([r[3] for r in results]...)
         return θ_values, lnlike_values, convergence_info
     else
-        for (i, (chunk_θ, chunk_ll)) in enumerate(results)
-            # Use chunk_indices to place results in correct positions
-            for (j, orig_idx) in enumerate(chunk_indices[i])
-                θ_values[orig_idx] = chunk_θ[j]
-                lnlike_values[orig_idx] = chunk_ll[j]
-            end
-        end
+        θ_values = vcat([r[1] for r in results]...)
+        lnlike_values = vcat([r[2] for r in results]...)
         return θ_values, lnlike_values
     end
 end
