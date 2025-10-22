@@ -1,74 +1,198 @@
-# Quick test: Compare sequential vs distributed on stat_model 2D profile
+# Test stat_model: Sequential vs Distributed 2D Profiling
+# Verifies that distributed profiling produces identical results to sequential
 
 using Distributed
-addprocs(2)
 
-# Load on main first
-if !@isdefined(ReparamTools)
-    include("ReparamTools.jl")
-end
+println("="^70)
+println("TEST: stat_model Sequential vs Distributed Profiling")
+println("="^70)
+
+# Add workers
+println("\n[1/5] Setting up workers...")
+addprocs(2)
+println("✓ Added 2 workers: ", workers())
+
+# Load ReparamTools on main process
+include("ReparamTools.jl")
 using .ReparamTools
 using Distributions
 using LinearAlgebra
 using Random
+using Printf
+using Statistics
 
-# Then load on workers
+# Load on workers
 @everywhere begin
-    if !@isdefined(ReparamTools)
-        include($(joinpath(@__DIR__, "ReparamTools.jl")))
-    end
+    include($(joinpath(@__DIR__, "ReparamTools.jl")))
     using .ReparamTools
     using Distributions
     using LinearAlgebra
 end
 
-Random.seed!(12)
+println("\n[2/5] Setting up stat_model...")
+# Set random seed for reproducibility
+Random.seed!(42)
 
-# Simple Poisson limit model from stat_model.jl
-n_true = 1000.0
-p_true = 0.01
-n_obs = 100
-data = rand(Poisson(n_true * p_true), n_obs)
+# Model parameters (Poisson limit: Normal(np, sqrt(np)))
+n_true, p_true = 100.0, 0.2
+θ_true = [n_true, p_true]
 
-# Define likelihood everywhere
-@everywhere function lnlike_xy(xy::Vector{Float64})
-    n, p = xy
-    if n <= 0 || p <= 0 || p >= 1
+# Parameter bounds
+θ_lower = [0.1, 0.0001]
+θ_upper = [500.0, 1.0]
+
+# Fixed data (same as stat_model.jl)
+data_fixed = [21.9, 22.3, 12.8, 16.4, 16.4, 20.3, 16.2, 20.0, 19.7, 24.4]
+
+# Define model: θ = [n, p] -> Normal(np, sqrt(np))
+function predict_mean_std(θ)
+    n, p = θ
+    np = n * p
+    return np, sqrt(np)
+end
+
+# Likelihood function
+function lnlike_θ(θ)
+    try
+        μ, σ = predict_mean_std(θ)
+        if σ <= 0 || !isfinite(μ) || !isfinite(σ)
+            return -Inf
+        end
+        dist = Normal(μ, σ)
+        return sum(logpdf(dist, d) for d in data_fixed)
+    catch
         return -Inf
     end
-    lambda = n * p
-    return sum(logpdf(Poisson(lambda), d) for d in $(data))
 end
 
-# Parameter bounds (from stat_model.jl)
-xy_lower_bounds = [1.0, 0.001]
-xy_upper_bounds = [10000.0, 0.999]
+# Send data and likelihood to workers
+@everywhere data_global = $(data_fixed)
 
-println("Testing 2D profile (both parameters)...")
-println("Grid: 20x20 = 400 points\n")
+@everywhere function predict_mean_std_worker(θ)
+    n, p = θ
+    np = n * p
+    return np, sqrt(np)
+end
 
-# Sequential
-println("=== Sequential ===")
+@everywhere function lnlike_θ_worker(θ)
+    try
+        μ, σ = predict_mean_std_worker(θ)
+        if σ <= 0 || !isfinite(μ) || !isfinite(σ)
+            return -Inf
+        end
+        dist = Normal(μ, σ)
+        return sum(logpdf(dist, d) for d in data_global)
+    catch
+        return -Inf
+    end
+end
+
+println("✓ Model setup complete")
+println("  True parameters: n=$(n_true), p=$(p_true)")
+println("  Data: ", length(data_fixed), " observations")
+println("  Mean: ", round(mean(data_fixed), digits=2))
+
+# Verify likelihood at true parameters
+ll_true = lnlike_θ(θ_true)
+println("\n  Likelihood at true params: ", round(ll_true, digits=4))
+
+println("\n[3/5] Running SEQUENTIAL 2D profile (n, p)...")
+println("  Grid: 5×5 = 25 points")
+println("  Target parameters: [1, 2] (n and p)")
+
+# Initial guess for nuisance parameters (empty for 2D case)
+nuisance_indices = Int[]
+nuisance_guess = Float64[]
+
+# Sequential profiling
+println("\n  Starting sequential profile...")
 t_seq = @elapsed begin
     θ_seq, ll_seq = ReparamTools.profile_target(
-        lnlike_xy, [1,2], xy_lower_bounds, xy_upper_bounds, Float64[];
-        grid_steps=20, use_distributed=false
+        lnlike_θ, [1, 2],  # Profile both n and p
+        θ_lower, θ_upper,
+        nuisance_guess;
+        grid_steps=5,
+        use_distributed=false,
+        optmaxtime=5.0
     )
 end
-println("Time: $(round(t_seq, digits=2))s")
 
-# Distributed
-println("\n=== Distributed (2 workers) ===")
+println("✓ Sequential complete")
+println("  Time: $(round(t_seq, digits=2))s")
+println("  Grid points: ", length(ll_seq))
+println("  Finite likelihoods: ", sum(isfinite.(ll_seq)), "/", length(ll_seq))
+println("  Max likelihood: ", round(maximum(ll_seq[isfinite.(ll_seq)]), digits=4))
+
+println("\n[4/5] Running DISTRIBUTED 2D profile (n, p)...")
+println("  Same grid: 5×5 = 25 points")
+println("  Workers: 2, chunks: 2")
+
+println("\n  Starting distributed profile...")
 t_dist = @elapsed begin
     θ_dist, ll_dist = ReparamTools.profile_target(
-        lnlike_xy, [1,2], xy_lower_bounds, xy_upper_bounds, Float64[];
-        grid_steps=20, use_distributed=true, n_chunks=2
+        lnlike_θ_worker, [1, 2],
+        θ_lower, θ_upper,
+        nuisance_guess;
+        grid_steps=5,
+        use_distributed=true,
+        n_chunks=2,
+        optmaxtime=5.0
     )
 end
-println("Time: $(round(t_dist, digits=2))s")
 
-println("\n=== Results ===")
-println("Speedup: $(round(t_seq/t_dist, digits=2))x")
-println("Max diff: $(maximum(abs.(ll_seq .- ll_dist)))")
+println("✓ Distributed complete")
+println("  Time: $(round(t_dist, digits=2))s")
+println("  Grid points: ", length(ll_dist))
+println("  Finite likelihoods: ", sum(isfinite.(ll_dist)), "/", length(ll_dist))
+println("  Max likelihood: ", round(maximum(ll_dist[isfinite.(ll_dist)]), digits=4))
 
+println("\n[5/5] Comparing results...")
+println("  Speedup: $(round(t_seq/t_dist, digits=2))x")
+
+# Compare likelihoods
+if length(ll_seq) != length(ll_dist)
+    println("\n✗ FAIL: Grid sizes differ!")
+    println("  Sequential: ", length(ll_seq))
+    println("  Distributed: ", length(ll_dist))
+    exit(1)
+end
+
+# Compute differences
+ll_diff = abs.(ll_seq - ll_dist)
+max_diff = maximum(ll_diff)
+mean_diff = mean(ll_diff)
+
+println("\n  Likelihood comparison:")
+println("    Max absolute difference:  ", @sprintf("%.2e", max_diff))
+println("    Mean absolute difference: ", @sprintf("%.2e", mean_diff))
+
+# Check for matching finite/infinite status
+finite_seq = isfinite.(ll_seq)
+finite_dist = isfinite.(ll_dist)
+finite_mismatch = sum(finite_seq .!= finite_dist)
+
+println("    Finite/Inf status matches: ", finite_mismatch == 0 ? "✓" : "✗ $(finite_mismatch) mismatches")
+
+# Final verdict
+tolerance = 1e-8
+println("\n" * "="^70)
+if max_diff < tolerance && finite_mismatch == 0
+    println("✓✓✓ TEST PASSED ✓✓✓")
+    println("Sequential and distributed results match within tolerance $(tolerance)")
+    exit_code = 0
+else
+    println("✗✗✗ TEST FAILED ✗✗✗")
+    if max_diff >= tolerance
+        println("Maximum difference $(max_diff) exceeds tolerance $(tolerance)")
+    end
+    if finite_mismatch > 0
+        println("Finite/Inf status differs at $(finite_mismatch) points")
+    end
+    exit_code = 1
+end
+println("="^70)
+
+# Cleanup
 rmprocs(workers())
+
+exit(exit_code)
