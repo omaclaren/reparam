@@ -487,7 +487,8 @@ end
 function profile_target(lnlike_θ, ψ_indices, θ_bounds_lower, θ_bounds_upper, ω_initial;
     grid_steps=100, ω_initial_extras::Union{Nothing, Vector{Vector{Float64}}}=nothing,
     method=:LD_TNEWTON_PRECOND, local_method=:LD_TNEWTON_PRECOND, xtol_rel=1e-9, ftol_rel=1e-9,
-    optmaxtime=120, popsize=50, track_convergence=false)
+    optmaxtime=120, popsize=50, track_convergence=false,
+    use_distributed=false, n_chunks=nothing)
     """
     Construct profile likelihood by maximizing over nuisance parameters.
 
@@ -509,6 +510,8 @@ function profile_target(lnlike_θ, ψ_indices, θ_bounds_lower, θ_bounds_upper,
     - ftol_rel: Relative tolerance in function value (default: 1e-9)
     - optmaxtime: Maximum optimization time in seconds (default: 120)
     - popsize: Population size for global optimization methods (default: 10)
+    - use_distributed: Use distributed parallel execution (default: false)
+    - n_chunks: Number of chunks for distributed execution (default: nworkers())
 
     Returns:
     - θ_values: Array of parameter vectors in original ordering
@@ -565,27 +568,44 @@ function profile_target(lnlike_θ, ψ_indices, θ_bounds_lower, θ_bounds_upper,
     ψ_combinations = Base.product(ψ_grids...)
     ψ_grid = vec([collect(ψᵢ) for ψᵢ in ψ_combinations])
 
-    # Delegate to sequential grid runner
-    if track_convergence
-        θ_values, lnlike_values, convergence_outcomes = profile_grid_sequential(
+    # Choose sequential or distributed execution
+    if use_distributed
+        # Distributed execution (track_convergence not supported)
+        if track_convergence
+            @warn "track_convergence=true not supported with use_distributed=true, ignoring"
+        end
+        θ_values, lnlike_values = profile_grid_distributed(
             lnlike_θ, ψ_grid, ψ_indices_int,
             θ_bounds_lower, θ_bounds_upper, ω_initial;
             ω_initial_extras=ω_initial_extras,
             method=method, local_method=local_method,
             xtol_rel=xtol_rel, ftol_rel=ftol_rel,
             optmaxtime=optmaxtime, popsize=popsize,
-            track_convergence=true
+            n_chunks=n_chunks
         )
     else
-        θ_values, lnlike_values = profile_grid_sequential(
-            lnlike_θ, ψ_grid, ψ_indices_int,
-            θ_bounds_lower, θ_bounds_upper, ω_initial;
-            ω_initial_extras=ω_initial_extras,
-            method=method, local_method=local_method,
-            xtol_rel=xtol_rel, ftol_rel=ftol_rel,
-            optmaxtime=optmaxtime, popsize=popsize,
-            track_convergence=false
-        )
+        # Sequential execution
+        if track_convergence
+            θ_values, lnlike_values, convergence_outcomes = profile_grid_sequential(
+                lnlike_θ, ψ_grid, ψ_indices_int,
+                θ_bounds_lower, θ_bounds_upper, ω_initial;
+                ω_initial_extras=ω_initial_extras,
+                method=method, local_method=local_method,
+                xtol_rel=xtol_rel, ftol_rel=ftol_rel,
+                optmaxtime=optmaxtime, popsize=popsize,
+                track_convergence=true
+            )
+        else
+            θ_values, lnlike_values = profile_grid_sequential(
+                lnlike_θ, ψ_grid, ψ_indices_int,
+                θ_bounds_lower, θ_bounds_upper, ω_initial;
+                ω_initial_extras=ω_initial_extras,
+                method=method, local_method=local_method,
+                xtol_rel=xtol_rel, ftol_rel=ftol_rel,
+                optmaxtime=optmaxtime, popsize=popsize,
+                track_convergence=false
+            )
+        end
     end
 
     # Normalize likelihood values (as before)
