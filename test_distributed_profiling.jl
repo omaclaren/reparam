@@ -8,8 +8,10 @@ println("Adding 2 workers...")
 addprocs(2)
 println("Workers: ", workers())
 
-# Load ReparamTools on main process first
-include("ReparamTools.jl")
+# Load ReparamTools on main process first (with guard)
+if !@isdefined(ReparamTools)
+    include("ReparamTools.jl")
+end
 using .ReparamTools: profile_grid_distributed, profile_grid_sequential
 using Random
 using Distributions
@@ -25,7 +27,9 @@ data_global = [rand(MvNormal(θ_true, Σ_global)) for _ in 1:n_obs]
 
 # Load ReparamTools and define likelihood on all workers
 @everywhere begin
-    include($(joinpath(@__DIR__, "ReparamTools.jl")))
+    if !@isdefined(ReparamTools)
+        include($(joinpath(@__DIR__, "ReparamTools.jl")))
+    end
     using .ReparamTools
 
     # Define likelihood function on all workers
