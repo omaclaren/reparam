@@ -27,7 +27,6 @@ export
     profile_point,
     profile_grid_sequential,
     profile_grid_distributed,
-    partition_grid_for_continuation,
     get_1D_profiles_from_2D,
     construct_ellipse_lnlike_approx,
     construct_upper_lower_profile_wise_CIs_for_mean,

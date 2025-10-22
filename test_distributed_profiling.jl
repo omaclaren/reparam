@@ -31,6 +31,8 @@ data_global = [rand(MvNormal(θ_true, Σ_global)) for _ in 1:n_obs]
         include($(joinpath(@__DIR__, "ReparamTools.jl")))
     end
     using .ReparamTools
+    using Distributions
+    using LinearAlgebra
 
     # Define likelihood function on all workers
     function lnlike_θ(θ::Vector{Float64})
