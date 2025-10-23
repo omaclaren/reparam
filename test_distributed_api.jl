@@ -1,27 +1,32 @@
 # Test profile_target with use_distributed=true parameter
 
 using Distributed
+using Distributed: WorkerPool
 
 # Add workers
-println("Adding 2 workers...")
-addprocs(2)
+println("Adding 4 workers...")
+addprocs(4)
 println("Workers: ", workers())
 
 # Load on main
-include("ReparamTools.jl")
+if !@isdefined(ReparamTools)
+    include("ReparamTools.jl")
+end
 using .ReparamTools
 using Distributions
 using LinearAlgebra
 
 # Load on workers
 @everywhere begin
-    include($(joinpath(@__DIR__, "ReparamTools.jl")))
+    if !@isdefined(ReparamTools)
+        include($(joinpath(@__DIR__, "ReparamTools.jl")))
+    end
     using .ReparamTools
     using Distributions
     using LinearAlgebra
 
-    # Define likelihood on all workers
-    function lnlike_θ(θ::Vector{Float64})
+    # Define likelihood on all workers (NO type annotation for ForwardDiff compatibility)
+    function lnlike_θ(θ)
         if length(θ) != 2
             return -Inf
         end
@@ -65,6 +70,59 @@ println("\n=== Comparison ===")
 println("Speedup: $(round(t_seq/t_dist, digits=2))x")
 println("Max likelihood diff: $(maximum(abs.(ll_seq .- ll_dist)))")
 println("Results match: ", maximum(abs.(ll_seq .- ll_dist)) < 1e-10)
+
+println("\n=== WorkerPool partition (concurrent 1D profiles) ===")
+worker_ids = workers()
+if length(worker_ids) >= 2
+    split_idx = max(1, length(worker_ids) ÷ 2)
+    pool1_ids = worker_ids[1:split_idx]
+    pool2_ids = worker_ids[split_idx+1:end]
+    if isempty(pool1_ids) || isempty(pool2_ids)
+        println("Not enough workers to form two pools; skipping partition test.")
+    else
+        pool1 = WorkerPool(pool1_ids)
+        pool2 = WorkerPool(pool2_ids)
+
+        center = 0.5 .* (θ_lower .+ θ_upper)
+        ψ_index_1 = [1]
+        ψ_index_2 = [2]
+        ω_init_1 = [center[2]]
+        ω_init_2 = [center[1]]
+
+        θ_seq_1, ll_seq_1 = ReparamTools.profile_target(
+            lnlike_θ, ψ_index_1, θ_lower, θ_upper, ω_init_1;
+            grid_steps=10, use_distributed=false)
+        θ_seq_2, ll_seq_2 = ReparamTools.profile_target(
+            lnlike_θ, ψ_index_2, θ_lower, θ_upper, ω_init_2;
+            grid_steps=10, use_distributed=false)
+
+        concurrent_results = @sync begin
+            task1 = @async begin
+                ReparamTools.profile_target(
+                    lnlike_θ, ψ_index_1, θ_lower, θ_upper, ω_init_1;
+                    grid_steps=10, use_distributed=true,
+                    n_chunks=length(pool1.workers), worker_pool=pool1)
+            end
+            task2 = @async begin
+                ReparamTools.profile_target(
+                    lnlike_θ, ψ_index_2, θ_lower, θ_upper, ω_init_2;
+                    grid_steps=10, use_distributed=true,
+                    n_chunks=length(pool2.workers), worker_pool=pool2)
+            end
+            (fetch(task1), fetch(task2))
+        end
+
+        (θ_dist_1, ll_dist_1), (θ_dist_2, ll_dist_2) = concurrent_results
+
+        println("  Profile 1 matches sequential: ",
+            maximum(abs.(ll_seq_1 .- ll_dist_1)) < 1e-10)
+        println("  Profile 2 matches sequential: ",
+            maximum(abs.(ll_seq_2 .- ll_dist_2)) < 1e-10)
+        println("  Pool sizes: ", (length(pool1.workers), length(pool2.workers)))
+    end
+else
+    println("Not enough workers for partition test; skipping.")
+end
 
 rmprocs(workers())
 println("\nTest complete!")
