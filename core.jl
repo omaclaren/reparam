@@ -5,6 +5,7 @@
 # For parallelization, use Distributed.jl with separate processes instead.
 
 using Distributed
+using Distributed: WorkerPool
 
 # ----------------------------------------------------------------
 # Likelihood in Original (xy) Coordinates (dimension independent)
@@ -369,7 +370,7 @@ end
     profile_grid_distributed(lnlike_θ, ψ_grid, ψ_indices, θ_bounds_lower, θ_bounds_upper, ω_initial;
                             ω_initial_extras=nothing, method=:LN_BOBYQA, local_method=:LD_TNEWTON_PRECOND,
                             xtol_rel=1e-9, ftol_rel=1e-9, optmaxtime=60.0, popsize=50,
-                            n_chunks=nothing, track_convergence=false)
+                            n_chunks=nothing, worker_pool=nothing, track_convergence=false)
 
 Execute profile likelihood over a grid using distributed parallel execution.
 
@@ -387,7 +388,8 @@ and concatenates results. Adaptive continuation works within each chunk but not 
 - `xtol_rel`, `ftol_rel`: Tolerances
 - `optmaxtime`: Time limit per optimization (seconds)
 - `popsize`: Population size for global methods
-- `n_chunks`: Number of chunks (default: nworkers())
+- `n_chunks`: Number of chunks (default: worker count in pool)
+- `worker_pool`: Optional `WorkerPool` specifying which workers to use (default: all workers)
 - `track_convergence`: Whether to track convergence (default: false)
 
 # Returns
@@ -419,12 +421,14 @@ function profile_grid_distributed(lnlike_θ, ψ_grid::Vector{Vector{Float64}}, �
                                   method=:LN_BOBYQA, local_method=:LD_TNEWTON_PRECOND,
                                   xtol_rel=1e-9, ftol_rel=1e-9, optmaxtime=60.0, popsize=50,
                                   n_chunks::Union{Nothing, Int}=nothing,
+                                  worker_pool::Union{Nothing, WorkerPool}=nothing,
                                   track_convergence=false)
 
     # Check workers available
-    n_workers = nworkers()
-    if n_workers < 2
-        @warn "Only 1 worker available (nworkers()=$n_workers). Using sequential execution instead."
+    pool = isnothing(worker_pool) ? WorkerPool(workers()) : worker_pool
+    n_pool_workers = length(pool.workers)
+    if n_pool_workers == 0
+        @warn "Worker pool is empty; using sequential execution instead."
         return profile_grid_sequential(
             lnlike_θ, ψ_grid, ψ_indices,
             θ_bounds_lower, θ_bounds_upper, ω_initial;
@@ -438,8 +442,8 @@ function profile_grid_distributed(lnlike_θ, ψ_grid::Vector{Vector{Float64}}, �
 
     # Determine number of chunks (don't exceed grid size)
     n_grid = length(ψ_grid)
-    n_chunks_actual = isnothing(n_chunks) ? n_workers : n_chunks
-    n_chunks_actual = min(n_chunks_actual, n_grid)  # Clamp to grid size
+    n_chunks_actual = isnothing(n_chunks) ? n_pool_workers : n_chunks
+    n_chunks_actual = max(1, min(n_chunks_actual, n_grid))  # Clamp to valid range
 
     # Split grid into contiguous chunks
     chunk_size = div(n_grid, n_chunks_actual)
@@ -453,12 +457,12 @@ function profile_grid_distributed(lnlike_θ, ψ_grid::Vector{Vector{Float64}}, �
         start_idx += this_size
     end
 
-    println("Distributed profiling: $n_grid points → $n_chunks_actual chunks on $n_workers workers")
+    println("Distributed profiling: $n_grid points → $n_chunks_actual chunks on $n_pool_workers workers")
     println("Chunk sizes: ", [length(c) for c in chunks])
 
     # Evaluate each chunk in parallel using pmap
     # Each chunk runs sequentially with adaptive continuation
-    results = pmap(chunks) do chunk_grid
+    results = pmap(pool, chunks) do chunk_grid
         profile_grid_sequential(
             lnlike_θ, chunk_grid, ψ_indices,
             θ_bounds_lower, θ_bounds_upper, ω_initial;
@@ -488,7 +492,7 @@ function profile_target(lnlike_θ, ψ_indices, θ_bounds_lower, θ_bounds_upper,
     grid_steps=100, ω_initial_extras::Union{Nothing, Vector{Vector{Float64}}}=nothing,
     method=:LD_TNEWTON_PRECOND, local_method=:LD_TNEWTON_PRECOND, xtol_rel=1e-9, ftol_rel=1e-9,
     optmaxtime=120, popsize=50, track_convergence=false,
-    use_distributed=false, n_chunks=nothing)
+    use_distributed=false, n_chunks=nothing, worker_pool=nothing)
     """
     Construct profile likelihood by maximizing over nuisance parameters.
 
@@ -511,7 +515,8 @@ function profile_target(lnlike_θ, ψ_indices, θ_bounds_lower, θ_bounds_upper,
     - optmaxtime: Maximum optimization time in seconds (default: 120)
     - popsize: Population size for global optimization methods (default: 10)
     - use_distributed: Use distributed parallel execution (default: false)
-    - n_chunks: Number of chunks for distributed execution (default: nworkers())
+    - n_chunks: Number of chunks for distributed execution (default: worker count)
+    - worker_pool: Optional Distributed.WorkerPool to target specific workers (default: all)
 
     Returns:
     - θ_values: Array of parameter vectors in original ordering
@@ -581,7 +586,8 @@ function profile_target(lnlike_θ, ψ_indices, θ_bounds_lower, θ_bounds_upper,
             method=method, local_method=local_method,
             xtol_rel=xtol_rel, ftol_rel=ftol_rel,
             optmaxtime=optmaxtime, popsize=popsize,
-            n_chunks=n_chunks
+            n_chunks=n_chunks,
+            worker_pool=worker_pool
         )
     else
         # Sequential execution
