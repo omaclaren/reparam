@@ -12,11 +12,11 @@ println("="^70)
 
 # Configuration
 USE_DISTRIBUTED = true  # Set to false for sequential
-N_WORKERS = 2
-GRID_1D = 5  # Grid points for 1D profiles
-GRID_2D = 3  # Grid points per dimension for 2D profile
+N_WORKERS = 4  # More workers for finer grid
+GRID_1D = 20  # Grid points for 1D profiles
+GRID_2D = 100  # Grid points per dimension for 2D profile (100×100 = 10,000 points!)
 MLE_TIMEOUT = 30.0  # seconds
-PROFILE_TIMEOUT = 20.0  # seconds per grid point
+PROFILE_TIMEOUT = 30.0  # seconds per grid point (increased for finer grid)
 
 full_worker_pool = nothing
 
@@ -375,36 +375,76 @@ else
 end
 println("="^70)
 
-# Generate 2D plot
+# Generate 2D plot using proper visualization (matching stat_model.jl style)
 println("\n[PLOTTING] Generating 2D profile figure...")
 using Plots
+using LaTeXStrings
+using Distributions: Chisq, quantile
 
-# Extract β₁ and K₁ values in original scale
-β1_vals = [exp(θ[7]) for θ in θ_2d_vals]
-K1_vals = [exp(θ[10]) for θ in θ_2d_vals]
+# Extract β₁ and K₁ values as tuples (matching stat_model.jl format)
+ψ_values = [(exp(θ[7]), exp(θ[10])) for θ in θ_2d_vals]
 
-# Reshape to grid
-β1_grid = reshape(β1_vals, GRID_2D, GRID_2D)
-K1_grid = reshape(K1_vals, GRID_2D, GRID_2D)
-ll_grid = reshape(ll_2d_vals, GRID_2D, GRID_2D)
+# Helper function (replicating visualization.jl approach)
+function plot_2D_profile(ψ_values, lnlike_values, title_text;
+                         ψ_true=[], ψ_MLE=[], l_level=95, nshade_levels=20)
 
-# Create contour plot
-p = contour(β1_grid[:,1], K1_grid[1,:], ll_grid',
-    xlabel="β₁",
-    ylabel="K₁",
-    title="Repressilator 2D Profile (β₁, K₁) - $(USE_DISTRIBUTED ? "Distributed" : "Sequential")",
-    fill=true,
-    color=:viridis,
-    levels=10,
-    size=(800, 600))
+    # Extract unique grid values (undo Cartesian product)
+    ψ1_values = unique([ψ1 for (ψ1, _) in ψ_values])
+    ψ2_values = unique([ψ2 for (_, ψ2) in ψ_values])
 
-# Mark true values
-scatter!(p, [θ_true[7]], [θ_true[10]],
-    marker=:star, markersize=10, color=:red, label="True")
+    # Reshape to 2D grid
+    lnlike_grid = reshape(lnlike_values, length(ψ1_values), length(ψ2_values))
 
-# Mark MLE
-scatter!(p, [exp(θ_log_MLE[7])], [exp(θ_log_MLE[10])],
-    marker=:circle, markersize=8, color=:white, label="MLE")
+    # Convert to likelihood scale (normalized)
+    like_grid = exp.(lnlike_grid)
+
+    # Chi-square calibration for confidence contour
+    df = 2
+    lstar = exp(-quantile(Chisq(df), l_level/100)/2)
+
+    # Filled contours
+    plt = contourf(ψ1_values, ψ2_values, like_grid',
+                   color=:dense, levels=nshade_levels, lw=0,
+                   colorbar=true,
+                   xlabel="β₁",
+                   ylabel="K₁",
+                   title=title_text,
+                   size=(800, 700))
+
+    # Add confidence level contour
+    contour!(ψ1_values, ψ2_values, like_grid',
+             levels=[lstar], color=:black, lw=2, legend=false, fill=false)
+
+    # Mark MLE (grid maximum)
+    max_idx = argmax(like_grid)
+    ψ1_max = ψ1_values[max_idx[1]]
+    ψ2_max = ψ2_values[max_idx[2]]
+    scatter!([ψ1_max], [ψ2_max],
+             mc=:silver, msc=:match, markersize=8,
+             markershape=:circle, legend=false)
+
+    # Mark true values
+    if length(ψ_true) > 0
+        scatter!([ψ_true[1]], [ψ_true[2]],
+                 mc=:darkgoldenrod, msc=:match, markersize=10,
+                 markershape=:star, legend=false)
+    end
+
+    # Mark provided MLE if given
+    if length(ψ_MLE) > 0
+        scatter!([ψ_MLE[1]], [ψ_MLE[2]],
+                 mc=:white, msc=:black, markersize=8,
+                 markershape=:circle, label="MLE")
+    end
+
+    return plt
+end
+
+# Create plot
+p = plot_2D_profile(ψ_values, ll_2d_vals,
+                    "Repressilator 2D Profile (β₁, K₁) - Distributed ($(GRID_2D)×$(GRID_2D) grid)",
+                    ψ_true=[θ_true[7], θ_true[10]],
+                    ψ_MLE=[exp(θ_log_MLE[7]), exp(θ_log_MLE[10])])
 
 # Save
 output_file = "repressilator_2D_profile.png"
