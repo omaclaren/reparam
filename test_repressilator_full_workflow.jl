@@ -375,6 +375,42 @@ else
 end
 println("="^70)
 
+# Generate 2D plot
+println("\n[PLOTTING] Generating 2D profile figure...")
+using Plots
+
+# Extract β₁ and K₁ values in original scale
+β1_vals = [exp(θ[7]) for θ in θ_2d_vals]
+K1_vals = [exp(θ[10]) for θ in θ_2d_vals]
+
+# Reshape to grid
+β1_grid = reshape(β1_vals, GRID_2D, GRID_2D)
+K1_grid = reshape(K1_vals, GRID_2D, GRID_2D)
+ll_grid = reshape(ll_2d_vals, GRID_2D, GRID_2D)
+
+# Create contour plot
+p = contour(β1_grid[:,1], K1_grid[1,:], ll_grid',
+    xlabel="β₁",
+    ylabel="K₁",
+    title="Repressilator 2D Profile (β₁, K₁) - $(USE_DISTRIBUTED ? "Distributed" : "Sequential")",
+    fill=true,
+    color=:viridis,
+    levels=10,
+    size=(800, 600))
+
+# Mark true values
+scatter!(p, [θ_true[7]], [θ_true[10]],
+    marker=:star, markersize=10, color=:red, label="True")
+
+# Mark MLE
+scatter!(p, [exp(θ_log_MLE[7])], [exp(θ_log_MLE[10])],
+    marker=:circle, markersize=8, color=:white, label="MLE")
+
+# Save
+output_file = "repressilator_2D_profile.png"
+savefig(p, output_file)
+println("✓ Figure saved: ", output_file)
+
 # Cleanup
 if USE_DISTRIBUTED
     rmprocs(workers())
