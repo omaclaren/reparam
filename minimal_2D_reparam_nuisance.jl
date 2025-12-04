@@ -152,6 +152,7 @@ println("LL range: $(minimum(ll_vals)) to $(maximum(ll_vals))")
 using Plots
 using Distributions
 using Contour
+using ScatteredInterpolation
 
 # Construct grid values in ψ space (same as profile_target uses)
 ψ1_log_range = range(ψ3_log_lower[1], ψ3_log_upper[1], length=GRID)
@@ -177,7 +178,7 @@ p1 = contourf(ψ1_vals, ψ2_vals, like_for_plots, color=:dense, levels=20, lw=0,
 scatter!([ψ1_true], [β1_true], mc=:darkgoldenrod, msc=:match, ms=10, markershape=:star, label="True")
 contour!(ψ1_vals, ψ2_vals, like_for_plots, levels=[lstar], color=:black, lw=1, legend=false)
 
-# Plot 2: Transform back to original (β₁, K₁) space
+# Plot 2: Transform back to original (β₁, K₁) space using ThinPlate RBF
 β1_flat = Float64[]
 K1_flat = Float64[]
 like_flat = Float64[]
@@ -191,11 +192,37 @@ for (i, ψ1) in enumerate(ψ1_vals)
     end
 end
 
-p2 = scatter(β1_flat, K1_flat, zcolor=like_flat, c=:dense,
+# Create regular grid in θ-space for plotting
+β1_min, β1_max = 0.004, 0.09
+K1_min, K1_max = 0.5, 200.0
+β1_reg = range(β1_min, β1_max, length=100)
+K1_reg = range(K1_min, K1_max, length=100)
+
+# Normalize scattered points to [0,1] for RBF interpolation
+β1_norm = (β1_flat .- β1_min) ./ (β1_max - β1_min)
+K1_norm = (K1_flat .- K1_min) ./ (K1_max - K1_min)
+
+# Create ThinPlate RBF interpolant in normalized space
+points_norm = hcat(β1_norm, K1_norm)'  # 2 × N matrix
+itp = interpolate(ThinPlate(), points_norm, like_flat)
+
+# Evaluate on regular grid (in normalized coordinates)
+like_θ_reg = zeros(length(β1_reg), length(K1_reg))
+for (i, β1) in enumerate(β1_reg)
+    β1_n = (β1 - β1_min) / (β1_max - β1_min)
+    for (j, K1) in enumerate(K1_reg)
+        K1_n = (K1 - K1_min) / (K1_max - K1_min)
+        like_θ_reg[i, j] = evaluate(itp, [β1_n, K1_n])[1]
+    end
+end
+
+# Clamp to [0, 1]
+like_θ_reg = clamp.(like_θ_reg, 0.0, 1.0)
+
+p2 = contourf(collect(β1_reg), collect(K1_reg), like_θ_reg', color=:dense, levels=20, lw=0,
              xlabel="β₁", ylabel="K₁", 
              title="Profile likelihood in θ-space\n(β₂ optimized)",
-             markersize=3, markerstrokewidth=0, label="",
-             xlims=(0, 0.1), ylims=(0, 200), clims=(0,1))
+             clims=(0,1))
 scatter!([β1_true], [K1_true], mc=:darkgoldenrod, msc=:match, ms=10, markershape=:star, label="True")
 
 # Extract 95% CI contour from ψ-space and transform to θ-space
