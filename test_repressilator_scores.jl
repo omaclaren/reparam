@@ -29,13 +29,13 @@ println("Using $length(t_test) time points for speed")
 ϕ_log = θ_log -> begin
     θ = exp.(θ_log)
     sol_matrix = solve_repressilator(t_test, θ, X0)
-    mRNA = extract_mrna(sol_matrix)
+    mRNA = sol_matrix[1:3, :]  # mRNA concentrations
     return vec(mRNA)
 end
 
 ϕ_original = θ -> begin
     sol_matrix = solve_repressilator(t_test, θ, X0)
-    mRNA = extract_mrna(sol_matrix)
+    mRNA = sol_matrix[1:3, :]  # mRNA concentrations
     return vec(mRNA)
 end
 

@@ -11,7 +11,7 @@ include("examples/RepressilatorModel.jl")
 include("ReparamTools.jl")
 using .RepressilatorModel
 using .ReparamTools
-using Distributions, LinearAlgebra, Random
+using Distributions, LinearAlgebra, Random, ForwardDiff
 
 # Load on workers
 @everywhere begin
@@ -264,6 +264,153 @@ println("Found $n_lines CI contour lines")
 plt = plot(p1, p2, layout=(1,2), size=(1200, 500))
 savefig(plt, "minimal_2D_reparam_result.png")
 println("Saved: minimal_2D_reparam_result.png")
+
+# === 1D PROFILE PROJECTIONS (row/column maxima of 2D grid) ===
+println("\n" * "=" ^ 60)
+println("1D PROFILE PROJECTIONS (from 2D grid)")
+println("=" ^ 60)
+
+# --- ψ-space profiles ---
+# Profile over ψ₁ (K/β): max over ψ₂ (β₁) for each ψ₁
+like_ψ1 = [maximum(like_matrix[i, :]) for i in 1:length(ψ1_vals)]
+println("\nψ-SPACE:")
+println("  Profile(ψ₁ = K/β): max over β₁ → range [$(round(minimum(like_ψ1), digits=4)), $(round(maximum(like_ψ1), digits=4))]")
+
+# Profile over ψ₂ (β₁): max over ψ₁ (K/β) for each ψ₂
+like_ψ2 = [maximum(like_matrix[:, j]) for j in 1:length(ψ2_vals)]
+println("  Profile(ψ₂ = β₁): max over K/β → range [$(round(minimum(like_ψ2), digits=4)), $(round(maximum(like_ψ2), digits=4))]")
+
+# --- θ-space profiles (from interpolated grid) ---
+# Profile over β₁: max over K₁ for each β₁
+like_β1 = [maximum(like_θ_reg[i, :]) for i in 1:length(β1_reg)]
+println("\nθ-SPACE:")
+println("  Profile(β₁): max over K₁ → range [$(round(minimum(like_β1), digits=4)), $(round(maximum(like_β1), digits=4))]")
+
+# Profile over K₁: max over β₁ for each K₁
+like_K1 = [maximum(like_θ_reg[:, j]) for j in 1:length(K1_reg)]
+println("  Profile(K₁): max over β₁ → range [$(round(minimum(like_K1), digits=4)), $(round(maximum(like_K1), digits=4))]")
+
+# 1D CI threshold
+lstar_1d = exp(-quantile(Chisq(1), 0.95)/2)
+println("\n95% CI threshold (1D): $(round(lstar_1d, digits=3))")
+
+# ψ-space 1D profile plots
+p3 = plot(ψ1_vals, like_ψ1, xlabel="ψ₁ = K₁/β₁", ylabel="Profile Likelihood",
+          title="ψ-space: K/β", linewidth=2, legend=false, ylims=(0, 1.05))
+hline!([lstar_1d], color=:red, linestyle=:dash, linewidth=2)
+vline!([ψ1_true], color=:green, linestyle=:dot, linewidth=2)
+
+p4 = plot(ψ2_vals, like_ψ2, xlabel="ψ₂ = β₁", ylabel="Profile Likelihood",
+          title="ψ-space: β₁", linewidth=2, legend=false, ylims=(0, 1.05))
+hline!([lstar_1d], color=:red, linestyle=:dash, linewidth=2)
+vline!([β1_true], color=:green, linestyle=:dot, linewidth=2)
+
+# θ-space 1D profile plots
+p5 = plot(collect(β1_reg), like_β1, xlabel="β₁", ylabel="Profile Likelihood",
+          title="θ-space: β₁", linewidth=2, legend=false, ylims=(0, 1.05))
+hline!([lstar_1d], color=:red, linestyle=:dash, linewidth=2)
+vline!([β1_true], color=:green, linestyle=:dot, linewidth=2)
+
+p6 = plot(collect(K1_reg), like_K1, xlabel="K₁", ylabel="Profile Likelihood",
+          title="θ-space: K₁", linewidth=2, legend=false, ylims=(0, 1.05))
+hline!([lstar_1d], color=:red, linestyle=:dash, linewidth=2)
+vline!([K1_true], color=:green, linestyle=:dot, linewidth=2)
+
+# Combined 6-panel plot: 2D plots on top, 1D profiles below
+plt_all = plot(p1, p2, p3, p4, p5, p6, layout=(3,2), size=(1200, 1200))
+savefig(plt_all, "minimal_2D_reparam_with_1D.png")
+println("\nSaved: minimal_2D_reparam_with_1D.png")
+
+# === HESSIAN ANALYSIS (curvature at MLE) ===
+println("\n" * "=" ^ 60)
+println("HESSIAN ANALYSIS (profile likelihood curvature at MLE)")
+println("=" ^ 60)
+
+# Define log-likelihood functions for Hessian computation
+# θ-space: [β₁, K₁]
+function nll_θ(θ_2)
+    β1, K1 = θ_2
+    θ_full = zeros(eltype(θ_2), 18)
+    θ_full[fixed_indices] .= θ_fixed
+    θ_full[7] = β1
+    θ_full[10] = K1
+    pred = RepressilatorModel.predict_mRNA(θ_full, t_obs, X0)
+    return sum((data .- pred).^2) / (2 * σ^2)
+end
+
+# ψ-space: [ψ₁ = K/β, ψ₂ = β]
+function nll_ψ(ψ_2)
+    ψ1, ψ2 = ψ_2
+    β1 = ψ2
+    K1 = ψ1 * ψ2
+    θ_full = zeros(eltype(ψ_2), 18)
+    θ_full[fixed_indices] .= θ_fixed
+    θ_full[7] = β1
+    θ_full[10] = K1
+    pred = RepressilatorModel.predict_mRNA(θ_full, t_obs, X0)
+    return sum((data .- pred).^2) / (2 * σ^2)
+end
+
+# Compute Hessians at MLE
+θ_mle = [β1_true, K1_true]
+ψ_mle = [ψ1_true, β1_true]
+
+H_θ = ForwardDiff.hessian(nll_θ, θ_mle)
+H_ψ = ForwardDiff.hessian(nll_ψ, ψ_mle)
+
+println("\n--- JOINT HESSIANS ---")
+println("\nθ-space Hessian at MLE [β₁, K₁]:")
+display(round.(H_θ, digits=2))
+
+println("\nψ-space Hessian at MLE [K/β, β]:")
+display(round.(H_ψ, digits=8))
+
+# === PROFILE INFORMATION via Schur complement ===
+# I_profile(ψ) = H_ψψ - H_ψν * H_νν^(-1) * H_νψ
+println("\n--- PROFILE INFORMATION (Schur complement) ---")
+println("Formula: I_profile(ψ) = H_ψψ - H_ψν * H_νν⁻¹ * H_νψ")
+
+# θ-space: profile over β₁ (nuisance = K₁)
+H_ββ = H_θ[1,1]
+H_βK = H_θ[1,2]
+H_KK = H_θ[2,2]
+I_profile_β1 = H_ββ - H_βK^2 / H_KK
+println("\nθ-space, profile over β₁ (nuisance = K₁):")
+println("  H_ββ = $(round(H_ββ, digits=2))")
+println("  H_βK = $(round(H_βK, digits=4))")
+println("  H_KK = $(round(H_KK, digits=6))")
+println("  I_profile(β₁) = H_ββ - H_βK²/H_KK = $(round(I_profile_β1, digits=4))")
+
+# θ-space: profile over K₁ (nuisance = β₁)
+I_profile_K1 = H_KK - H_βK^2 / H_ββ
+println("\nθ-space, profile over K₁ (nuisance = β₁):")
+println("  I_profile(K₁) = H_KK - H_βK²/H_ββ = $(round(I_profile_K1, digits=8))")
+
+# ψ-space: profile over ψ₁=K/β (nuisance = ψ₂=β)
+H_11 = H_ψ[1,1]  # K/β
+H_12 = H_ψ[1,2]
+H_22 = H_ψ[2,2]  # β
+I_profile_ψ1 = H_11 - H_12^2 / H_22
+println("\nψ-space, profile over ψ₁=K/β (nuisance = ψ₂=β):")
+println("  H_ψ₁ψ₁ = $(round(H_11, sigdigits=4))")
+println("  H_ψ₁ψ₂ = $(round(H_12, sigdigits=4))")
+println("  H_ψ₂ψ₂ = $(round(H_22, sigdigits=4))")
+if abs(H_22) > 1e-15
+    println("  I_profile(K/β) = $(round(I_profile_ψ1, sigdigits=4))")
+else
+    println("  I_profile(K/β) = H_ψ₁ψ₁ = $(round(H_11, sigdigits=4)) (H_ψ₂ψ₂ ≈ 0)")
+end
+
+# ψ-space: profile over ψ₂=β (nuisance = ψ₁=K/β)
+I_profile_ψ2 = H_22 - H_12^2 / H_11
+println("\nψ-space, profile over ψ₂=β (nuisance = ψ₁=K/β):")
+println("  I_profile(β) = H_ψ₂ψ₂ - H_ψ₁ψ₂²/H_ψ₁ψ₁ = $(round(I_profile_ψ2, sigdigits=4))")
+
+println("\n" * "-" ^ 40)
+println("SUMMARY:")
+println("  θ-space profile info: β₁ → $(round(I_profile_β1, sigdigits=3)), K₁ → $(round(I_profile_K1, sigdigits=3))")
+println("  ψ-space profile info: K/β → $(round(H_11, sigdigits=3)), β → $(round(I_profile_ψ2, sigdigits=3))")
+println("\n  Near-zero profile info = flat profile = non-identifiable")
 
 # Cleanup
 rmprocs(workers())

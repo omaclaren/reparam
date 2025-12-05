@@ -1,16 +1,16 @@
 Rank,Combination,Sigma_eff,Type
-1,"k_dp₂",2036.001,single
-2,"k_dm₂",1567.714,single
-3,"β₁·K₁⁻¹",1309.69,β/K ratio
-4,"β₂·K₂⁻¹",1155.703,β/K ratio
-5,"β₃⁻¹·K₃",946.485,β/K ratio
-6,"k_dp₃",936.341,single
-7,"k_dp₁",861.382,single
-8,"α₁",780.818,single
-9,"α₂",776.035,single
-10,"k_dm₃",585.298,single
-11,"α₀₃",552.996,single
-12,"α₃",504.738,single
-13,"α₀₂",462.029,single
-14,"k_dm₁",453.319,single
-15,"α₀₁",98.827,single
+1,"k_dp₂",2038.152,single
+2,"k_dm₂",1552.083,single
+3,"β₁·K₁⁻¹",1266.036,β/K ratio
+4,"β₂·K₂⁻¹",1149.728,β/K ratio
+5,"β₃·K₃⁻¹",933.322,β/K ratio
+6,"k_dp₃",922.03,single
+7,"k_dp₁",857.952,single
+8,"α₂",764.592,single
+9,"α₁",759.924,single
+10,"k_dm₃",577.975,single
+11,"α₀₃",533.014,single
+12,"α₃",491.751,single
+13,"α₀₂",474.585,single
+14,"k_dm₁",454.588,single
+15,"α₀₁",91.787,single

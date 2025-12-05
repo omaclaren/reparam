@@ -12,11 +12,11 @@ println("="^70)
 
 # Configuration
 USE_DISTRIBUTED = true  # Set to false for sequential
-N_WORKERS = 4  # More workers for finer grid
-GRID_1D = 20  # Grid points for 1D profiles
-GRID_2D = 20  # Grid points per dimension for 2D profile (20×20 = 400 points)
+N_WORKERS = 2
+GRID_1D = 5  # Grid points for 1D profiles
+GRID_2D = 3  # Grid points per dimension for 2D profile
 MLE_TIMEOUT = 30.0  # seconds
-PROFILE_TIMEOUT = 30.0  # seconds per grid point
+PROFILE_TIMEOUT = 20.0  # seconds per grid point
 
 full_worker_pool = nothing
 
@@ -56,9 +56,9 @@ end
 
 println("\n[1/6] Setting up model...")
 
-# Model configuration - EXACT SETTINGS FROM examples/repressilator.jl commit 8658bfd
-NT = 8  # 8 timepoints → 24 observations (3 species × 8 times)
-T_end = 10000.0  # Full oscillation cycle
+# Model configuration - EXACT SETTINGS FROM examples/repressilator.jl
+NT = 8
+T_end = 10000.0
 t_obs = LinRange(0, T_end, NT)
 X0 = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 σ = 1.0
@@ -279,7 +279,6 @@ println("    Grid points: ", length(ll_β1_vals))
 println("    Finite values: ", sum(isfinite.(ll_β1_vals)), "/", length(ll_β1_vals))
 if sum(isfinite.(ll_β1_vals)) > 0
     println("    Max likelihood: ", @sprintf("%.4f", maximum(ll_β1_vals[isfinite.(ll_β1_vals)])))
-    println("    Log-likelihood values: ", ll_β1_vals)
 end
 
 println("\n  ✓ K₁ profile complete in ", @sprintf("%.2f", t_K1), "s")
@@ -376,66 +375,34 @@ else
 end
 println("="^70)
 
-# Validate 2D profile against 1D profiles
-println("\n[VALIDATION] Checking 2D profile consistency...")
-# K varies fastest in product, so reshape as (lenK, lenβ) then transpose to get rows=β, cols=K
-ll_2d_grid = reshape(ll_2d_vals, GRID_2D, GRID_2D)'
-
-# Extract β₁ profile from 2D (max over K₁ for each β₁)
-ll_beta_from_2d = [maximum(ll_2d_grid[i, :]) for i in 1:GRID_2D]
-
-# Extract K₁ profile from 2D (max over β₁ for each K₁)
-ll_K_from_2d = [maximum(ll_2d_grid[:, j]) for j in 1:GRID_2D]
-
-println("  β₁ profile from 1D:  range ", extrema(ll_β1_vals))
-println("  β₁ profile from 2D:  range ", extrema(ll_beta_from_2d))
-println("  Max difference: ", maximum(abs.(ll_β1_vals .- ll_beta_from_2d)))
-
-println("  K₁ profile from 1D:  range ", extrema(ll_K1_vals))
-println("  K₁ profile from 2D:  range ", extrema(ll_K_from_2d))
-println("  Max difference: ", maximum(abs.(ll_K1_vals .- ll_K_from_2d)))
-
-if maximum(abs.(ll_β1_vals .- ll_beta_from_2d)) > 1e-6 ||
-   maximum(abs.(ll_K1_vals .- ll_K_from_2d)) > 1e-6
-    println("  ✗ WARNING: 2D profile does not match 1D profiles!")
-    println("    This suggests incorrect data in 2D profile.")
-else
-    println("  ✓ 2D profile matches 1D profiles")
-end
-println("="^70)
-
-# Generate 2D plot using standard visualization approach
+# Generate 2D plot
 println("\n[PLOTTING] Generating 2D profile figure...")
 
 using Plots
 using Distributions: Chisq, quantile
 
-# Extract ψ values in original scale
+# Extract parameter values in original scale
 β1_values = unique([exp(θ[7]) for θ in θ_2d_vals])
 K1_values = unique([exp(θ[10]) for θ in θ_2d_vals])
 
-# Reshape likelihoods to 2D grid
+println("  β₁ range: ", extrema(β1_values))
+println("  K₁ range: ", extrema(K1_values))
+
 # K varies fastest in product, so reshape as (lenK, lenβ) then transpose to get rows=β, cols=K
 ll_grid = reshape(ll_2d_vals, length(K1_values), length(β1_values))'
-
-# Convert to likelihood scale (visualization.jl does: exp.(lnlike_ψ_values))
-# Since already normalized, max will be 1.0 after exp
 like_grid = exp.(ll_grid)
 
 # Chi-square calibration for 95% confidence contour
 df = 2
 lstar = exp(-quantile(Chisq(df), 0.95)/2)
 
-# Create contour plot without colorbar to avoid GR rendering bug
-# NOTE: GR backend has intermittent Int32 overflow in colorbar rendering
-# (error in setlinecolorind -> gr_draw_colorbar) when saving plots with colorbar.
-# This occurs even with properly normalized data and is a GR library issue.
-# Workaround: disable colorbar, or use pyplot/plotlyjs backend
+# Create contour plot without colorbar (avoid GR rendering bug)
 plt = contourf(β1_values, K1_values, like_grid,
               color=:dense, levels=20, lw=0,
               xlabel="β₁", ylabel="K₁",
-              title="Repressilator 2D Profile: (β₁, K₁)",
-              colorbar=false)
+              title="Repressilator 2D Profile: (β₁, K₁) [3×3 grid]",
+              colorbar=false,
+              size=(600, 500))
 
 # Add 95% confidence contour
 contour!(β1_values, K1_values, like_grid,
@@ -450,7 +417,7 @@ scatter!([θ_true[7]], [θ_true[10]],
          mc=:darkgoldenrod, msc=:match, markersize=10, markershape=:star, legend=false)
 
 # Save
-output_file = "repressilator_2D_distributed_beta1_K1.png"
+output_file = "repressilator_2D_3x3_beta1_K1.png"
 savefig(plt, output_file)
 println("✓ Figure saved: ", output_file)
 

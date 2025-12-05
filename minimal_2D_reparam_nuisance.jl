@@ -252,5 +252,39 @@ plt = plot(p1, p2, layout=(1,2), size=(1200, 500))
 savefig(plt, "minimal_2D_reparam_nuisance_result.png")
 println("Saved: minimal_2D_reparam_nuisance_result.png")
 
+# === 1D PROFILE PROJECTIONS (row/column maxima of 2D grid) ===
+println("\n" * "=" ^ 60)
+println("1D PROFILE PROJECTIONS (from 2D grid)")
+println("=" ^ 60)
+
+# Profile over ψ₁ (K/β): max over ψ₂ (β₁) for each ψ₁
+like_ψ1 = [maximum(like_matrix[i, :]) for i in 1:GRID]
+println("\nProfile(ψ₁ = K/β): max over β₁")
+println("  Likelihood range: [$(round(minimum(like_ψ1), digits=4)), $(round(maximum(like_ψ1), digits=4))]")
+
+# Profile over ψ₂ (β₁): max over ψ₁ (K/β) for each ψ₂
+like_ψ2 = [maximum(like_matrix[:, j]) for j in 1:GRID]
+println("\nProfile(ψ₂ = β₁): max over K/β")
+println("  Likelihood range: [$(round(minimum(like_ψ2), digits=4)), $(round(maximum(like_ψ2), digits=4))]")
+
+# 1D profile plots
+lstar_1d = exp(-quantile(Chisq(1), 0.95)/2)  # 1D CI threshold
+println("\n95% CI threshold (1D): $(round(lstar_1d, digits=3))")
+
+p3 = plot(ψ1_vals, like_ψ1, xlabel="ψ₁ = K₁/β₁", ylabel="Profile Likelihood",
+          title="1D Profile: K/β (identifiable)", linewidth=2, legend=false, xscale=:log10)
+hline!([lstar_1d], color=:red, linestyle=:dash, linewidth=2)
+vline!([ψ1_true], color=:green, linestyle=:dot, linewidth=2)
+
+p4 = plot(ψ2_vals, like_ψ2, xlabel="ψ₂ = β₁", ylabel="Profile Likelihood",
+          title="1D Profile: β₁ (non-identifiable)", linewidth=2, legend=false, xscale=:log10)
+hline!([lstar_1d], color=:red, linestyle=:dash, linewidth=2)
+vline!([β1_true], color=:green, linestyle=:dot, linewidth=2)
+
+# Combined 4-panel plot
+plt_all = plot(p1, p2, p3, p4, layout=(2,2), size=(1200, 900))
+savefig(plt_all, "minimal_2D_reparam_nuisance_with_1D.png")
+println("\nSaved: minimal_2D_reparam_nuisance_with_1D.png")
+
 # Cleanup
 rmprocs(workers())

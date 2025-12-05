@@ -1,29 +1,29 @@
 Repressilator Profile Likelihood Results
-Generated: 2025-10-21T23:43:27.094
-Mode: paper
-Grid points: 15
-Initial guesses: 3
-Timeout per optimization: 40.0s
+Generated: 2025-11-21T12:57:07.926
+Mode: test
+Grid points: 10
+Initial guesses: 1
+Timeout per optimization: 10.0s
 
-MLE log-likelihood: -31.9564
+MLE log-likelihood: -32.4144
 True log-likelihood: -37.952
 
 MLE parameter values:
-  α₀₁ = 0.005
-  α₀₂ = 0.005166
-  α₀₃ = 0.013787
-  α₁ = 0.8
-  α₂ = 0.810908
-  α₃ = 1.471051
-  β₁ = 0.017677
-  β₂ = 0.029833
-  β₃ = 0.016687
-  K₁ = 22.558759
-  K₂ = 23.136407
-  K₃ = 40.0
-  k_degm₁ = 0.005831
-  k_degm₂ = 0.004235
-  k_degm₃ = 0.006355
-  k_degp₁ = 0.001378
-  k_degp₂ = 0.001217
-  k_degp₃ = 0.001331
+  α₀₁ = 0.007724
+  α₀₂ = 0.005434
+  α₀₃ = 0.010689
+  α₁ = 0.863385
+  α₂ = 0.80167
+  α₃ = 1.29603
+  β₁ = 0.015332
+  β₂ = 0.02433
+  β₃ = 0.01035
+  K₁ = 21.322809
+  K₂ = 20.189184
+  K₃ = 27.06455
+  k_degm₁ = 0.006822
+  k_degm₂ = 0.004234
+  k_degm₃ = 0.005708
+  k_degp₁ = 0.001347
+  k_degp₂ = 0.001207
+  k_degp₃ = 0.001264

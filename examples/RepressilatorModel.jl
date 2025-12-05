@@ -1,19 +1,15 @@
 """
 RepressilatorModel.jl
 
-Lightweight module containing the repressilator ODE system and helper functions
-for distributed profiling.
-
-This module can be loaded on worker processes to enable distributed 2D profiling
-in repressilator.jl.
+Module containing the repressilator ODE system (Eisenberg & Hayashi formulation)
+and helper functions for simulation and observation mapping.
 """
 module RepressilatorModel
 
 using DifferentialEquations
 using LinearAlgebra
 
-export repressilator!, solve_repressilator, extract_mrna, extract_proteins,
-       create_ϕ_mapping, predict_mRNA
+export repressilator!, solve_repressilator, predict_mRNA, create_ϕ_mapping
 
 """
 Repressilator ODE system - Eisenberg & Hayashi formulation with n=2.5 fixed.
@@ -54,25 +50,21 @@ end
 """
 Solve the repressilator ODE system.
 """
-function solve_repressilator(t_save, θ, X0; solver=Rodas4())
+function solve_repressilator(t_save, θ, X0; solver=Rodas4(), abstol=1e-8, reltol=1e-6)
     tspan = (0.0, maximum(t_save))
     prob = ODEProblem(repressilator!, X0, tspan, θ)
-    sol = solve(prob, solver, saveat=t_save, abstol=1e-10, reltol=1e-8)
+    sol = solve(prob, solver, saveat=t_save, abstol=abstol, reltol=reltol)
     return Array(sol)
 end
 
 """
-Extract all three mRNA concentrations.
+Predict mRNA concentrations for given parameters and time grid.
+Returns flattened vector in column-major order: [m1(t1), m2(t1), m3(t1), m1(t2), ...]
 """
-function extract_mrna(solution_matrix)
-    return solution_matrix[1:3, :]
-end
-
-"""
-Extract all three protein concentrations.
-"""
-function extract_proteins(solution_matrix)
-    return solution_matrix[4:6, :]
+function predict_mRNA(θ, t_grid, X0)
+    sol_matrix = solve_repressilator(t_grid, θ, X0)
+    mRNA = sol_matrix[1:3, :]  # 3×NT matrix (rows=species, cols=time)
+    return vec(mRNA)
 end
 
 """
@@ -80,22 +72,9 @@ Create ϕ mapping from parameters to mRNA observations.
 """
 function create_ϕ_mapping(t, X0)
     function ϕ(θ)
-        sol_matrix = solve_repressilator(t, θ, X0)
-        mrna_matrix = extract_mrna(sol_matrix)
-        # Flatten: [m₁(t₁), m₂(t₁), m₃(t₁), m₁(t₂), ...]
-        return vec(mrna_matrix')
+        return predict_mRNA(θ, t, X0)
     end
     return ϕ
-end
-
-"""
-Predict mRNA concentrations for given parameters and time grid.
-Returns flattened vector in column-major order.
-"""
-function predict_mRNA(θ, t_grid, X0)
-    sol_matrix = solve_repressilator(t_grid, θ, X0)
-    mRNA = extract_mrna(sol_matrix)  # 3×NT matrix (rows=species, cols=time)
-    return vec(mRNA)  # Flatten → [m1(t1), m2(t1), m3(t1), m1(t2), ...]
 end
 
 end # module

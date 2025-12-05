@@ -31,13 +31,13 @@ t_test = [0.0, 1000.0, 2000.0, 3000.0, 4000.0]  # Short time grid for speed
 ϕ_log = θ_log -> begin
     θ = exp.(θ_log)
     sol_matrix = solve_repressilator(t_test, θ, X0)
-    mRNA = extract_mrna(sol_matrix)
+    mRNA = sol_matrix[1:3, :]  # mRNA concentrations
     return vec(mRNA)
 end
 
 ϕ_original = θ -> begin
     sol_matrix = solve_repressilator(t_test, θ, X0)
-    mRNA = extract_mrna(sol_matrix)
+    mRNA = sol_matrix[1:3, :]  # mRNA concentrations
     return vec(mRNA)
 end
 

@@ -6,12 +6,22 @@ else
     println("✓ ReparamTools module already included")
 end
 
+# Include RepressilatorModel.jl for ODE system and helpers
+if !@isdefined(RepressilatorModel)
+    include("RepressilatorModel.jl")
+    println("✓ RepressilatorModel module included")
+else
+    println("✓ RepressilatorModel module already included")
+end
+
 # Load required packages
 using .ReparamTools
+using .RepressilatorModel
 using Plots
 using Distributions
 using LinearAlgebra
 using Random
+using Statistics
 using DifferentialEquations
 using ForwardDiff
 
@@ -27,12 +37,12 @@ const PARAM_INDICES = collect(1:18)
 # CONFIGURATION: Profiling Settings
 # ========================================================================
 # Six profile modes with increasing grid resolution and runtime
-const PROFILE_MODE = "paper"  # Options: "test", "paper", "high_quality", "publication", "ultra", "full"
+const PROFILE_MODE = "full"  # Options: "test", "paper", "high_quality", "publication", "ultra", "full"
 
 # Mode configurations
 const PROFILE_CONFIGS = Dict(
     # Quick testing - minimal grid for debugging
-    "test"  => (grid_1d=5, grid_2d=[3,3], timeout=10.0, n_guesses=1, do_2d=false, mle_guesses=5, mle_timeout=20.0),
+    "test"  => (grid_1d=10, grid_2d=[5,5], timeout=10.0, n_guesses=1, do_2d=false, mle_guesses=5, mle_timeout=20.0),
 
     # Development mode - fast iteration (~15-20 min for 3 profiles)
     "paper" => (grid_1d=15, grid_2d=[7,7], timeout=40.0, n_guesses=3, do_2d=false, mle_guesses=9, mle_timeout=60.0),
@@ -89,89 +99,13 @@ println("=" ^ 70)
 # --------------------------------------------------------
 # Model Definition: Repressilator (Eisenberg & Hayashi Setup)
 # --------------------------------------------------------
-# Eisenberg & Hayashi exact parameter setup with n=2.5 (Hill coefficient fixed)
-#
-# For i=1,2,3 (modulo 3):
-#   ṁᵢ = α₀ᵢ + αᵢ/(1 + (pᵢ₋₁/Kᵢ₋₁)²) - k_degmᵢ·mᵢ
-#   ṗᵢ = βᵢ·mᵢ - k_degpᵢ·pᵢ
-#   yᵢ = mᵢ
+# Uses RepressilatorModel module which defines:
+#   - repressilator!: ODE system (Eisenberg & Hayashi formulation, n=2.5 fixed)
+#   - solve_repressilator: ODE solver wrapper
+#   - create_ϕ_mapping: θ → mRNA observations closure factory
 #
 # 18 parameters with rank 15/18 (3 non-identifiable).
 # Expected identifiable: K₁/β₁, K₂/β₂, K₃/β₃ ratios.
-
-function repressilator!(dX, X, θ, t)
-    """
-    Repressilator ODE system - Eisenberg & Hayashi formulation with n=2.5 fixed.
-
-    State vector X = [m₁, m₂, m₃, p₁, p₂, p₃]
-    Parameter vector θ = [α₀₁, α₀₂, α₀₃, α₁, α₂, α₃,
-                          β₁, β₂, β₃, K₁, K₂, K₃,
-                          k_degm₁, k_degm₂, k_degm₃, k_degp₁, k_degp₂, k_degp₃]
-
-    18 parameters (Hill coefficient n fixed at 2)
-    """
-
-    # Unpack state variables
-    m₁, m₂, m₃, p₁, p₂, p₃ = X
-
-    # Unpack parameters (18 total)
-    α₀₁, α₀₂, α₀₃ = θ[1:3]      # Basal transcription
-    α₁, α₂, α₃ = θ[4:6]          # Regulated transcription
-    β₁, β₂, β₃ = θ[7:9]          # Translation
-    K₁, K₂, K₃ = θ[10:12]        # Inhibition constants
-    k_degm₁, k_degm₂, k_degm₃ = θ[13:15]  # mRNA degradation
-    k_degp₁, k_degp₂, k_degp₃ = θ[16:18]  # Protein degradation
-
-    # Hill coefficient fixed at 2.5 (>2 for oscillations?)
-    n = 2.5
-
-    # mRNA dynamics: basal + regulated transcription - degradation
-    # Gene i is repressed by protein i-1 with inhibition constant K_{i-1} (modulo 3)
-    # Per Eisenberg Eq. 12: p₀ = p₃ and K₀ = K₃ (cyclic indexing)
-    dX[1] = α₀₁ + α₁ / (1 + (p₃/K₃)^n) - k_degm₁ * m₁
-    dX[2] = α₀₂ + α₂ / (1 + (p₁/K₁)^n) - k_degm₂ * m₂
-    dX[3] = α₀₃ + α₃ / (1 + (p₂/K₂)^n) - k_degm₃ * m₃
-
-    # Protein dynamics: translation - degradation
-    dX[4] = β₁ * m₁ - k_degp₁ * p₁
-    dX[5] = β₂ * m₂ - k_degp₂ * p₂
-    dX[6] = β₃ * m₃ - k_degp₃ * p₃
-end
-
-# ODE model solver
-function solve_repressilator(t_save, θ, X0; solver=Rodas4())
-    """
-    Solve the repressilator ODE system.
-    """
-    tspan = (0.0, maximum(t_save))
-    prob = ODEProblem(repressilator!, X0, tspan, θ)
-    sol = solve(prob, solver, saveat=t_save, abstol=1e-10, reltol=1e-8)
-    return Array(sol)
-end
-
-# Extract mRNA observations (all three as in Eisenberg)
-function extract_mrna(solution_matrix)
-    """Extract all three mRNA concentrations."""
-    return solution_matrix[1:3, :]
-end
-
-# Extract protein concentrations (all three)
-function extract_proteins(solution_matrix)
-    """Extract all three protein concentrations."""
-    return solution_matrix[4:6, :]
-end
-
-# Creates ϕ mapping function. Assume map to mRNA only (all three).
-function create_ϕ_mapping(t, X0)
-    """Create ϕ mapping from parameters to mRNA observations."""
-    function ϕ(θ)
-        sol_matrix = solve_repressilator(t, θ, X0)
-        mrna_matrix = extract_mrna(sol_matrix)
-        # Flatten: [m₁(t₁), m₂(t₁), m₃(t₁), m₁(t₂), ...]
-        return vec(mrna_matrix')
-    end
-    return ϕ
-end
 
 # --------------------------------------------------------
 # Setup and Data Generation
@@ -267,18 +201,15 @@ println("  K₁/β₁ = $(K₁_true/β₁_true)")
 println("  K₂/β₂ = $(K₂_true/β₂_true)")
 println("  K₃/β₃ = $(K₃_true/β₃_true)")
 
-function predict_mRNA(θ, t_grid)
-    sol_matrix = solve_repressilator(t_grid, θ, X0)
-    mRNA = extract_mrna(sol_matrix)  # 3×NT matrix (rows=species, cols=time)
-    return vec(mRNA)  # Flatten in column-major order → [m1(t1), m2(t1), m3(t1), m1(t2), ...]
-end
+# Create ϕ mappings for observation and prediction grids
+ϕ_obs = create_ϕ_mapping(t_obs, X0)   # for likelihood/data generation
+ϕ_pred = create_ϕ_mapping(t_pred, X0) # for IIR analysis and predictions
 
 # --------------------------------------------------------
 # Generate synthetic data
 # --------------------------------------------------------
 
-ϕ_func = create_ϕ_mapping(t_pred, X0)  # Use fine grid for IIR analysis
-y_true = predict_mRNA(θ_true, t_obs)
+y_true = ϕ_obs(θ_true)
 N_obs = length(y_true)
 data = y_true + σ * randn(N_obs)
 
@@ -307,7 +238,7 @@ println(repeat("=", 70))
 
 # Distribution for predictions (mRNA only, not proteins)
 # Use fine grid for smooth prediction bands; additive Gaussian noise model
-distrib_fine_θ = θ -> MvNormal(predict_mRNA(θ, t_pred), σ_pred^2 * I(3*length(t_pred)))
+distrib_fine_θ = θ -> MvNormal(ϕ_pred(θ), σ_pred^2 * I(3*length(t_pred)))
 
 # Log-space wrapper for profiling (profiles are in log-space)
 distrib_fine_θ_log = θ_log -> distrib_fine_θ(exp.(θ_log))
@@ -333,7 +264,7 @@ println(repeat("-", 70))
 # 3. K₁/β₁ ratio (identifiable, in complement space)
 
 # Define distribution for observations (use observation time grid)
-distrib_θ = θ -> MvNormal(predict_mRNA(θ, t_obs), σ^2 * I(3*NT))
+distrib_θ = θ -> MvNormal(ϕ_obs(θ), σ^2 * I(3*NT))
 
 # Construct likelihood using standard pattern
 lnlike_θ = construct_lnlike_xy(distrib_θ, data; dist_type=:multi)
@@ -375,9 +306,52 @@ println("\nSetting biologically-informed parameter bounds:")
 θ_lower[16:18] .= 0.001
 θ_upper[16:18] .= 0.0015
 
+# Create wider bounds for profiling (allow compensation during profiling)
+# When profiling non-identifiable parameters, optimizer needs more room to adjust
+# other parameters to compensate. Add 30% buffer to all bounds.
+println("\nCreating profiling bounds (wider than MLE bounds for compensation):")
+θ_lower_profiling = copy(θ_lower)
+θ_upper_profiling = copy(θ_upper)
+
+for i in 1:length(θ_lower)
+    range = θ_upper[i] - θ_lower[i]
+    buffer = 0.3 * range  # 30% buffer on each side
+    # Don't go below 50% of original lower bound or above 200% of original upper bound
+    θ_lower_profiling[i] = max(θ_lower[i] - buffer, θ_lower[i] * 0.5)
+    θ_upper_profiling[i] = min(θ_upper[i] + buffer, θ_upper[i] * 2.0)
+end
+
+println("  Original α₁ bounds: [$(θ_lower[4]), $(θ_upper[4])]")
+println("  Profiling α₁ bounds: [$(round(θ_lower_profiling[4], digits=3)), $(round(θ_upper_profiling[4], digits=3))]")
+println("  (30% buffer added to allow compensation during profiling)")
+
 # Convert to log space
 θ_log_lower = log.(θ_lower)
 θ_log_upper = log.(θ_upper)
+θ_log_lower_profiling = log.(θ_lower_profiling)
+θ_log_upper_profiling = log.(θ_upper_profiling)
+
+# Validate profiling bounds (ensure minimum separation to avoid NLopt errors)
+min_separation_profiling = 1e-3  # Minimum 0.001 in log space
+n_fixed_profiling_bounds = 0
+for i in 1:length(θ_log_lower_profiling)
+    range = θ_log_upper_profiling[i] - θ_log_lower_profiling[i]
+    if range < min_separation_profiling || θ_log_upper_profiling[i] <= θ_log_lower_profiling[i]
+        # Bounds too close or invalid - widen them using midpoint
+        center = 0.5 * (θ_log_lower[i] + θ_log_upper[i])  # Use original bounds midpoint
+        θ_log_lower_profiling[i] = center - min_separation_profiling / 2
+        θ_log_upper_profiling[i] = center + min_separation_profiling / 2
+        n_fixed_profiling_bounds += 1
+        if n_fixed_profiling_bounds <= 3  # Only print first few
+            println("  Fixed profiling bounds for parameter $i: range was $(round(range, digits=6)), set to $(round(min_separation_profiling, digits=3))")
+        end
+    end
+end
+if n_fixed_profiling_bounds > 3
+    println("  Fixed $n_fixed_profiling_bounds profiling bounds (showing first 3)")
+elseif n_fixed_profiling_bounds > 0
+    println("  Fixed $n_fixed_profiling_bounds profiling bounds")
+end
 
 # Start from midpoint of bounds (NOT true parameters - we don't know those in real data!)
 θ_log_initial = 0.5 * (θ_log_lower + θ_log_upper)
@@ -442,20 +416,20 @@ println("  Time: $(round(t_mle_elapsed, digits=1)) seconds")
 
 θ_MLE = exp.(θ_log_MLE)
 
-# Verify MLE is better than true parameters
+# Verify optimization succeeded (MLE should be at least as good as true params)
 lnlike_true = lnlike_θ(θ_true)
-improvement = lnlike_MLE - lnlike_true
+ll_difference = lnlike_MLE - lnlike_true
 
 println("\nMLE verification:")
 println("  Log-likelihood at true parameters: $(round(lnlike_true, digits=4))")
 println("  Log-likelihood at MLE: $(round(lnlike_MLE, digits=4))")
-println("  Improvement: $(round(improvement, digits=4))")
+println("  Difference (MLE - true): $(round(ll_difference, digits=4))")
 
-# Only warn if improvement is clearly negative (accounting for numerical noise)
-if improvement < -0.01
+# Only warn if difference is clearly negative (accounting for numerical noise)
+if ll_difference < -0.01
     @warn "MLE has significantly worse likelihood than true parameters! Optimization may have failed."
-elseif abs(improvement) < 0.01
-    println("  (Improvement ≈0: MLE very close to true parameters, as expected with low noise)")
+elseif abs(ll_difference) < 0.01
+    println("  (Difference ≈0: MLE very close to true parameters, as expected with low noise)")
 end
 
 println("\nMLE parameter values:")
@@ -475,8 +449,16 @@ println("\n" * repeat("=", 70))
 println("Applying IIR at MLE (18 parameters)")
 println(repeat("=", 70))
 
-# Wrap in log-space for IIR
-ϕ_log(θ_log) = ϕ_func(exp.(θ_log))
+# Create high-precision ϕ for IIR analysis (needs tight tolerances for accurate Jacobian)
+# This is separate from ϕ_pred which uses faster tolerances for optimization
+function ϕ_pred_highprec(θ)
+    sol_matrix = solve_repressilator(t_pred, θ, X0; abstol=1e-10, reltol=1e-8)
+    mRNA = sol_matrix[1:3, :]
+    return vec(mRNA)
+end
+
+# Wrap in log-space for IIR (use prediction grid for IIR analysis)
+ϕ_log(θ_log) = ϕ_pred_highprec(exp.(θ_log))
 θ_log_true = log.(θ_true)
 n_params = 18
 
@@ -598,7 +580,7 @@ if size(N, 2) > 0
     println("  Computing Jacobian w.r.t. original parameters θ (not log θ)...")
 
     # Define auxiliary map in original coordinates
-    ϕ_original = θ -> predict_mRNA(θ, t_obs)
+    ϕ_original = ϕ_obs  # already defined for observation grid
 
     # Run IIR analysis at the same point (θ_MLE in original space)
     t_orig_start = time()
@@ -925,6 +907,29 @@ if size(N, 2) > 0
         end
         ψ_log_lower_bounds[i] = lower_val
         ψ_log_upper_bounds[i] = upper_val
+    end
+
+    # Validate and fix bounds that are too close (can cause NLopt errors)
+    # Compute typical range from valid bounds
+    valid_ranges = [ub - lb for (lb, ub) in zip(ψ_log_lower_bounds, ψ_log_upper_bounds) 
+                    if abs(ub - lb) > 1e-6]
+    typical_range = isempty(valid_ranges) ? log(10.0) : median(valid_ranges)
+    min_separation = max(1e-3, typical_range * 0.01)  # At least 0.1% of typical range, minimum 1e-3
+    
+    # Fix invalid bounds (lower ≈ upper) by centering around MLE with typical range
+    n_fixed = 0
+    for i in 1:n_params
+        range = ψ_log_upper_bounds[i] - ψ_log_lower_bounds[i]
+        if range < min_separation
+            center = ψ_log_MLE[i]
+            ψ_log_lower_bounds[i] = center - typical_range / 2
+            ψ_log_upper_bounds[i] = center + typical_range / 2
+            n_fixed += 1
+            println("  Fixed invalid bounds for ψ[$i]: range was $(round(range, digits=6)), set to $(round(typical_range, digits=3)) around MLE")
+        end
+    end
+    if n_fixed > 0
+        println("  Fixed $n_fixed invalid bounds in ψ-space")
     end
 
     # Convert to ψ-space bounds (for profiling in monomial coordinates)
@@ -1269,8 +1274,8 @@ println("(Review these plots to verify dynamics before continuing)")
 
 # Solve full system at MLE to get both mRNA and protein trajectories
 sol_full_MLE = solve_repressilator(t_pred, θ_MLE, X0)
-mrna_MLE = extract_mrna(sol_full_MLE)
-proteins_MLE = extract_proteins(sol_full_MLE)
+mrna_MLE = sol_full_MLE[1:3, :]      # mRNA concentrations
+proteins_MLE = sol_full_MLE[4:6, :]  # protein concentrations
 
 # Plot individual mRNA trajectories with time markers
 mrna_names = ["m_1", "m_2", "m_3"]
@@ -1334,20 +1339,25 @@ println("Creating combined mRNA + protein dynamics plot with true trajectories..
 
 # Generate true parameter trajectories for comparison
 sol_full_true = solve_repressilator(t_pred, θ_true, X0)
-mrna_true = extract_mrna(sol_full_true)
-proteins_true = extract_proteins(sol_full_true)
+mrna_true = sol_full_true[1:3, :]      # mRNA concentrations
+proteins_true = sol_full_true[4:6, :]  # protein concentrations
+
+# Reshape noisy data to extract observations for each species
+# data is flattened as [m1(t1), m2(t1), m3(t1), m1(t2), m2(t2), m3(t2), ...]
+# Reshape to 3×NT (species × time), then transpose to NT×3 (time × species)
+data_mat = reshape(data, 3, NT)'  # NT×3 matrix: rows=time, cols=species
 
 p_plots = []
 species_info = [
-    (mrna_MLE[1, :], mrna_true[1, :], "m_1", "mRNA 1", :red, :pink),
-    (mrna_MLE[2, :], mrna_true[2, :], "m_2", "mRNA 2", :green, :lightgreen),
-    (mrna_MLE[3, :], mrna_true[3, :], "m_3", "mRNA 3", :blue, :lightblue),
-    (proteins_MLE[1, :], proteins_true[1, :], "p_1", "Protein 1", :darkred, :red),
-    (proteins_MLE[2, :], proteins_true[2, :], "p_2", "Protein 2", :darkgreen, :green),
-    (proteins_MLE[3, :], proteins_true[3, :], "p_3", "Protein 3", :darkblue, :blue)
+    (mrna_MLE[1, :], mrna_true[1, :], "m_1", "mRNA 1", :red, :pink, 1, true),   # species_idx=1, has_data=true
+    (mrna_MLE[2, :], mrna_true[2, :], "m_2", "mRNA 2", :green, :lightgreen, 2, true),   # species_idx=2, has_data=true
+    (mrna_MLE[3, :], mrna_true[3, :], "m_3", "mRNA 3", :blue, :lightblue, 3, true),   # species_idx=3, has_data=true
+    (proteins_MLE[1, :], proteins_true[1, :], "p_1", "Protein 1", :darkred, :red, 0, false),  # no data
+    (proteins_MLE[2, :], proteins_true[2, :], "p_2", "Protein 2", :darkgreen, :green, 0, false),  # no data
+    (proteins_MLE[3, :], proteins_true[3, :], "p_3", "Protein 3", :darkblue, :blue, 0, false)   # no data
 ]
 
-for (traj_MLE, traj_true, label, title, color_MLE, color_true) in species_info
+for (traj_MLE, traj_true, label, title, color_MLE, color_true, species_idx, has_data) in species_info
     p = plot(t_pred, traj_true,
              xlabel="Time (s)",
              ylabel="Concentration (nM)",
@@ -1362,6 +1372,17 @@ for (traj_MLE, traj_true, label, title, color_MLE, color_true) in species_info
           label="MLE",
           color=color_MLE,
           lw=2)
+    
+    # Add noisy data points for mRNA species (only mRNAs are observed)
+    if has_data
+        scatter!(p, t_obs, data_mat[:, species_idx],
+                 label="Data",
+                 color=:black,
+                 markersize=4,
+                 markerstrokewidth=1,
+                 alpha=0.7)
+    end
+    
     push!(p_plots, p)
 end
 
@@ -1399,13 +1420,13 @@ Threads.@threads for i in 1:3
         nuisance_indices = setdiff(1:n_params, K1_index)
         nuisance_guess = θ_log_MLE[nuisance_indices]
         nuisance_extras = generate_initial_guesses(
-            θ_log_lower[nuisance_indices],
-            θ_log_upper[nuisance_indices],
+            θ_log_lower_profiling[nuisance_indices],
+            θ_log_upper_profiling[nuisance_indices],
             n_guesses)
 
         ψ_values, lnlike_values, convergence_info = profile_target(
             lnlike_θ_log, K1_index,
-            θ_log_lower, θ_log_upper,
+            θ_log_lower_profiling, θ_log_upper_profiling,
             nuisance_guess;
             grid_steps=[CONFIG.grid_1d],
             ω_initial_extras=nuisance_extras,
@@ -1428,13 +1449,13 @@ Threads.@threads for i in 1:3
         nuisance_indices = setdiff(1:n_params, β1_index)
         nuisance_guess = θ_log_MLE[nuisance_indices]
         nuisance_extras = generate_initial_guesses(
-            θ_log_lower[nuisance_indices],
-            θ_log_upper[nuisance_indices],
+            θ_log_lower_profiling[nuisance_indices],
+            θ_log_upper_profiling[nuisance_indices],
             n_guesses)
 
         ψ_values, lnlike_values, convergence_info = profile_target(
             lnlike_θ_log, β1_index,
-            θ_log_lower, θ_log_upper,
+            θ_log_lower_profiling, θ_log_upper_profiling,
             nuisance_guess;
             grid_steps=[CONFIG.grid_1d],
             ω_initial_extras=nuisance_extras,
@@ -1456,14 +1477,56 @@ Threads.@threads for i in 1:3
 
         nuisance_indices_ratio = setdiff(1:n_params, ψ_K1_β1_index)
         nuisance_guess_ratio = ψ_MLE[nuisance_indices_ratio]
+        
+        # Validate bounds before profiling (ensure minimum separation)
+        # NLopt requires strict inequality: lower < upper with minimum separation
+        ψ_lower_profiling = copy(ψ_lower_bounds)
+        ψ_upper_profiling = copy(ψ_upper_bounds)
+        min_relative_separation = 1e-3  # Minimum 0.1% relative separation (was 1e-4)
+        n_fixed_profiling = 0
+        
+        for j in 1:length(ψ_lower_bounds)
+            center = ψ_MLE[j]
+            current_range = ψ_upper_profiling[j] - ψ_lower_profiling[j]
+            min_required_range = max(abs(center) * min_relative_separation, 1e-6)
+            
+            # Check if bounds are invalid, equal, or too close together
+            needs_fix = !isfinite(current_range) || 
+                        ψ_upper_profiling[j] <= ψ_lower_profiling[j] || 
+                        current_range < min_required_range ||
+                        isapprox(ψ_lower_profiling[j], ψ_upper_profiling[j], rtol=1e-6)
+            
+            if needs_fix
+                # Invalid or too-tight bounds - use MLE with reasonable range
+                range = max(abs(center) * 0.5, 1e-3)  # At least ±50% or 1e-3
+                ψ_lower_profiling[j] = max(center - range, center * 0.1, 1e-8)
+                ψ_upper_profiling[j] = center + range
+                
+                # Ensure strict inequality with minimum gap
+                if ψ_upper_profiling[j] <= ψ_lower_profiling[j]
+                    ψ_upper_profiling[j] = ψ_lower_profiling[j] * 1.1 + 1e-6
+                end
+                
+                n_fixed_profiling += 1
+                if n_fixed_profiling <= 5  # Only print first few to avoid spam
+                    println("  Fixed bounds for ψ[$j]: was [$(round(ψ_lower_bounds[j], digits=6)), $(round(ψ_upper_bounds[j], digits=6))], now [$(round(ψ_lower_profiling[j], digits=6)), $(round(ψ_upper_profiling[j], digits=6))]")
+                end
+            end
+        end
+        if n_fixed_profiling > 5
+            println("  Fixed $n_fixed_profiling total bounds (showing first 5)")
+        elseif n_fixed_profiling > 0
+            println("  Fixed $n_fixed_profiling invalid/too-tight bounds")
+        end
+        
         nuisance_extras_ratio = generate_initial_guesses(
-            ψ_lower_bounds[nuisance_indices_ratio],
-            ψ_upper_bounds[nuisance_indices_ratio],
+            ψ_lower_profiling[nuisance_indices_ratio],
+            ψ_upper_profiling[nuisance_indices_ratio],
             n_guesses)
 
         ψ_ratio_values, lnlike_ratio_values, convergence_info_ratio = profile_target(
             lnlike_ψ, ψ_K1_β1_index,
-            ψ_lower_bounds, ψ_upper_bounds,
+            ψ_lower_profiling, ψ_upper_profiling,
             nuisance_guess_ratio;
             grid_steps=[CONFIG.grid_1d],
             ω_initial_extras=nuisance_extras_ratio,
@@ -1583,22 +1646,110 @@ if CONFIG.do_2d
     nuisance_indices_2d = setdiff(1:n_params, target_indices_K1β1)
     nuisance_guess_2d = θ_log_MLE[nuisance_indices_2d]
 
+    # Validate bounds for 2D profiling (double-check before profiling)
+    θ_log_lower_2d = copy(θ_log_lower_profiling)
+    θ_log_upper_2d = copy(θ_log_upper_profiling)
+    min_sep_2d = 1e-2  # Require at least 0.01 in log space (~1% relative change)
+    min_rel_sep = 0.05  # Or 5% of |center|
+    local n_fixed_2d = 0
+    for j in 1:length(θ_log_lower_2d)
+        lower_j = θ_log_lower_2d[j]
+        upper_j = θ_log_upper_2d[j]
+        range_2d = upper_j - lower_j
+        center_2d = θ_log_MLE[j]
+
+        # Determine required separation based on relative scale
+        rel_sep = max(abs(center_2d) * min_rel_sep, min_sep_2d)
+
+        if !isfinite(range_2d) || !isfinite(lower_j) || !isfinite(upper_j) ||
+           upper_j <= lower_j || range_2d <= rel_sep
+            width = rel_sep
+            θ_log_lower_2d[j] = center_2d - width / 2
+            θ_log_upper_2d[j] = center_2d + width / 2
+
+            # Ensure strict inequality
+            if θ_log_upper_2d[j] <= θ_log_lower_2d[j]
+                θ_log_upper_2d[j] = θ_log_lower_2d[j] + width
+            end
+
+            n_fixed_2d += 1
+            if n_fixed_2d <= 5
+                println("  Fixed 2D profiling bounds for parameter $j: was [$(round(lower_j, digits=6)), $(round(upper_j, digits=6))], now [$(round(θ_log_lower_2d[j], digits=6)), $(round(θ_log_upper_2d[j], digits=6))]")
+            end
+        end
+    end
+    if n_fixed_2d > 5
+        println("  Fixed $n_fixed_2d bounds for 2D profiling (showing first 5)")
+    elseif n_fixed_2d > 0
+        println("  Fixed $n_fixed_2d bounds for 2D profiling")
+    end
+
     nuisance_extras_2d = generate_initial_guesses(
-        θ_log_lower[nuisance_indices_2d],
-        θ_log_upper[nuisance_indices_2d],
+        θ_log_lower_2d[nuisance_indices_2d],
+        θ_log_upper_2d[nuisance_indices_2d],
         n_guesses)
 
+    t_2d_start = time()
     ψK1β1_values, lnlike_K1β1_values = profile_target(
         lnlike_θ_log, target_indices_K1β1,
-        θ_log_lower, θ_log_upper,
+        θ_log_lower_2d, θ_log_upper_2d,
         nuisance_guess_2d;
         grid_steps=CONFIG.grid_2d,
         ω_initial_extras=nuisance_extras_2d,
         method=:LN_BOBYQA,
         optmaxtime=CONFIG.timeout)
+    t_2d_elapsed = time() - t_2d_start
 
     ratio_values_joint = [exp(ψ[K1_index] - ψ[β1_index]) for ψ in ψK1β1_values]
     println("  Joint profile ratio range: [$(round(minimum(ratio_values_joint), digits=2)), $(round(maximum(ratio_values_joint), digits=2))]")
+    println("  2D profile complete in $(round(t_2d_elapsed, digits=1))s ($(prod(CONFIG.grid_2d)) points)")
+
+    # Create and save 2D contour plot
+    println("\nGenerating 2D profile contour plot...")
+
+    # Extract unique values for β₁ and K₁ (in original scale)
+    β1_values_2d = unique([exp(ψ[β1_index]) for ψ in ψK1β1_values])
+    K1_values_2d = unique([exp(ψ[K1_index]) for ψ in ψK1β1_values])
+
+    # Reshape likelihoods to 2D grid
+    # β₁ varies fastest in Base.product (first arg), so reshape as (lenβ, lenK)
+    # For contourf(x, y, Z): x=columns, y=rows, so Z should be (lenK, lenβ)
+    ll_grid_2d = reshape(lnlike_K1β1_values, length(β1_values_2d), length(K1_values_2d))'
+
+    # Normalize to max = 0, then convert to likelihood scale
+    ll_grid_2d_norm = ll_grid_2d .- maximum(ll_grid_2d)
+    like_grid_2d = exp.(ll_grid_2d_norm)
+
+    # Chi-square calibration for 95% confidence contour (df=2 for 2D)
+    df_2d = 2
+    lstar_2d = exp(-quantile(Chisq(df_2d), 0.95)/2)
+
+    # Create contour plot
+    plt_2d = contourf(β1_values_2d, K1_values_2d, like_grid_2d,
+                      color=:dense, levels=20, lw=0,
+                      xlabel="β₁", ylabel="K₁",
+                      title="Repressilator 2D Profile: (β₁, K₁)",
+                      colorbar=false,
+                      size=(800, 600))
+
+    # Add 95% confidence contour
+    contour!(plt_2d, β1_values_2d, K1_values_2d, like_grid_2d,
+             levels=[lstar_2d], color=:black, lw=2, legend=false, fill=false)
+
+    # Mark MLE
+    scatter!(plt_2d, [θ_MLE[β1_index]], [θ_MLE[K1_index]],
+             mc=:silver, msc=:match, markersize=8, markershape=:circle, 
+             label="MLE", legend=:topright)
+
+    # Mark true values
+    scatter!(plt_2d, [θ_true[β1_index]], [θ_true[K1_index]],
+             mc=:darkgoldenrod, msc=:match, markersize=10, markershape=:star,
+             label="True")
+
+    # Save figure
+    output_file_2d = joinpath(@__DIR__, "..", "figures", "repressilator_2D_beta1_K1.png")
+    savefig(plt_2d, output_file_2d)
+    println("✓ 2D profile figure saved: $output_file_2d")
 end
 
 println("\n" * repeat("=", 70))
