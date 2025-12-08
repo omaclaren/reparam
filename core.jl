@@ -345,7 +345,9 @@ function profile_grid_sequential(lnlike_θ, ψ_grid::Vector{Vector{Float64}}, ψ
         end
 
         # Adaptive continuation: use optimized ω as next starting point
-        ω_current = ω_opt
+        # Clamp to be strictly inside bounds to avoid NLopt errors
+        eps_bound = 1e-6
+        ω_current = clamp.(ω_opt, ω_bounds_lower .+ eps_bound, ω_bounds_upper .- eps_bound)
 
         # After first grid point, regenerate extras around continuation point
         # This provides local exploration while maintaining continuation benefit

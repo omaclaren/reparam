@@ -469,52 +469,37 @@ function lnlike_6param_ψ_log(ψ_log)
 end
 
 # Bounds in log-ψ space - based on actual IIR transformation
-# Need to compute bounds that correspond to reasonable θ ranges
-# θ_free ∈ [β₁, β₂, β₃, K₁, K₂, K₃]
-# Reasonable: β ∈ [0.001, 0.5], K ∈ [1, 500]
+# Use sensible bounds like minimal_2D_IIR_coords.jl rather than computing from θ corners
+# (Corner-based bounds are too extreme and 30% buffer shrinks them too much)
 
-# Compute ψ bounds from θ bounds
-θ_lower = [0.001, 0.001, 0.001, 1.0, 1.0, 1.0]
-θ_upper = [0.5, 0.5, 0.5, 500.0, 500.0, 500.0]
+# For gene 1 coordinates (same for genes 2, 3 by symmetry):
+#   ψ_1 = K₁/β₁ (identifiable): reasonable range [10, 50000]
+#   ψ_5 = β₁·K₁ (non-identifiable): reasonable range [0.004, 20]
+#
+# These bounds give good coverage of realistic θ values:
+#   β ∈ [0.004, 0.1], K ∈ [1, 200] corresponds to:
+#   K/β ∈ [10, 50000], β·K ∈ [0.004, 20]
 
-# Transform corner points to get ψ bounds
-ψ_corners = []
-for β1 in [θ_lower[1], θ_upper[1]]
-    for β2 in [θ_lower[2], θ_upper[2]]
-        for β3 in [θ_lower[3], θ_upper[3]]
-            for K1 in [θ_lower[4], θ_upper[4]]
-                for K2 in [θ_lower[5], θ_upper[5]]
-                    for K3 in [θ_lower[6], θ_upper[6]]
-                        push!(ψ_corners, θ_to_ψ([β1, β2, β3, K1, K2, K3]))
-                    end
-                end
-            end
-        end
-    end
-end
-ψ_corners_mat = hcat(ψ_corners...)'
-lower_6d = vec(minimum(ψ_corners_mat, dims=1))
-upper_6d = vec(maximum(ψ_corners_mat, dims=1))
+# Identifiable: K/β ratios (indices 1,2,3)
+K_over_β_lower = 10.0
+K_over_β_upper = 50000.0
 
-# Convert to log space
-lower_6d_log_raw = log.(lower_6d)
-upper_6d_log_raw = log.(upper_6d)
+# Non-identifiable: β·K products (indices 4,5,6)
+βK_lower = 0.004
+βK_upper = 20.0
 
-# Add buffer to bounds to avoid NLopt boundary issues during adaptive continuation
-# (same 30% buffer approach as examples/repressilator.jl)
-println("\nAdding 30% buffer to bounds (for NLopt adaptive continuation):")
-lower_6d_log = copy(lower_6d_log_raw)
-upper_6d_log = copy(upper_6d_log_raw)
+# Build full 6D bounds
+lower_6d = [K_over_β_lower, K_over_β_lower, K_over_β_lower, βK_lower, βK_lower, βK_lower]
+upper_6d = [K_over_β_upper, K_over_β_upper, K_over_β_upper, βK_upper, βK_upper, βK_upper]
+
+# Convert to log space (these are the GRID bounds - no buffer shrinkage)
+lower_6d_log = log.(lower_6d)
+upper_6d_log = log.(upper_6d)
+
+println("\nψ bounds (sensible, matching minimal_2D_IIR_coords.jl):")
 for j in 1:6
-    range_j = upper_6d_log_raw[j] - lower_6d_log_raw[j]
-    buffer = 0.3 * range_j
-    lower_6d_log[j] = lower_6d_log_raw[j] + buffer
-    upper_6d_log[j] = upper_6d_log_raw[j] - buffer
-end
-
-println("\nψ bounds (from θ bounds transformation, with 30% buffer):")
-for j in 1:6
-    println("  ψ_$j ∈ [$(round(exp(lower_6d_log[j]), sigdigits=3)), $(round(exp(upper_6d_log[j]), sigdigits=3))]")
+    coord_type = j <= 3 ? "K/β" : "β·K"
+    println("  ψ_$j ($coord_type) ∈ [$(round(exp(lower_6d_log[j]), sigdigits=3)), $(round(exp(upper_6d_log[j]), sigdigits=3))]")
 end
 
 # === COMPUTE 2D PROFILE WITH NUISANCE OPTIMIZATION ===
@@ -523,7 +508,7 @@ println("2D PROFILING over ψ_$(target_2d[1]) × ψ_$(target_2d[2])")
 println("(profiling out ψ_$(join(nuisance_2d, ", ψ_")) as nuisance)")
 println("=" ^ 70)
 
-GRID = 50  # Finer grid for publication quality
+GRID = 75  # Finer grid for smoother surface
 
 # Grid in ψ-space for the two target coordinates
 ψ_target1_grid = exp.(range(lower_6d_log[target_2d[1]], upper_6d_log[target_2d[1]], length=GRID))
@@ -550,7 +535,7 @@ println("\nRunning profile_target...")
 t_start = time()
 ψ_vals, ll_vals = profile_target(lnlike_6param_ψ_log, target_2d, lower_6d_log, upper_6d_log, nuisance_guess;
                                   grid_steps=GRID, use_distributed=false,
-                                  method=:LN_BOBYQA, optmaxtime=30.0)
+                                  method=:LN_BOBYQA, optmaxtime=60.0)
 elapsed = time() - t_start
 println("Done in $(round(elapsed, digits=1)) seconds")
 println("Finite values: $(sum(isfinite.(ll_vals)))/$(length(ll_vals))")
