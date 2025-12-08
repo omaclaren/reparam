@@ -497,12 +497,24 @@ lower_6d = vec(minimum(ψ_corners_mat, dims=1))
 upper_6d = vec(maximum(ψ_corners_mat, dims=1))
 
 # Convert to log space
-lower_6d_log = log.(lower_6d)
-upper_6d_log = log.(upper_6d)
+lower_6d_log_raw = log.(lower_6d)
+upper_6d_log_raw = log.(upper_6d)
 
-println("\nψ bounds (from θ bounds transformation):")
+# Add buffer to bounds to avoid NLopt boundary issues during adaptive continuation
+# (same 30% buffer approach as examples/repressilator.jl)
+println("\nAdding 30% buffer to bounds (for NLopt adaptive continuation):")
+lower_6d_log = copy(lower_6d_log_raw)
+upper_6d_log = copy(upper_6d_log_raw)
 for j in 1:6
-    println("  ψ_$j ∈ [$(round(lower_6d[j], sigdigits=3)), $(round(upper_6d[j], sigdigits=3))]")
+    range_j = upper_6d_log_raw[j] - lower_6d_log_raw[j]
+    buffer = 0.3 * range_j
+    lower_6d_log[j] = lower_6d_log_raw[j] + buffer
+    upper_6d_log[j] = upper_6d_log_raw[j] - buffer
+end
+
+println("\nψ bounds (from θ bounds transformation, with 30% buffer):")
+for j in 1:6
+    println("  ψ_$j ∈ [$(round(exp(lower_6d_log[j]), sigdigits=3)), $(round(exp(upper_6d_log[j]), sigdigits=3))]")
 end
 
 # === COMPUTE 2D PROFILE WITH NUISANCE OPTIMIZATION ===
@@ -511,14 +523,28 @@ println("2D PROFILING over ψ_$(target_2d[1]) × ψ_$(target_2d[2])")
 println("(profiling out ψ_$(join(nuisance_2d, ", ψ_")) as nuisance)")
 println("=" ^ 70)
 
-GRID = 25  # Reduced for faster testing (increase to 50+ for publication)
+GRID = 50  # Finer grid for publication quality
 
 # Grid in ψ-space for the two target coordinates
 ψ_target1_grid = exp.(range(lower_6d_log[target_2d[1]], upper_6d_log[target_2d[1]], length=GRID))
 ψ_target2_grid = exp.(range(lower_6d_log[target_2d[2]], upper_6d_log[target_2d[2]], length=GRID))
 
 # Use profile_target from ReparamTools (expects log-space bounds)
-nuisance_guess = log.(ψ_true_full[nuisance_2d])  # Start nuisance at true values
+# Start nuisance at midpoint of bounds (NOT true values - that would be cheating)
+nuisance_lower = lower_6d_log[nuisance_2d]
+nuisance_upper = upper_6d_log[nuisance_2d]
+nuisance_guess = (nuisance_lower .+ nuisance_upper) ./ 2
+
+# Ensure guess is strictly inside bounds (NLopt requires this)
+eps_bound = 1e-6
+nuisance_guess = clamp.(nuisance_guess, nuisance_lower .+ eps_bound, nuisance_upper .- eps_bound)
+
+println("\nNuisance optimization setup:")
+println("  Nuisance indices: $(nuisance_2d)")
+println("  Initial guess (log-space midpoint): $(round.(nuisance_guess, digits=3))")
+println("  Initial guess (ψ-space): $(round.(exp.(nuisance_guess), digits=3))")
+println("  True values (ψ-space): $(round.(ψ_true_full[nuisance_2d], digits=4))")
+println("  True values (log-space): $(round.(log.(ψ_true_full[nuisance_2d]), digits=3))")
 
 println("\nRunning profile_target...")
 t_start = time()
@@ -528,6 +554,17 @@ t_start = time()
 elapsed = time() - t_start
 println("Done in $(round(elapsed, digits=1)) seconds")
 println("Finite values: $(sum(isfinite.(ll_vals)))/$(length(ll_vals))")
+
+# Verify that nuisance parameters actually changed from initial guess
+# profile_target returns θ_values which include the optimized nuisance
+# Check a few sample points
+println("\nVerifying nuisance optimization (sample points):")
+sample_indices = [1, div(length(ψ_vals), 2), length(ψ_vals)]
+for idx in sample_indices
+    θ_opt = ψ_vals[idx]
+    nuisance_opt = θ_opt[nuisance_2d]
+    println("  Grid point $idx: nuisance = $(round.(nuisance_opt, digits=3))")
+end
 
 # Reshape results
 ll_matrix = reshape(ll_vals, GRID, GRID)
