@@ -524,10 +524,15 @@ nuisance_guess = (nuisance_lower .+ nuisance_upper) ./ 2
 eps_bound = 1e-6
 nuisance_guess = clamp.(nuisance_guess, nuisance_lower .+ eps_bound, nuisance_upper .- eps_bound)
 
+# Generate multiple starting points for better optimization (library feature)
+n_extra_guesses = 5
+nuisance_extras = generate_initial_guesses(nuisance_lower, nuisance_upper, n_extra_guesses)
+
 println("\nNuisance optimization setup:")
 println("  Nuisance indices: $(nuisance_2d)")
 println("  Initial guess (log-space midpoint): $(round.(nuisance_guess, digits=3))")
 println("  Initial guess (ψ-space): $(round.(exp.(nuisance_guess), digits=3))")
+println("  Extra starting points: $n_extra_guesses")
 println("  True values (ψ-space): $(round.(ψ_true_full[nuisance_2d], digits=4))")
 println("  True values (log-space): $(round.(log.(ψ_true_full[nuisance_2d]), digits=3))")
 
@@ -535,6 +540,7 @@ println("\nRunning profile_target...")
 t_start = time()
 ψ_vals, ll_vals = profile_target(lnlike_6param_ψ_log, target_2d, lower_6d_log, upper_6d_log, nuisance_guess;
                                   grid_steps=GRID, use_distributed=false,
+                                  ω_initial_extras=nuisance_extras,
                                   method=:LN_BOBYQA, optmaxtime=60.0)
 elapsed = time() - t_start
 println("Done in $(round(elapsed, digits=1)) seconds")
