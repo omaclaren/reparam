@@ -1,7 +1,7 @@
 # Project Status: Invariant Image Reparameterisation (IIR)
 
-**Last Updated:** 2025-10-13
-**Phase:** Paper Revision - Final Examples Complete
+**Last Updated:** 2025-12-10
+**Phase:** Paper Revision - Profile Likelihood Demonstration In Progress
 
 ## Overview
 
@@ -31,7 +31,7 @@ The IIR paper has been through peer review at SIAM/ASA Journal on Uncertainty Qu
 
 **Decision**: Focus paper on single-stage method as solid, practical contribution. Multi-stage briefly mentioned in future work with honest assessment of limitations.
 
-## Completed Examples for Paper
+## Examples for Paper
 
 ### 1. stat_model.jl ✅ (Pedagogical)
 **Purpose**: Simple, clear demonstration of IIR basics
@@ -49,7 +49,7 @@ The IIR paper has been through peer review at SIAM/ASA Journal on Uncertainty Qu
 
 **Status**: Complete and verified
 
-### 2. repressilator.jl ✅ (Ambitious)
+### 2. Repressilator (Ambitious) - In Progress
 **Purpose**: Demonstrate IIR on realistic mechanistic ODE model (reviewer request)
 
 **Model**: Eisenberg & Hayashi (2010) 3-gene repressilator
@@ -57,21 +57,39 @@ The IIR paper has been through peer review at SIAM/ASA Journal on Uncertainty Qu
 - System: 6 coupled nonlinear ODEs (stiff)
 - Observables: All 3 mRNA time series
 
-**Results**:
+**IIR Analysis Results** ✅:
 - Rank: 15/18 (3 non-identifiable directions)
 - Invariant null space: βK products (3-dimensional)
-- Identifiable combinations: K₁/β₁, K₂/β₂, K₃/β₃ ratios
-- **Validation**: Matches Eisenberg's profile likelihood results exactly
+- Identifiable combinations: K/β ratios (up to sign/reciprocal ambiguity)
+- Finite-difference invariance test works for stiff ODEs (atolM=1e-6)
 
-**Technical advances**:
-- Finite-difference invariance test for stiff ODEs (atolM=1e-6)
-- Varimax rotation reveals interpretable K/β structure
-- Profile-wise prediction uncertainty analysis demonstrates practical importance
+**Profile Likelihood Demonstration** 🔄 In Progress:
+The goal is to show that profiling original parameters (β₁, K₁) gives misleading narrow uncertainty, while profiling IIR-identified combinations (K₁/β₁ identifiable, β₁K₁ non-identifiable) reveals the true structure.
 
-**Status**: Complete, working (path bug fixed 2025-10-13)
+**Development Strategy** (incremental complexity):
+1. ✅ 2D ideal case (`minimal_2D_IIR_coords.jl`) - calibrate optimizer, understand expected behavior
+2. ✅ 2D + 1 nuisance (`minimal_2D_IIR_nuisance.jl`) - verify nuisance handling
+3. ✅ 6 params: β, K subset (`iir_guided_profiling.jl`) - working
+4. ✅ 18 params: full model IIR (`iir_guided_profiling_18param.jl`) - **IIR complete, profiling next**
 
-**Narrative**: Discovery→Problem→Solution
-1. **Discovery**: IIR automatically identifies K/β ratios without symbolic computation
+**18-Parameter IIR Results** (2025-12-10):
+- Rank: 15/18, gap 723,000× (unambiguous)
+- Identifiable (15): K₁/β₁, K₂/β₂, K₃/β₃, plus 12 individual params (α₀, α, k_degm, k_degp)
+- Non-identifiable (3): β₁K₁, β₂K₂, β₃K₃
+- Gene 1 coordinates found: ψ₆ = K₁/β₁ (identifiable), ψ₁₇ = β₁K₁ (non-identifiable)
+- Key settings: fine time grid (501 pts) + tight ODE tolerances (abstol=1e-10, reltol=1e-8) for IIR; observation grid (8 pts) for likelihood
+
+**Next step**: Add 2D profiling over gene 1 coordinates (K₁/β₁ vs β₁K₁) with 16 nuisance parameters
+
+**Key files**:
+- `examples/repressilator.jl` - full IIR analysis (reference)
+- `examples/RepressilatorModel.jl` - model definition
+- `iir_guided_profiling.jl` - 6-param subset profiling
+- `iir_guided_profiling_18param.jl` - **18-param IIR complete, profiling to be added**
+- `minimal_2D_IIR_coords.jl`, `minimal_2D_IIR_nuisance.jl` - calibration scripts
+
+**Narrative** (target for paper):
+1. **Discovery**: IIR automatically identifies K/β structure without symbolic computation
 2. **Problem**: Profiling individual parameters (K₁, β₁) gives misleading narrow uncertainty
 3. **Solution**: Profiling identifiable ratio (K₁/β₁) provides honest prediction intervals
 
@@ -151,9 +169,13 @@ reparam/
 ├── utils.jl                  # Helper functions
 ├── parameterizations.jl      # Transformations, Varimax rotation
 ├── visualization.jl          # Plotting functions
+├── iir_guided_profiling.jl   # 🔄 Active: 6-param profiling development
+├── minimal_2D_IIR_coords.jl  # ✅ 2D calibration (ideal case)
+├── minimal_2D_IIR_nuisance.jl # ✅ 2D + nuisance calibration
 └── examples/
     ├── stat_model.jl         # ✅ Pedagogical example (complete)
-    ├── repressilator.jl  # ✅ Ambitious example (complete)
+    ├── repressilator.jl      # IIR analysis complete, profiling in progress
+    ├── RepressilatorModel.jl # Model definition
     ├── stat_sum_model.jl     # Sequential IIR (works, but not in paper)
     ├── pk_model.jl           # Sequential IIR (reveals limitations)
     ├── mm_model.jl           # Legacy (needs update)
@@ -244,10 +266,23 @@ Brief mention of multi-stage possibilities with honest assessment:
 
 ## Immediate Tasks
 
+### Profile Likelihood Demonstration (Current Focus)
+- [x] 2D ideal case working (`minimal_2D_IIR_coords.jl`)
+- [x] 2D + nuisance working (`minimal_2D_IIR_nuisance.jl`)
+- [x] 6-param subset profiling working (`iir_guided_profiling.jl`)
+- [ ] **Next**: Extend to full 18-param model using learnings from 6-param
+- [ ] Generate comparison figure: original params vs IIR coords
+
+### Practical Challenge: Basis Ambiguity
+IIR identifies the correct *subspace* but the basis vectors have ambiguity:
+- Sign flips (K/β vs β/K)
+- Reciprocals (K/β vs K·β could be confused without careful interpretation)
+
+For paper figures, need to manually select which IIR coordinates correspond to gene 1's β and K to make an interpretable comparison. This is a presentation issue, not an algorithm issue.
+
 ### For Manuscript
-- [x] Two working examples (stat_model, repressilator) ✅
-- [ ] Verify repressilator runs end-to-end
-- [ ] Generate repressilator prediction comparison figure
+- [x] stat_model complete ✅
+- [ ] Repressilator profile demonstration figure
 - [ ] Update Methods section to match invariance.jl implementation
 - [ ] Write Results section highlighting both examples
 
@@ -258,11 +293,11 @@ Brief mention of multi-stage possibilities with honest assessment:
 
 ## Questions Resolved
 
-1. ~~Which ambitious example?~~ → Repressilator (already implemented!)
+1. ~~Which ambitious example?~~ → Repressilator
 2. ~~Single vs multi-stage focus?~~ → Single-stage (robust and reliable)
 3. ~~How to handle sequential IIR findings?~~ → Brief mention in future work
-4. ~~Update legacy examples?~~ → Not necessary, two examples sufficient
+4. ~~Development strategy for profiling?~~ → Incremental: 2D → 2D+nuisance → 6-param → 18-param
 
 ## Last Updated
 
-**2025-10-13**: Consolidated documentation reflecting strategic focus on single-stage IIR with two complete examples (stat_model, repressilator). Multi-stage investigation complete but deferred to future work.
+**2025-12-10**: Updated to reflect actual status. IIR analysis for repressilator works; profile likelihood demonstration in progress using incremental development strategy (2D → 6-param → 18-param). Documented basis ambiguity challenge for figure generation.
