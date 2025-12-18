@@ -8,7 +8,7 @@
 
 # === PARSE COMMAND LINE ARGS ===
 USE_DISTRIBUTED = "--parallel" in ARGS
-N_WORKERS = 4
+N_WORKERS = 7
 
 # Parse --grid=N argument (default 50)
 GRID = 50
