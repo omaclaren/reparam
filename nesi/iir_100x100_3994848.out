@@ -1,0 +1,145 @@
+======================================
+IIR 100x100 Profiling Job
+======================================
+Job ID: 3994848
+Node: c010
+CPUs: 36
+Memory: 65536
+Started: Tue 06 Jan 2026 16:23:13 NZDT
+======================================
+Setting up 35 workers...
+Workers ready: 35
+      From worker 14:	  Activating project at `~/reparam`
+      From worker 16:	  Activating project at `~/reparam`
+      From worker 32:	  Activating project at `~/reparam`
+      From worker 5:	  Activating project at `~/reparam`
+      From worker 6:	  Activating project at `~/reparam`
+      From worker 18:	  Activating project at `~/reparam`
+      From worker 26:	  Activating project at `~/reparam`
+      From worker 34:	  Activating project at `~/reparam`
+      From worker 28:	  Activating project at `~/reparam`
+      From worker 2:	  Activating project at `~/reparam`
+      From worker 7:	  Activating project at `~/reparam`
+      From worker 21:	  Activating project at `~/reparam`
+      From worker 3:	  Activating project at `~/reparam`
+      From worker 25:	  Activating project at `~/reparam`
+      From worker 15:	  Activating project at `~/reparam`
+      From worker 27:	  Activating project at `~/reparam`
+      From worker 10:	  Activating project at `~/reparam`
+      From worker 36:	  Activating project at `~/reparam`
+      From worker 13:	  Activating project at `~/reparam`
+      From worker 17:	  Activating project at `~/reparam`
+      From worker 8:	  Activating project at `~/reparam`
+      From worker 12:	  Activating project at `~/reparam`
+      From worker 30:	  Activating project at `~/reparam`
+      From worker 29:	  Activating project at `~/reparam`
+      From worker 20:	  Activating project at `~/reparam`
+      From worker 22:	  Activating project at `~/reparam`
+      From worker 9:	  Activating project at `~/reparam`
+      From worker 33:	  Activating project at `~/reparam`
+      From worker 11:	  Activating project at `~/reparam`
+      From worker 19:	  Activating project at `~/reparam`
+      From worker 35:	  Activating project at `~/reparam`
+      From worker 31:	  Activating project at `~/reparam`
+      From worker 24:	  Activating project at `~/reparam`
+      From worker 4:	  Activating project at `~/reparam`
+      From worker 23:	  Activating project at `~/reparam`
+Modules loaded on all workers
+
+======================================================================
+IIR 100x100 PROFILING ON NESI
+======================================================================
+Workers: 35
+Grid: 100 × 100 = 10000 points
+Parameters: 18
+
+======================================================================
+FINDING MLE
+======================================================================
+Running MLE optimization with 5 restarts...
+MLE found in 58.5 seconds
+Log-likelihood at MLE: -84.92
+
+======================================================================
+RUNNING IIR ANALYSIS
+======================================================================
+
+  Hessian-based invariance test diagnostics:
+    τM (threshold): 0.0040436261254726165
+    M_test singular values (should be ~0 for invariant):
+      MS[1] = 0.00287 (0.71×τM) ✓ invariant
+      MS[2] = 0.0002857 (0.07×τM) ✓ invariant
+      MS[3] = 9.894e-5 (0.02×τM) ✓ invariant
+    Classification: 0 non-invariant, 3 invariant
+
+Rank: 15 / 18
+Identifiable: 15, Non-identifiable: 3
+
+=== DEBUG: Transformation Matrix ===
+β₁ (idx 7) and K₁ (idx 10) coefficients in each column:
+  ψ_1 (identifiable): β₁=0.0, K₁=0.0, other=1.05
+  ψ_2 (identifiable): β₁=0.0, K₁=0.0, other=2.1
+  ψ_3 (identifiable): β₁=-0.0, K₁=-0.0, other=1.05
+  ψ_4 (identifiable): β₁=0.0, K₁=0.0, other=1.05
+  ψ_5 (identifiable): β₁=-0.0, K₁=-0.0, other=1.05
+  ψ_6 (identifiable): β₁=0.0, K₁=0.0, other=1.05
+  ψ_7 (identifiable): β₁=-1.05, K₁=1.05, other=0.0
+  ψ_8 (identifiable): β₁=-0.0, K₁=-0.0, other=1.05
+  ψ_9 (identifiable): β₁=0.0, K₁=0.0, other=1.05
+  ψ_10 (identifiable): β₁=0.0, K₁=0.0, other=1.05
+  ψ_11 (identifiable): β₁=-0.0, K₁=-0.0, other=2.1
+  ψ_12 (identifiable): β₁=-0.0, K₁=-0.0, other=1.05
+  ψ_13 (identifiable): β₁=-0.0, K₁=-0.0, other=1.05
+  ψ_14 (identifiable): β₁=0.0, K₁=0.0, other=1.05
+  ψ_15 (identifiable): β₁=-0.0, K₁=-0.0, other=1.05
+  ψ_16 (non-identifiable): β₁=1.05, K₁=1.05, other=0.0
+  ψ_17 (non-identifiable): β₁=-0.0, K₁=-0.0, other=2.1
+  ψ_18 (non-identifiable): β₁=0.0, K₁=0.0, other=2.1
+=====================================
+
+DEBUG: Searching for K₁/β₁ in identifiable columns...
+  j=1: K=0, β=0, other=1
+  j=2: K=0, β=0, other=2
+  j=3: K=0, β=0, other=1
+  j=4: K=0, β=0, other=1
+  j=5: K=0, β=0, other=1
+  j=6: K=0, β=0, other=1
+  j=7: K=1, β=-1, other=0
+  → MATCH! gene1_ident_idx = 7
+DEBUG: Searching for β₁K₁ in non-identifiable columns...
+  j=1: K=1, β=1, other=0
+  → MATCH! gene1_nonident_idx = 16
+
+Gene 1 coordinates: ψ_7 (K₁/β₁), ψ_16 (β₁·K₁)
+
+======================================================================
+100x100 PROFILING
+======================================================================
+Grid: 100 × 100 = 10000 points
+Workers: 35
+Extra restarts: 7
+
+Starting profiling...
+Distributed profiling: 10000 points → 35 chunks on 35 workers
+Chunk sizes: [286, 286, 286, 286, 286, 286, 286, 286, 286, 286, 286, 286, 286, 286, 286, 286, 286, 286, 286, 286, 286, 286, 286, 286, 286, 285, 285, 285, 285, 285, 285, 285, 285, 285, 285]
+
+Done in 346.7 minutes
+Finite values: 10000/10000
+
+Results saved to iir_100x100_results.jls
+
+======================================================================
+RESULTS SUMMARY
+======================================================================
+K₁/β₁ (identifiable): 75/100 above 95% threshold
+β₁·K₁ (non-identifiable): 100/100 above 95% threshold
+
+Generating plot...
+Saved: iir_100x100_result.png
+
+======================================================================
+JOB COMPLETE
+======================================================================
+======================================
+Finished: Tue 06 Jan 2026 22:12:53 NZDT
+======================================
