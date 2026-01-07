@@ -20,7 +20,7 @@ output_file = length(ARGS) >= 2 ? ARGS[2] : replace(input_file, ".jls" => "_repl
 println("Loading results from: $input_file")
 results = deserialize(input_file)
 
-# Extract saved data
+# Extract saved data (with defaults for backwards compatibility)
 ψ_vals = results["ψ_vals"]
 ll_vals = results["ll_vals"]
 ψ_MLE = results["ψ_MLE"]
@@ -33,9 +33,19 @@ GRID = results["GRID"]
 n_ident = results["n_ident"]
 n_nonident = results["n_nonident"]
 
+# New fields (with defaults for old format)
+N_NUISANCE = get(results, "N_NUISANCE", 16)
+mode_str = get(results, "mode", "PROFILE (16 nuisance)")
+
 n_params = length(θ_MLE)
+β1_idx, K1_idx = 7, 10
+
+# Fixed θ-space plotting bounds (for consistent visualization)
+β_plot_min, β_plot_max = 0.005, 0.08
+K_plot_min, K_plot_max = 10.0, 80.0
 
 println("Grid: $GRID × $GRID")
+println("Mode: $mode_str")
 println("Target coordinates: ψ_$(target_2d[1]), ψ_$(target_2d[2])")
 
 # === RECONSTRUCT TRANSFORMATIONS ===
@@ -92,11 +102,20 @@ gr(size=(1200, 900))
 ψ_target1_true = ψ_MLE[target_2d[1]]
 ψ_target2_true = ψ_MLE[target_2d[2]]
 
+# Build subtitle based on mode
+subtitle = if N_NUISANCE == 0
+    "(slice: other params fixed at MLE)"
+elseif N_NUISANCE == 16
+    "(16 nuisance params profiled)"
+else
+    "($N_NUISANCE profiled, $(16-N_NUISANCE) fixed at MLE)"
+end
+
 # Plot 1: 2D profile in ψ-space
 p1 = contourf(ψ_target1_grid, ψ_target2_grid, like_matrix', color=:dense, levels=20, lw=0,
               xlabel="ψ_$(target_2d[1]) = K₁/β₁ (identifiable)",
               ylabel="ψ_$(target_2d[2]) = β₁·K₁ (non-identifiable)",
-              title="2D Profile in IIR coordinates\n($(n_params - 2) nuisance params profiled out)",
+              title="Profile in IIR coordinates\n$subtitle",
               xscale=:log10, clims=(0,1))
 scatter!([ψ_target1_true], [ψ_target2_true], mc=:darkgoldenrod, msc=:match, ms=10,
          markershape=:star, label="MLE")
@@ -117,19 +136,20 @@ for (i, ψ_t1) in enumerate(ψ_target1_grid)
     end
 end
 
-# θ-space bounds for plotting (use data range with margin)
-β_min, β_max = extrema(β_flat)
-K_min, K_max = extrema(K_flat)
-β_margin = 0.1 * (β_max - β_min)
-K_margin = 0.1 * (K_max - K_min)
+# Filter to fixed plotting region
+in_region = (β_flat .>= β_plot_min) .& (β_flat .<= β_plot_max) .&
+            (K_flat .>= K_plot_min) .& (K_flat .<= K_plot_max)
+β_filt = β_flat[in_region]
+K_filt = K_flat[in_region]
+like_filt = like_flat[in_region]
 
 # Interpolate to regular grid for contourf
-β_reg = range(β_min, β_max, length=100)
-K_reg = range(K_min, K_max, length=100)
+β_reg = range(β_plot_min, β_plot_max, length=100)
+K_reg = range(K_plot_min, K_plot_max, length=100)
 
 # Simple nearest-neighbor interpolation for θ-space
 like_θ_reg = fill(NaN, length(β_reg), length(K_reg))
-for (idx, (β_val, K_val, like_val)) in enumerate(zip(β_flat, K_flat, like_flat))
+for (β_val, K_val, like_val) in zip(β_filt, K_filt, like_filt)
     i_β = argmin(abs.(collect(β_reg) .- β_val))
     i_K = argmin(abs.(collect(K_reg) .- K_val))
     if isnan(like_θ_reg[i_β, i_K]) || like_val > like_θ_reg[i_β, i_K]
@@ -137,7 +157,7 @@ for (idx, (β_val, K_val, like_val)) in enumerate(zip(β_flat, K_flat, like_flat
     end
 end
 
-# Fill NaNs with nearest valid value (simple approach)
+# Fill NaNs (outside the transformed region)
 for i in 1:length(β_reg), j in 1:length(K_reg)
     if isnan(like_θ_reg[i, j])
         like_θ_reg[i, j] = 0.0
@@ -146,22 +166,31 @@ end
 like_θ_reg = clamp.(like_θ_reg, 0.0, 1.0)
 
 p2 = contourf(collect(β_reg), collect(K_reg), like_θ_reg', color=:dense, levels=20, lw=0,
-             xlabel="β₁", ylabel="K₁", title="Profile likelihood in θ-space\n(other params profiled out)",
-             xlims=(β_min, β_max), ylims=(K_min, K_max), clims=(0,1))
-scatter!([θ_MLE[7]], [θ_MLE[10]], mc=:darkgoldenrod, msc=:match, ms=10, markershape=:star, label="MLE")
+             xlabel="β₁", ylabel="K₁", title="Profile in θ-space\n$subtitle",
+             xlims=(β_plot_min, β_plot_max), ylims=(K_plot_min, K_plot_max), clims=(0,1))
+scatter!([θ_MLE[β1_idx]], [θ_MLE[K1_idx]], mc=:darkgoldenrod, msc=:match, ms=10, markershape=:star, label="MLE")
 
 # Transform CI contour to θ-space
-c = Contour.contour(collect(ψ_target1_grid), collect(ψ_target2_grid), like_matrix, lstar_2d)
-for line in Contour.lines(c)
-    ψ_t1_c, ψ_t2_c = Contour.coordinates(line)
-    β_c = Float64[]
-    K_c = Float64[]
-    for (pt1, pt2) in zip(ψ_t1_c, ψ_t2_c)
-        β, K = ψ_targets_to_θ1(pt1, pt2, ψ_MLE, target_2d, ψ_to_θ)
-        push!(β_c, β)
-        push!(K_c, K)
+try
+    c = Contour.contour(collect(ψ_target1_grid), collect(ψ_target2_grid), like_matrix, lstar_2d)
+    for line in Contour.lines(c)
+        ψ_t1_c, ψ_t2_c = Contour.coordinates(line)
+        β_c = Float64[]
+        K_c = Float64[]
+        for (pt1, pt2) in zip(ψ_t1_c, ψ_t2_c)
+            β, K = ψ_targets_to_θ1(pt1, pt2, ψ_MLE, target_2d, ψ_to_θ)
+            # Only include points within plot bounds
+            if β_plot_min <= β <= β_plot_max && K_plot_min <= K <= K_plot_max
+                push!(β_c, β)
+                push!(K_c, K)
+            end
+        end
+        if length(β_c) > 1
+            plot!(p2, β_c, K_c, color=:black, lw=2, label="")
+        end
     end
-    plot!(p2, β_c, K_c, color=:black, lw=2, label="")
+catch e
+    println("Warning: Could not draw θ-space contour: $e")
 end
 
 # Plot 3: 1D profile for identifiable
