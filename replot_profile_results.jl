@@ -8,6 +8,7 @@ using Plots
 using Distributions
 using LinearAlgebra
 using Contour
+using ScatteredInterpolation
 
 # === LOAD RESULTS ===
 if length(ARGS) < 1
@@ -147,22 +148,25 @@ like_filt = like_flat[in_region]
 β_reg = range(β_plot_min, β_plot_max, length=100)
 K_reg = range(K_plot_min, K_plot_max, length=100)
 
-# Simple nearest-neighbor interpolation for θ-space
-like_θ_reg = fill(NaN, length(β_reg), length(K_reg))
-for (β_val, K_val, like_val) in zip(β_filt, K_filt, like_filt)
-    i_β = argmin(abs.(collect(β_reg) .- β_val))
-    i_K = argmin(abs.(collect(K_reg) .- K_val))
-    if isnan(like_θ_reg[i_β, i_K]) || like_val > like_θ_reg[i_β, i_K]
-        like_θ_reg[i_β, i_K] = like_val
+# Normalize scattered points to [0,1] for RBF interpolation
+β_norm = (β_filt .- β_plot_min) ./ (β_plot_max - β_plot_min)
+K_norm = (K_filt .- K_plot_min) ./ (K_plot_max - K_plot_min)
+
+# Create ThinPlate RBF interpolant in normalized space
+points_norm = hcat(β_norm, K_norm)'  # 2 × N matrix
+itp = interpolate(ThinPlate(), points_norm, like_filt)
+
+# Evaluate on regular grid
+like_θ_reg = zeros(length(β_reg), length(K_reg))
+for (i, β) in enumerate(β_reg)
+    β_n = (β - β_plot_min) / (β_plot_max - β_plot_min)
+    for (j, K) in enumerate(K_reg)
+        K_n = (K - K_plot_min) / (K_plot_max - K_plot_min)
+        like_θ_reg[i, j] = evaluate(itp, [β_n, K_n])[1]
     end
 end
 
-# Fill NaNs (outside the transformed region)
-for i in 1:length(β_reg), j in 1:length(K_reg)
-    if isnan(like_θ_reg[i, j])
-        like_θ_reg[i, j] = 0.0
-    end
-end
+# Clamp to [0, 1]
 like_θ_reg = clamp.(like_θ_reg, 0.0, 1.0)
 
 p2 = contourf(collect(β_reg), collect(K_reg), like_θ_reg', color=:dense, levels=20, lw=0,
