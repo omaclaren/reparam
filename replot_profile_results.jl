@@ -41,9 +41,23 @@ mode_str = get(results, "mode", "PROFILE (16 nuisance)")
 n_params = length(θ_MLE)
 β1_idx, K1_idx = 7, 10
 
-# Fixed θ-space plotting bounds (for consistent visualization)
-β_plot_min, β_plot_max = 0.005, 0.08
-K_plot_min, K_plot_max = 10.0, 80.0
+# Fixed plotting bounds (for consistent visualization)
+# IIR coordinates (ψ-space)
+ψ1_plot_min, ψ1_plot_max = 1e1, 1e5      # K₁/β₁ range
+ψ2_plot_min, ψ2_plot_max = 0.0, 8.0      # β₁·K₁ range
+
+# θ-space bounds derived from ψ-space (same logic as minimal_2D_IIR_coords.jl)
+# Constraint: β·K ≤ ψ2_plot_max and K/β within ψ1 range
+β_plot_min = 0.005
+β_plot_max = sqrt(ψ2_plot_max / ψ1_plot_min)  # β at low K/β, high β·K corner
+K_plot_min = 1.0
+K_plot_max = min(ψ2_plot_max / β_plot_min, 500.0)  # Cap for display
+# Ensure β·K constraint at corners
+if β_plot_max * K_plot_max > ψ2_plot_max
+    scale = sqrt(ψ2_plot_max / (β_plot_max * K_plot_max))
+    β_plot_max *= scale
+    K_plot_max *= scale
+end
 
 println("Grid: $GRID × $GRID")
 println("Mode: $mode_str")
@@ -117,7 +131,8 @@ p1 = contourf(ψ_target1_grid, ψ_target2_grid, like_matrix', color=:dense, leve
               xlabel="ψ_$(target_2d[1]) = K₁/β₁ (identifiable)",
               ylabel="ψ_$(target_2d[2]) = β₁·K₁ (non-identifiable)",
               title="Profile in IIR coordinates\n$subtitle",
-              xscale=:log10, clims=(0,1))
+              xscale=:log10, xlims=(ψ1_plot_min, ψ1_plot_max), ylims=(ψ2_plot_min, ψ2_plot_max),
+              clims=(0,1))
 scatter!([ψ_target1_true], [ψ_target2_true], mc=:darkgoldenrod, msc=:match, ms=10,
          markershape=:star, label="MLE")
 contour!(ψ_target1_grid, ψ_target2_grid, like_matrix', levels=[lstar_2d], color=:black, lw=2,
@@ -201,7 +216,7 @@ end
 p3 = plot(ψ_target1_grid, like_ψ_target1,
           xlabel="ψ_$(target_2d[1]) = K₁/β₁ (identifiable)", ylabel="Profile Likelihood",
           title="Profile: K₁/β₁ (IDENTIFIABLE)", linewidth=2, legend=false,
-          xscale=:log10, ylims=(0, 1.05))
+          xscale=:log10, xlims=(ψ1_plot_min, ψ1_plot_max), ylims=(0, 1.05))
 hline!([lstar_1d], color=:red, linestyle=:dash, linewidth=2)
 vline!([ψ_target1_true], color=:green, linestyle=:dot, linewidth=2)
 
@@ -209,7 +224,7 @@ vline!([ψ_target1_true], color=:green, linestyle=:dot, linewidth=2)
 p4 = plot(ψ_target2_grid, like_ψ_target2,
           xlabel="ψ_$(target_2d[2]) = β₁·K₁ (non-identifiable)", ylabel="Profile Likelihood",
           title="Profile: β₁·K₁ (NON-IDENTIFIABLE)", linewidth=2, legend=false,
-          ylims=(0, 1.05))
+          xlims=(ψ2_plot_min, ψ2_plot_max), ylims=(0, 1.05))
 hline!([lstar_1d], color=:red, linestyle=:dash, linewidth=2)
 vline!([ψ_target2_true], color=:green, linestyle=:dot, linewidth=2)
 

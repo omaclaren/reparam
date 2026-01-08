@@ -137,11 +137,11 @@ data = y_true + σ * randn(length(y_true))
 θ_log_lower = log.(θ_lower)
 θ_log_upper = log.(θ_upper)
 
-# Wider bounds for profiling
-θ_lower_profile = [0.003, 0.003, 0.003, 0.5, 0.5, 0.5, 0.005, 0.005, 0.005,
-                   10.0, 10.0, 10.0, 0.003, 0.003, 0.003, 0.0008, 0.0008, 0.0008]
-θ_upper_profile = [0.020, 0.020, 0.020, 3.0, 3.0, 3.0, 0.08, 0.08, 0.08,
-                   80.0, 80.0, 80.0, 0.010, 0.010, 0.010, 0.002, 0.002, 0.002]
+# Wider bounds for profiling (to capture full uncertainty region)
+θ_lower_profile = [0.003, 0.003, 0.003, 0.5, 0.5, 0.5, 0.002, 0.002, 0.002,
+                   3.0, 3.0, 3.0, 0.003, 0.003, 0.003, 0.0008, 0.0008, 0.0008]
+θ_upper_profile = [0.020, 0.020, 0.020, 3.0, 3.0, 3.0, 0.5, 0.5, 0.5,
+                   200.0, 200.0, 200.0, 0.010, 0.010, 0.010, 0.002, 0.002, 0.002]
 
 # === LIKELIHOOD FUNCTION ===
 distrib_θ = θ -> MvNormal(RepressilatorModel.predict_mRNA(θ, t_obs, X0), σ^2 * I(3*NT))
@@ -154,7 +154,7 @@ println("FINDING MLE")
 println("=" ^ 70)
 
 θ_log_initial = 0.5 * (θ_log_lower + θ_log_upper)
-n_mle_guesses = 5
+n_mle_guesses = 15
 mle_guesses = ReparamTools.generate_initial_guesses(θ_log_lower, θ_log_upper, n_mle_guesses)
 
 println("Running MLE optimization with $n_mle_guesses restarts...")
@@ -164,7 +164,7 @@ t_mle_start = time()
 θ_log_MLE, lnlike_MLE = ReparamTools.profile_target(
     lnlike_θ_log, Int[], θ_log_lower, θ_log_upper, mle_guesses[1];
     grid_steps=Int[], ω_initial_extras=mle_guesses[2:end],
-    method=:LN_BOBYQA, optmaxtime=60.0)
+    method=:LN_BOBYQA, optmaxtime=120.0)
 t_mle_elapsed = time() - t_mle_start
 
 θ_MLE = exp.(θ_log_MLE)
