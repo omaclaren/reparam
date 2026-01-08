@@ -571,9 +571,25 @@ function profile_target(lnlike_θ, ψ_indices, θ_bounds_lower, θ_bounds_upper,
         end
     end
 
-    # Convert Cartesian product to vector of vectors
+    # Convert Cartesian product to vector of vectors with snake ordering
+    # Snake ordering alternates direction for each increment of second dimension
+    # to maintain spatial continuity for warm-starting
     ψ_combinations = Base.product(ψ_grids...)
-    ψ_grid = vec([collect(ψᵢ) for ψᵢ in ψ_combinations])
+    ψ_grid_raw = [collect(ψᵢ) for ψᵢ in ψ_combinations]
+
+    if dim_ψ == 2
+        # For 2D: reshape, apply snake ordering, flatten
+        n1, n2 = length(ψ_grids[1]), length(ψ_grids[2])
+        ψ_grid_matrix = reshape(ψ_grid_raw, n1, n2)
+        # Reverse every other column for snake pattern
+        for j in 2:2:n2
+            ψ_grid_matrix[:, j] = reverse(ψ_grid_matrix[:, j])
+        end
+        ψ_grid = vec(ψ_grid_matrix)
+    else
+        # For 1D or higher dimensions, use standard ordering
+        ψ_grid = vec(ψ_grid_raw)
+    end
 
     # Choose sequential or distributed execution
     if use_distributed
@@ -613,6 +629,36 @@ function profile_target(lnlike_θ, ψ_indices, θ_bounds_lower, θ_bounds_upper,
                 optmaxtime=optmaxtime, popsize=popsize,
                 track_convergence=false
             )
+        end
+    end
+
+    # Unshuffle results back to column-major order for callers expecting reshape
+    if dim_ψ == 2
+        n1, n2 = length(ψ_grids[1]), length(ψ_grids[2])
+        # Build unshuffle indices: map snake order back to column-major
+        snake_to_colmajor = Vector{Int}(undef, n1 * n2)
+        for j in 1:n2
+            for i in 1:n1
+                snake_idx = (j - 1) * n1 + (iseven(j) ? (n1 - i + 1) : i)
+                colmajor_idx = (j - 1) * n1 + i
+                snake_to_colmajor[snake_idx] = colmajor_idx
+            end
+        end
+        # Reorder results
+        θ_values_reordered = similar(θ_values)
+        lnlike_values_reordered = similar(lnlike_values)
+        for (snake_idx, colmajor_idx) in enumerate(snake_to_colmajor)
+            θ_values_reordered[colmajor_idx] = θ_values[snake_idx]
+            lnlike_values_reordered[colmajor_idx] = lnlike_values[snake_idx]
+        end
+        θ_values = θ_values_reordered
+        lnlike_values = lnlike_values_reordered
+        if track_convergence
+            convergence_outcomes_reordered = similar(convergence_outcomes)
+            for (snake_idx, colmajor_idx) in enumerate(snake_to_colmajor)
+                convergence_outcomes_reordered[colmajor_idx] = convergence_outcomes[snake_idx]
+            end
+            convergence_outcomes = convergence_outcomes_reordered
         end
     end
 
