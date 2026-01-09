@@ -425,29 +425,41 @@ if USE_HYBRID
     λ_NN = eigen_NN.values
     U_NN = eigen_NN.vectors
 
-    # Identify identifiable subspace (eigenvalues above threshold)
-    λ_max = maximum(abs.(λ_NN))
+    # Check PSD: H = -∇²ℓ should be PSD at a maximum
+    n_negative = sum(λ_NN .< -1e-10 * maximum(abs.(λ_NN)))
+    if n_negative > 0
+        println("  WARNING: $n_negative negative eigenvalues in H_NN (not at local max?)")
+        println("    Min eigenvalue: $(minimum(λ_NN))")
+    end
+
+    # Use POSITIVE-part eigenvalues only (safer than abs - avoids inverting saddle directions)
+    λ_pos = max.(λ_NN, 0.0)
+    λ_max = maximum(λ_pos)
     rtol_eig = 1e-8
-    ident_mask = abs.(λ_NN) .> rtol_eig * λ_max
+    ident_mask = λ_pos .> rtol_eig * λ_max
     n_ident_nuisance = sum(ident_mask)
     n_flat_nuisance = sum(.!ident_mask)
 
     println("  H_NN eigenvalue spectrum:")
-    println("    Identifiable: $n_ident_nuisance directions")
-    println("    Flat (non-identifiable): $n_flat_nuisance directions")
-    println("    Spectral gap: $(round(minimum(abs.(λ_NN[ident_mask])) / maximum(abs.(λ_NN[.!ident_mask])), sigdigits=2))×")
+    println("    Identifiable (positive curvature): $n_ident_nuisance directions")
+    println("    Flat/saddle (non-identifiable): $n_flat_nuisance directions")
+    if n_flat_nuisance > 0 && any(λ_pos[ident_mask] .> 0)
+        gap = minimum(λ_pos[ident_mask]) / max(maximum(λ_pos[.!ident_mask]), 1e-15)
+        println("    Spectral gap: $(round(gap, sigdigits=2))×")
+    end
 
-    # Compute pseudoinverse using only identifiable directions
+    # Compute pseudoinverse using only identifiable (positive curvature) directions
     # H_NN⁺ = U_r * Λ_r⁻¹ * U_rᵀ
     U_r = U_NN[:, ident_mask]
-    Λ_r = λ_NN[ident_mask]
+    Λ_r = λ_pos[ident_mask]  # Strictly positive
     H_NN_pinv = U_r * Diagonal(1.0 ./ Λ_r) * U_r'
 
-    # Precompute: path_matrix = -H_NN⁺ H_NI
-    path_matrix = -H_NN_pinv * H_NI
+    # Precompute path matrix (explicit projection form for clarity)
+    # path_matrix = -H_NN⁺ H_NI = -U_r Λ_r⁻¹ (U_rᵀ H_NI)
+    path_matrix = -(U_r * Diagonal(1.0 ./ Λ_r) * (U_r' * H_NI))
 
-    # For gradient diagnostic: project onto identifiable subspace
-    Λ_r_sqrt_inv = Diagonal(1.0 ./ sqrt.(abs.(Λ_r)))
+    # For gradient diagnostic: curvature-scaled projected score
+    Λ_r_sqrt_inv = Diagonal(1.0 ./ sqrt.(Λ_r))
 
     println("\nEvaluating $(GRID^2) grid points with linear path approximation...")
     flush(stdout)
@@ -533,17 +545,25 @@ if USE_HYBRID
     ψ_vals = ψ_vals'  # Transpose to N×2
 
     # Report gradient diagnostics
+    # The diagnostic is ||Λ_r^{-1/2} U_rᵀ ∇_N ℓ|| = curvature-scaled projected nuisance score
+    # Interpretation: size of implied one-step Newton correction in identifiable nuisance subspace
+    # Values << 1: near the nuisance optimum (linear path approximation valid)
+    # Values >> 1: far from nuisance optimum (approximation breaking down)
     valid_grads = gradient_norms[isfinite.(gradient_norms)]
-    println("\nGradient diagnostic (||g_scaled||):")
+    println("\nProjected nuisance score diagnostic (||Λ_r^{-1/2} U_rᵀ ∇_N ℓ||):")
+    println("  (Measures distance from nuisance optimum in curvature-scaled units)")
     if isempty(valid_grads)
         println("  WARNING: All gradient computations failed (NaN)")
         println("  This may indicate issues with autodiff or parameter bounds")
     else
-        println("  Valid gradients: $(length(valid_grads))/$(length(gradient_norms))")
+        println("  Valid points: $(length(valid_grads))/$(length(gradient_norms))")
         println("  Median: $(round(median(valid_grads), sigdigits=3))")
         println("  Max: $(round(maximum(valid_grads), sigdigits=3))")
-        println("  Points with ||g_scaled|| > 0.1: $(sum(valid_grads .> 0.1))/$(length(valid_grads))")
-        println("  Points with ||g_scaled|| > 1.0: $(sum(valid_grads .> 1.0))/$(length(valid_grads))")
+        n_good = sum(valid_grads .< 1.0)
+        println("  Points with diagnostic < 1 (good approximation): $n_good/$(length(valid_grads))")
+        if n_good < length(valid_grads)
+            println("  Points with diagnostic > 10 (poor approximation): $(sum(valid_grads .> 10))/$(length(valid_grads))")
+        end
     end
 
 elseif N_NUISANCE == 0
