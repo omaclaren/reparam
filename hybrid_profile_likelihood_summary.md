@@ -242,4 +242,34 @@ This framing turns the method's limitation (linearity) into a rigorous, self-dia
 3. For the paper: include hybrid as methodological contribution, or just use as computational tool?
 
 ---
+
+## Implementation Update (2026-01-09)
+
+### Bug Fix: Negative Eigenvalue Handling
+
+The original implementation used `abs.(λ_NN)` to identify identifiable directions. This incorrectly inverted negative eigenvalues (saddle directions), treating them as curved identifiable directions.
+
+**Fix**: Use positive-part eigenvalues `max.(λ_NN, 0)`:
+```julia
+λ_pos = max.(λ_NN, 0.0)
+ident_mask = λ_pos .> rtol_eig * maximum(λ_pos)
+```
+
+For the repressilator, H_NN had 2 negative eigenvalues. Correct spectrum:
+- **Before fix**: 14 identifiable, 2 flat (incorrect)
+- **After fix**: 12 identifiable, 4 flat/saddle (correct)
+
+### Empirical Finding: Method Fails for This Problem
+
+With the corrected implementation, the projected nuisance score diagnostic shows:
+- **0/100** grid points with diagnostic < 1 (good approximation regime)
+- **100/100** grid points with diagnostic > 10 (poor approximation regime)
+
+The linear path approximation breaks down immediately when moving away from the MLE. Result: hybrid gives essentially slice-like confidence intervals, not a meaningful intermediate between slice and full profiling.
+
+**Conclusion**: The nuisance-interest coupling is too nonlinear for a first-order (linear) path approximation in this 18-parameter repressilator model. Full profiling with optimization is required for accurate uncertainty quantification.
+
+This is still a useful finding: the diagnostic correctly identifies when the method fails.
+
+---
 *Summary prepared for discussion, 2026-01-09*
