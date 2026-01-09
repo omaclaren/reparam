@@ -384,12 +384,13 @@ if USE_HYBRID
     # 5. Compute gradient diagnostic
 
     println("Setting up hybrid profiling...")
-    println("  Computing Hessian at MLE...")
+    println("  Computing Hessian at MLE (in log-ψ space)...")
     flush(stdout)
 
-    # Define log-likelihood in full ψ-space
-    function lnlike_ψ_full(ψ)
+    # Define log-likelihood in log-ψ space (ensures positivity)
+    function lnlike_ψ_log_full(ψ_log)
         try
+            ψ = exp.(ψ_log)
             θ = ψ_to_θ(ψ)
             if any(θ .<= 0) || any(!isfinite, θ)
                 return -Inf
@@ -400,8 +401,11 @@ if USE_HYBRID
         end
     end
 
-    # Compute Hessian via ForwardDiff
-    H_full = -ForwardDiff.hessian(lnlike_ψ_full, ψ_MLE)
+    # Work in log-ψ space
+    ψ_log_MLE = log.(ψ_MLE)
+
+    # Compute Hessian via ForwardDiff in log-ψ space
+    H_full = -ForwardDiff.hessian(lnlike_ψ_log_full, ψ_log_MLE)
 
     # Symmetrize (numerical safety)
     H_full = 0.5 * (H_full + H_full')
@@ -453,14 +457,14 @@ if USE_HYBRID
     ψ_vals = zeros(2, GRID^2)
     gradient_norms = zeros(GRID^2)
 
-    # Reference values
-    ψ_I_MLE = ψ_MLE[interest_idx]
-    ψ_N_MLE = ψ_MLE[nuisance_idx]
+    # Reference values in log-ψ space
+    ψ_log_I_MLE = ψ_log_MLE[interest_idx]
+    ψ_log_N_MLE = ψ_log_MLE[nuisance_idx]
 
-    # Gradient function for diagnostics
-    function grad_N_lnlike(ψ_full)
+    # Gradient function for diagnostics (in log-ψ space)
+    function grad_N_lnlike_log(ψ_log_full)
         try
-            g = ForwardDiff.gradient(lnlike_ψ_full, ψ_full)
+            g = ForwardDiff.gradient(lnlike_ψ_log_full, ψ_log_full)
             return g[nuisance_idx]
         catch
             return fill(NaN, length(nuisance_idx))
@@ -476,39 +480,38 @@ if USE_HYBRID
             ψ2 = ψ_target2_grid[j]
             k += 1
 
-            # Interest parameter deviation
-            ψ_I = [ψ1, ψ2]
-            δψ_I = ψ_I - ψ_I_MLE
+            # Interest parameter deviation in LOG-ψ space
+            ψ_log_I = [log(ψ1), log(ψ2)]
+            δψ_log_I = ψ_log_I - ψ_log_I_MLE
 
-            # Linear path approximation for nuisance
-            δψ_N = path_matrix * δψ_I
-            ψ_N = ψ_N_MLE + δψ_N
+            # Linear path approximation for nuisance in LOG-ψ space
+            δψ_log_N = path_matrix * δψ_log_I
+            ψ_log_N = ψ_log_N_MLE + δψ_log_N
 
-            # Build full ψ vector
-            ψ_full_k = copy(ψ_MLE)
-            ψ_full_k[interest_idx] = ψ_I
-            ψ_full_k[nuisance_idx] = ψ_N
+            # Build full log-ψ vector
+            ψ_log_full_k = copy(ψ_log_MLE)
+            ψ_log_full_k[interest_idx] = ψ_log_I
+            ψ_log_full_k[nuisance_idx] = ψ_log_N
 
             # Debug output for first few points
             if k <= n_debug
+                ψ_full_k = exp.(ψ_log_full_k)
                 println("\n  Debug point $k:")
-                println("    ψ_I = $ψ_I")
-                println("    δψ_I = $δψ_I")
-                println("    ||δψ_N|| = $(norm(δψ_N))")
-                println("    min(ψ_N) = $(minimum(ψ_N)), max(ψ_N) = $(maximum(ψ_N))")
-                println("    any(ψ_full_k .≤ 0) = $(any(ψ_full_k .<= 0))")
+                println("    ψ_I = $([ψ1, ψ2])")
+                println("    δψ_log_I = $δψ_log_I")
+                println("    ||δψ_log_N|| = $(norm(δψ_log_N))")
+                println("    min(ψ) = $(minimum(ψ_full_k)), max(ψ) = $(maximum(ψ_full_k))")
                 θ_test = ψ_to_θ(ψ_full_k)
                 println("    min(θ) = $(minimum(θ_test)), max(θ) = $(maximum(θ_test))")
-                println("    any(θ .≤ 0) = $(any(θ_test .<= 0))")
             end
 
-            # Evaluate true likelihood
-            ll_vals[k] = lnlike_ψ_full(ψ_full_k)
-            ψ_vals[:, k] = log.(ψ_I)
+            # Evaluate true likelihood (function takes log-ψ)
+            ll_vals[k] = lnlike_ψ_log_full(ψ_log_full_k)
+            ψ_vals[:, k] = ψ_log_I  # Already in log space
 
             # Gradient diagnostic: ||g_scaled|| = ||Λ_r^{-1/2} U_rᵀ ∇_N log L||
             if isfinite(ll_vals[k])
-                g_N = grad_N_lnlike(ψ_full_k)
+                g_N = grad_N_lnlike_log(ψ_log_full_k)
                 if all(isfinite.(g_N))
                     g_proj = U_r' * g_N  # Project onto identifiable subspace
                     g_scaled = Λ_r_sqrt_inv * g_proj
