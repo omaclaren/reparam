@@ -471,13 +471,12 @@ if USE_HYBRID
         end
     end
 
-    # Loop over grid (snake ordering for cache efficiency, though less critical here)
+    # Loop in column-major order (target1 fast, target2 slow) - matches profile_target output
+    # No snake ordering needed since we're not optimizing (just evaluating likelihood)
     local k = 0
     local n_debug = 3  # Debug first few points
-    for (i, ψ1) in enumerate(ψ_target1_grid)
-        j_range = iseven(i) ? reverse(1:GRID) : (1:GRID)
-        for j in j_range
-            ψ2 = ψ_target2_grid[j]
+    for (j, ψ2) in enumerate(ψ_target2_grid)   # j = target2 index (outer/slow)
+        for (i, ψ1) in enumerate(ψ_target1_grid)  # i = target1 index (inner/fast)
             k += 1
 
             # Interest parameter deviation in LOG-ψ space
@@ -523,10 +522,9 @@ if USE_HYBRID
                 gradient_norms[k] = NaN
             end
         end
-
-        # Progress
-        if i % max(1, GRID ÷ 10) == 0
-            println("  Row $i/$GRID complete")
+        # Progress (after each target2 column)
+        if j % max(1, GRID ÷ 10) == 0
+            println("  Column $j/$GRID complete")
             flush(stdout)
         end
     end
