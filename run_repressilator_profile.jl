@@ -186,7 +186,7 @@ println("FINDING MLE")
 println("=" ^ 70)
 
 θ_log_initial = 0.5 * (θ_log_lower + θ_log_upper)
-n_mle_guesses = 30  # Increased from 15 for wider bounds
+n_mle_guesses = 20  # Slightly more than original 15 for wider bounds
 mle_guesses = ReparamTools.generate_initial_guesses(θ_log_lower, θ_log_upper, n_mle_guesses)
 
 println("Running MLE optimization with $n_mle_guesses restarts...")
@@ -196,7 +196,7 @@ t_mle_start = time()
 θ_log_MLE, lnlike_MLE = ReparamTools.profile_target(
     lnlike_θ_log, Int[], θ_log_lower, θ_log_upper, mle_guesses[1];
     grid_steps=Int[], ω_initial_extras=mle_guesses[2:end],
-    method=:LN_BOBYQA, optmaxtime=180.0)  # Increased from 120s
+    method=:LN_BOBYQA, optmaxtime=150.0)  # Slightly more than original 120s
 t_mle_elapsed = time() - t_mle_start
 
 θ_MLE = exp.(θ_log_MLE)
@@ -680,8 +680,8 @@ else
     nuisance_log_guess = log.(ψ_MLE[nuisance_to_profile])
     nuisance_log_guess = clamp.(nuisance_log_guess, nuisance_log_lower .+ 1e-6, nuisance_log_upper .- 1e-6)
 
-    # Extra starting points - increased for wider bounds
-    n_extra_guesses = N_NUISANCE <= 4 ? 10 : 25  # Increased from 15 to 25
+    # Extra starting points (snake_direction=:row handles warm-starting effectively)
+    n_extra_guesses = N_NUISANCE <= 4 ? 10 : 15
     nuisance_extras = ReparamTools.generate_initial_guesses(nuisance_log_lower, nuisance_log_upper, n_extra_guesses)
 
     # Fewer chunks = better warm-starting continuity, but need enough for parallelism
@@ -704,7 +704,7 @@ else
         lnlike_func, [1, 2], ψ_log_lower_opt, ψ_log_upper_opt, nuisance_log_guess;
         grid_steps=GRID, use_distributed=USE_DISTRIBUTED,
         ω_initial_extras=nuisance_extras,
-        method=:LN_BOBYQA, optmaxtime= N_NUISANCE <= 4 ? 60.0 : 200.0,  # Increased from 150s
+        method=:LN_BOBYQA, optmaxtime= N_NUISANCE <= 4 ? 60.0 : 150.0,
         n_chunks=n_chunks_profile,
         snake_direction=:row  # ψ₂ (non-identifiable) varies faster - smoother nuisance landscape
     )
