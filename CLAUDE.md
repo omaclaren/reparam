@@ -333,9 +333,24 @@ For paper figures, need to manually select which IIR coordinates correspond to g
 - `nesi/repressilator_16nuisance_20x20_results.jls` - 20×20 profile (66 KB)
 - `nesi/repressilator_16nuisance_100x100_snake_replot.png` - publication figure
 
-### Quality Metrics (snake_direction optimization)
+### Snake Direction Optimization
 
-The `snake_direction=:row` parameter traverses the grid along the non-identifiable direction first, improving warm-start effectiveness:
+The `snake_direction` parameter in `compute_profile_grid` controls grid traversal order:
+
+```julia
+function compute_profile_grid(
+    neg_log_likelihood, θ_fixed, nuisance_idx, bounds_fixed;
+    ...
+    snake_direction::Symbol = :row  # :row or :col
+)
+```
+
+**Why it works**: The original column-major snake order caused distant initialization when traversing along the non-identifiable direction (rows). Row-major snake order ensures:
+1. Each point initializes from geometrically adjacent neighbor
+2. Optimization converges to consistent local minimum along flat ridges
+3. No artificial "dips" from far-away initialization
+
+**Quality metrics** showing the improvement:
 
 | Metric | Old | New (snake fix) | Improvement |
 |--------|-----|-----------------|-------------|
