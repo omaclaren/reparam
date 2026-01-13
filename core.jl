@@ -494,7 +494,8 @@ function profile_target(lnlike_θ, ψ_indices, θ_bounds_lower, θ_bounds_upper,
     grid_steps=100, ω_initial_extras::Union{Nothing, Vector{Vector{Float64}}}=nothing,
     method=:LD_TNEWTON_PRECOND, local_method=:LD_TNEWTON_PRECOND, xtol_rel=1e-9, ftol_rel=1e-9,
     optmaxtime=120, popsize=50, track_convergence=false,
-    use_distributed=false, n_chunks=nothing, worker_pool=nothing)
+    use_distributed=false, n_chunks=nothing, worker_pool=nothing,
+    snake_direction=:column)
     """
     Construct profile likelihood by maximizing over nuisance parameters.
 
@@ -519,6 +520,9 @@ function profile_target(lnlike_θ, ψ_indices, θ_bounds_lower, θ_bounds_upper,
     - use_distributed: Use distributed parallel execution (default: false)
     - n_chunks: Number of chunks for distributed execution (default: worker count)
     - worker_pool: Optional Distributed.WorkerPool to target specific workers (default: all)
+    - snake_direction: For 2D grids, :column (default) traverses ψ₁ within columns,
+        :row traverses ψ₂ within rows. Use :row when the nuisance landscape is smoother
+        along ψ₂ (e.g., when ψ₂ is non-identifiable).
 
     Returns:
     - θ_values: Array of parameter vectors in original ordering
@@ -572,20 +576,39 @@ function profile_target(lnlike_θ, ψ_indices, θ_bounds_lower, θ_bounds_upper,
     end
 
     # Convert Cartesian product to vector of vectors with snake ordering
-    # Snake ordering alternates direction for each increment of second dimension
-    # to maintain spatial continuity for warm-starting
+    # Snake ordering alternates direction to maintain spatial continuity for warm-starting
+    # :column (default) - traverse along ψ₁ (column-wise), snake across ψ₂
+    # :row - traverse along ψ₂ (row-wise), snake across ψ₁
     ψ_combinations = Base.product(ψ_grids...)
     ψ_grid_raw = [collect(ψᵢ) for ψᵢ in ψ_combinations]
 
     if dim_ψ == 2
-        # For 2D: reshape, apply snake ordering, flatten
         n1, n2 = length(ψ_grids[1]), length(ψ_grids[2])
         ψ_grid_matrix = reshape(ψ_grid_raw, n1, n2)
-        # Reverse every other column for snake pattern
-        for j in 2:2:n2
-            ψ_grid_matrix[:, j] = reverse(ψ_grid_matrix[:, j])
+
+        if snake_direction == :column
+            # Column-wise snake: traverse ψ₁ within each ψ₂ column
+            # Continuation is along ψ₁ (same ψ₂, adjacent ψ₁)
+            for j in 2:2:n2
+                ψ_grid_matrix[:, j] = reverse(ψ_grid_matrix[:, j])
+            end
+            ψ_grid = vec(ψ_grid_matrix)
+        elseif snake_direction == :row
+            # Row-wise snake: traverse ψ₂ within each ψ₁ row
+            # Continuation is along ψ₂ (same ψ₁, adjacent ψ₂)
+            for i in 2:2:n1
+                ψ_grid_matrix[i, :] = reverse(ψ_grid_matrix[i, :])
+            end
+            # Flatten row-major: collect row by row
+            ψ_grid = Vector{Vector{Float64}}(undef, n1 * n2)
+            for i in 1:n1
+                for j in 1:n2
+                    ψ_grid[(i-1)*n2 + j] = ψ_grid_matrix[i, j]
+                end
+            end
+        else
+            error("snake_direction must be :column or :row, got $snake_direction")
         end
-        ψ_grid = vec(ψ_grid_matrix)
     else
         # For 1D or higher dimensions, use standard ordering
         ψ_grid = vec(ψ_grid_raw)
@@ -637,13 +660,27 @@ function profile_target(lnlike_θ, ψ_indices, θ_bounds_lower, θ_bounds_upper,
         n1, n2 = length(ψ_grids[1]), length(ψ_grids[2])
         # Build unshuffle indices: map snake order back to column-major
         snake_to_colmajor = Vector{Int}(undef, n1 * n2)
-        for j in 1:n2
+
+        if snake_direction == :column
+            # Column-wise snake: was vec(matrix) with reversed even columns
+            for j in 1:n2
+                for i in 1:n1
+                    snake_idx = (j - 1) * n1 + (iseven(j) ? (n1 - i + 1) : i)
+                    colmajor_idx = (j - 1) * n1 + i
+                    snake_to_colmajor[snake_idx] = colmajor_idx
+                end
+            end
+        else  # :row
+            # Row-wise snake: was vec(matrix') with reversed even rows
             for i in 1:n1
-                snake_idx = (j - 1) * n1 + (iseven(j) ? (n1 - i + 1) : i)
-                colmajor_idx = (j - 1) * n1 + i
-                snake_to_colmajor[snake_idx] = colmajor_idx
+                for j in 1:n2
+                    snake_idx = (i - 1) * n2 + (iseven(i) ? (n2 - j + 1) : j)
+                    colmajor_idx = (j - 1) * n1 + i
+                    snake_to_colmajor[snake_idx] = colmajor_idx
+                end
             end
         end
+
         # Reorder results
         θ_values_reordered = similar(θ_values)
         lnlike_values_reordered = similar(lnlike_values)
