@@ -41,23 +41,16 @@ mode_str = get(results, "mode", "PROFILE (16 nuisance)")
 n_params = length(θ_MLE)
 β1_idx, K1_idx = 7, 10
 
-# Fixed plotting bounds (for consistent visualization)
-# IIR coordinates (ψ-space)
-ψ1_plot_min, ψ1_plot_max = 1e1, 1e5      # K₁/β₁ range
-ψ2_plot_min, ψ2_plot_max = 0.0, 8.0      # β₁·K₁ range
+# Plotting bounds - use computation bounds for full coverage
+# IIR coordinates (ψ-space) - use actual grid range
+ψ1_plot_min, ψ1_plot_max = ψ_lower[target_2d[1]], ψ_upper[target_2d[1]]
+ψ2_plot_min, ψ2_plot_max = 0.0, ψ_upper[target_2d[2]]  # start at 0 for linear axis
 
-# θ-space bounds derived from ψ-space (same logic as minimal_2D_IIR_coords.jl)
-# Constraint: β·K ≤ ψ2_plot_max and K/β within ψ1 range
-β_plot_min = 0.005
-β_plot_max = sqrt(ψ2_plot_max / ψ1_plot_min)  # β at low K/β, high β·K corner
-K_plot_min = 1.0
-K_plot_max = min(ψ2_plot_max / β_plot_min, 500.0)  # Cap for display
-# Ensure β·K constraint at corners
-if β_plot_max * K_plot_max > ψ2_plot_max
-    scale = sqrt(ψ2_plot_max / (β_plot_max * K_plot_max))
-    β_plot_max *= scale
-    K_plot_max *= scale
-end
+# θ-space bounds - match profile bounds
+β_plot_min = 0.0
+β_plot_max = 0.5
+K_plot_min = 0.0
+K_plot_max = 100.0
 
 println("Grid: $GRID × $GRID")
 println("Mode: $mode_str")

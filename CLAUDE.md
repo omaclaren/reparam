@@ -224,6 +224,46 @@ Even when rank = p (full rank), **always compute and report**:
 - Ranking of combinations by singular values
 - IIR reparameterization still valuable for separating well-identified from poorly-identified combinations
 
+### 5. Coordinate Spaces and Bounds
+
+**Computation vs Visualization Spaces**
+
+1. **Computation is done in ψ-space (IIR coordinates)**
+   - Grid is log-uniform over target coordinates (e.g., ψ₇=K₁/β₁, ψ₁₈=β₁·K₁)
+   - Nuisance optimization also in ψ-space
+   - Natural space: rectangular grid, separates identifiable/non-identifiable
+
+2. **θ-space visualization is a transform**
+   - Transform back via: K₁ = √(ψ₇·ψ₁₈), β₁ = √(ψ₁₈/ψ₇)
+   - Regular ψ grid → hyperbolic pattern in θ-space
+   - Shows likelihood surface in original parameters
+
+**Bounds Hierarchy**
+
+```
+θ profile bounds (user-specified, e.g., K≤100, β≤0.5)
+    ↓ Monte Carlo sampling
+ψ bounds (derived, define 2D target grid)
+    ↓ inverse transform
+θ plotting bounds (should match θ profile bounds)
+```
+
+**Key insight**: Wide ψ bounds needed to cover θ-space adequately due to nonlinear transform. But some ψ grid points map to θ values outside intended region.
+
+**Example** (repressilator gene 1):
+- θ profile bounds: K≤100, β≤0.5
+- ψ bounds derived: ψ₇∈[7, 63500], ψ₁₈∈[0.02, 60]
+- But max K from ψ grid: √(63500×60) ≈ 1950 (far exceeds K≤100)
+
+**Practical approach**:
+- Tighter θ profile bounds → tighter ψ bounds → less wasted computation
+- Clip θ-space scatter plots to profile bounds for visualization
+- RBF interpolation fills gaps for contour plots
+
+**Plotting scripts**:
+- `replot_profile_results.jl` - contourf with RBF interpolation (publication quality)
+- `replot_scatter.jl` - scatter showing actual computed points (diagnostic)
+
 ## Investigation History (For Reference)
 
 ### Sequential IIR Exploration (Not in Paper)
@@ -311,12 +351,15 @@ For paper figures, need to manually select which IIR coordinates correspond to g
 
 **Run Times** (18-parameter repressilator, 16 nuisance profiled):
 
-| Grid | Points | Profiling Time | Wall Time | Workers |
-|------|--------|----------------|-----------|---------|
-| 20×20 | 400 | 20.4 min | ~25 min | 71 |
-| 100×100 | 10,000 | 489 min (~8.2 hr) | ~8.2 hr | 71 |
+| Grid | Points | Profiling Time | Wall Time | Workers | Bounds |
+|------|--------|----------------|-----------|---------|--------|
+| 10×10 | 100 | 22.1 min | ~26 min | 7 (local) | K≤100 |
+| 20×20 | 400 | 20.4 min | ~25 min | 71 (NeSI) | K≤200 |
+| 100×100 | 10,000 | 489 min (~8.2 hr) | ~8.2 hr | 71 (NeSI) | K≤200 |
 
-**Per-point cost**: ~2.9 seconds per grid point (including 15 multi-start restarts for nuisance optimization)
+**Per-point cost**: ~2.9 seconds per grid point on NeSI (including 15 multi-start restarts for nuisance optimization)
+
+**Tighter bounds testing** (2026-01-14): Testing K≤100 (vs K≤200) to reduce wasted computation on out-of-bounds θ regions. 20×20 and 100×100 NeSI jobs submitted.
 
 **Optimization settings**:
 - Nuisance optimization: NLopt L-BFGS with 15 random restarts
@@ -361,4 +404,4 @@ function compute_profile_grid(
 
 ## Last Updated
 
-**2026-01-14**: Profile likelihood demonstration complete. 100×100 grid validated with snake_direction fix showing 54× improvement in smoothness. Results are publication-ready. Computational resources documented for paper.
+**2026-01-14**: Profile likelihood demonstration complete. 100×100 grid validated with snake_direction fix showing 54× improvement in smoothness. Added documentation on coordinate spaces and bounds hierarchy. Testing tighter bounds (K≤100) to reduce computation; 10×10 local test successful, NeSI 20×20 and 100×100 jobs pending.
