@@ -147,6 +147,7 @@ N_perp_rotated = varimax_rotation(N_perp; n_restarts=200)
 ```
 
 Maximizes sparsity within span(N_perp) while preserving invariant subspace structure.
+For the current single-stage paper focus, treat this as an interpretability/presentation aid rather than a required algorithmic step.
 
 ## Paper Strategy
 
@@ -157,7 +158,7 @@ Focus on robust, reliable monomial transformations (ψ = exp(A log(θ)))
 - ✅ Works reliably across model types
 - ✅ Clear theoretical foundation
 - ✅ No basis-dependence issues
-- ✅ Produces interpretable results with Varimax
+- ✅ Produces interpretable results (Varimax available as optional enhancement)
 
 ### Multi-Stage Extensions (Future Work)
 Sequential application (e.g., products → sums) mentioned briefly as open research direction. Investigation revealed:

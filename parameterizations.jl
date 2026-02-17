@@ -8,8 +8,9 @@
 Apply varimax rotation to N_perp basis to encourage sparse, interpretable loadings.
 Uses multiple random restarts to escape local optima.
 
-Essential for sequential IIR: ensures each stage produces parameter combinations
-with local structure (e.g., products like n₁p₁, n₂p₂) rather than global mixtures.
+Optional interpretability enhancement: often helps produce sparse, human-readable
+combinations within span(N_perp) (e.g., ratio/product structure) rather than dense mixtures.
+For this paper's single-stage IIR focus, use as a presentation aid rather than a required step.
 
 # Arguments
 - `N_perp`: n×k matrix of potentially identifiable basis vectors (columns)
@@ -24,6 +25,10 @@ Rotated N_perp with sparse structure
 # Notes
 - Requires FactorLoadingMatrices.jl package
 - Multiple restarts essential: single random start often gives poor local optimum
+- Thresholding (`threshold > 0`) can break strict orthogonality; use `threshold=0`
+  if strict orthogonality is required
+- Empty basis (`k=0`) is treated as a no-op and returned unchanged
+- Zero-norm columns are treated as invalid input and raise an error
 - Tentative observation: SVD output from symmetric problems may need more restarts
   than typical factor analysis applications. Further investigation needed.
 
@@ -32,14 +37,30 @@ Kaiser, H. F. (1958). The varimax criterion for analytic rotation in factor anal
 """
 function varimax_rotation(N_perp; n_restarts=200, threshold=1e-2, gamma=1.0)
     # Note: Requires FactorLoadingMatrices to be loaded
-    # Save original column norms
-    col_norms = [norm(N_perp[:, i]) for i in 1:size(N_perp, 2)]
+    n, k = size(N_perp)
+
+    if k == 0
+        return copy(N_perp)
+    end
+
+    if n_restarts < 1
+        throw(ArgumentError("n_restarts must be >= 1"))
+    end
+
+    # Validate input columns
+    tol = eps(Float64)
+    col_norms = [norm(N_perp[:, i]) for i in 1:k]
+    zero_cols = findall(c -> c <= tol, col_norms)
+    if !isempty(zero_cols)
+        throw(ArgumentError("varimax_rotation received zero-norm columns at indices $(collect(zero_cols)). This usually indicates a malformed basis matrix."))
+    end
+
     N_norm = N_perp ./ col_norms'
 
-    # Varimax objective function
+    # Rotation objective consistent with gamma
     function varimax_objective(L)
-        n, p = size(L)
-        sum(sum(L.^4, dims=1) .- (sum(L.^2, dims=1).^2) ./ n)
+        n_rows, _ = size(L)
+        sum(sum(L.^4, dims=1) .- gamma * (sum(L.^2, dims=1).^2) ./ n_rows)
     end
 
     # Multiple random restarts to escape local optima
@@ -48,7 +69,7 @@ function varimax_rotation(N_perp; n_restarts=200, threshold=1e-2, gamma=1.0)
 
     for trial in 1:n_restarts
         # Random orthogonal rotation as starting point
-        Q_rand = Matrix(qr(randn(size(N_perp, 2), size(N_perp, 2))).Q)
+        Q_rand = Matrix(qr(randn(k, k)).Q)
         candidate = N_norm * Q_rand
 
         # Apply varimax
@@ -63,11 +84,11 @@ function varimax_rotation(N_perp; n_restarts=200, threshold=1e-2, gamma=1.0)
         end
     end
 
-    # Re-orthonormalize via QR
+    # Re-orthonormalize via QR (before thresholding)
     Q_final = Matrix(qr(best_rotated).Q)
     rotated = Q_final .* col_norms'
 
-    # Threshold small entries
+    # Threshold small entries (can break strict orthogonality)
     rotated[abs.(rotated) .< threshold] .= 0.0
 
     # Renormalize non-zero columns
@@ -160,11 +181,12 @@ function reparam(evecs_scaled; a_func=x->log.(x), a_func_inv=x->exp.(x))
     - If you prefer to work with a matrix `A` whose **rows** are combinations,
       you can bypass this helper and define the transform explicitly as:
       `θ_to_ψ(θ) = a_func_inv(A * a_func(θ))` and
-      `ψ_to_θ(ψ) = a_func_inv(inv(A) * a_func(ψ))`.
+      `ψ_to_θ(ψ) = a_func_inv(A \\ a_func(ψ))`.
     """
     # Forward and inverse transformations
-    xytoXY(xy) = a_func_inv(evecs_scaled' * a_func(xy))
-    XYtoxy(XY) = a_func_inv(inv(evecs_scaled') * a_func(XY))
+    A = evecs_scaled'
+    xytoXY(xy) = a_func_inv(A * a_func(xy))
+    XYtoxy(XY) = a_func_inv(A \ a_func(XY))
 
     return xytoXY, XYtoxy
 end

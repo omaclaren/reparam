@@ -64,7 +64,7 @@ The IIR paper has been through peer review at SIAM/ASA Journal on Uncertainty Qu
 - Finite-difference invariance test works for stiff ODEs (atolM=1e-6)
 
 **Profile Likelihood Demonstration** ✅ Complete:
-Shows that profiling IIR-identified combinations (K₁/β₁ identifiable, β₁K₁ non-identifiable) reveals the true identifiability structure. 100×100 grid computed on NeSI HPC.
+Shows that profiling IIR-identified combinations (K₁/β₁ identifiable, β₁K₁ non-identifiable) reveals the true identifiability structure. **50×50 grid selected for publication** (cleaner than 100×100 which had optimizer artifacts in low K₁/β₁ region).
 
 **Development Strategy** (incremental complexity):
 1. ✅ 2D ideal case (`minimal_2D_IIR_coords.jl`) - calibrate optimizer, understand expected behavior
@@ -143,6 +143,8 @@ A_full = A_full_T_scaled'            # Transpose to get row combinations
 ### Varimax Rotation (Optional Enhancement)
 
 **Purpose**: Improve interpretability of identifiable combinations within span(N_perp)
+
+For the current single-stage paper focus, use this mainly as an interpretation/presentation aid rather than a required algorithmic step.
 
 **Implementation** (parameterizations.jl):
 ```julia
@@ -344,22 +346,23 @@ For paper figures, need to manually select which IIR coordinates correspond to g
 
 ### Profile Likelihood Computation
 
-**Hardware**: NeSI (New Zealand eScience Infrastructure) HPC cluster
+**Hardware**: NeSI (New Zealand eScience Infrastructure) HPC cluster. See `NESI_CHEATSHEET.md` for workflow.
 - Node: Milan compute nodes
 - CPUs per job: 72 (71 workers + 1 coordinator)
 - Julia parallelization: Distributed.jl with `pmap`
 
 **Run Times** (18-parameter repressilator, 16 nuisance profiled):
 
-| Grid | Points | Profiling Time | Wall Time | Workers | Bounds |
-|------|--------|----------------|-----------|---------|--------|
-| 10×10 | 100 | 22.1 min | ~26 min | 7 (local) | K≤100 |
-| 20×20 | 400 | 20.4 min | ~25 min | 71 (NeSI) | K≤200 |
-| 100×100 | 10,000 | 489 min (~8.2 hr) | ~8.2 hr | 71 (NeSI) | K≤200 |
+| Grid | Points | Profiling Time | Wall Time | Workers | Bounds | Notes |
+|------|--------|----------------|-----------|---------|--------|-------|
+| 10×10 | 100 | 22.1 min | ~26 min | 7 (local) | K≤100 | |
+| 20×20 | 400 | 20.4 min | ~25 min | 71 (NeSI) | K≤100 | |
+| 50×50 | 2,500 | ~2 hr | ~2 hr | 71 (NeSI) | K≤100 | **Publication quality** |
+| 100×100 | 10,000 | ~8 hr | ~8 hr | 71 (NeSI) | K≤100 | More artifacts than 50×50 |
 
 **Per-point cost**: ~2.9 seconds per grid point on NeSI (including 15 multi-start restarts for nuisance optimization)
 
-**Tighter bounds testing** (2026-01-14): Testing K≤100 (vs K≤200) to reduce wasted computation on out-of-bounds θ regions. 20×20 and 100×100 NeSI jobs submitted.
+**Bounds**: K≤100 (tighter than original K≤200) reduces wasted computation on out-of-bounds θ regions.
 
 **Optimization settings**:
 - Nuisance optimization: NLopt L-BFGS with 15 random restarts
@@ -372,9 +375,16 @@ For paper figures, need to manually select which IIR coordinates correspond to g
 - Memory: <1GB
 
 ### Result Files
-- `nesi/repressilator_16nuisance_100x100_results.jls` - 100×100 profile (1.5 MB)
-- `nesi/repressilator_16nuisance_20x20_results.jls` - 20×20 profile (66 KB)
-- `nesi/repressilator_16nuisance_100x100_snake_replot.png` - publication figure
+- `nesi/repressilator_16nuisance_50x50_results.jls` - **50×50 profile (publication quality)**
+- `nesi/repressilator_16nuisance_50x50_results_replot.png` - **publication figure**
+- `nesi/repressilator_16nuisance_100x100_results.jls` - 100×100 profile (more artifacts)
+- `nesi/repressilator_16nuisance_20x20_results.jls` - 20×20 profile (low resolution)
+
+### MLE Point Estimate Note
+The MLE used for IIR analysis may differ slightly from the gridded profile maximum (expected due to different optimization strategies). Options:
+1. Re-run MLE with more restarts/adaptive methods for better convergence
+2. Show both on plot: original MLE (star) + gridded max (circle) for transparency
+3. Note in caption that IIR was computed at nearby high-likelihood point
 
 ### Snake Direction Optimization
 
@@ -404,4 +414,6 @@ function compute_profile_grid(
 
 ## Last Updated
 
-**2026-01-14**: Profile likelihood demonstration complete. 100×100 grid validated with snake_direction fix showing 54× improvement in smoothness. Added documentation on coordinate spaces and bounds hierarchy. Testing tighter bounds (K≤100) to reduce computation; 10×10 local test successful, NeSI 20×20 and 100×100 jobs pending.
+**2026-01-17**: 50×50 grid selected as publication quality - cleaner than 100×100 (which had optimizer artifacts in rows 27-28). Good region extremely smooth (mean row std 0.004). Minor θ-space interpolation artifacts at extreme corners acceptable. Documented MLE offset issue and options for handling.
+
+**2026-01-14**: Profile likelihood demonstration complete. 100×100 grid validated with snake_direction fix showing 54× improvement in smoothness. Added documentation on coordinate spaces and bounds hierarchy. Testing tighter bounds (K≤100) to reduce computation.

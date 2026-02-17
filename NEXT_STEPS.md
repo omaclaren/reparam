@@ -109,6 +109,10 @@ Consider including as supplementary material:
 Before potential public release:
 - [ ] Remove temporary test files (test_*.jl)
 - [ ] Clean up analysis documents (ANALYSIS_SUMMARY.md, PK_MODEL_FINDINGS.md)
+- [ ] Audit legacy examples (`mm_model.jl`, `transport_model.jl`, `pk_model.jl`) and ensure they either run end-to-end or are clearly marked archival/experimental
+- [ ] After legacy audit, prune legacy-only helper paths (e.g., unused `obs_matrix` usage and utilities like `construct_observation_matrix` if no longer needed)
+- [ ] Nice-to-have cleanup: refine `generate_initial_guesses()` boundary fallback perturbations to use inward-only random steps (less clamp waste at bounds)
+- [ ] Nice-to-have cleanup: consider in-house `varimax` implementation (replace `FactorLoadingMatrices` dependency if maintainability/control benefits outweigh effort)
 - [ ] Update README with installation and quick start
 - [ ] Add license file
 - [ ] Consider archiving on Zenodo for paper citation
