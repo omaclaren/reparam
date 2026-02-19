@@ -1,8 +1,11 @@
 # ----------------------------------------------------------------
-# Note: NLopt is not thread-safe
+# NLopt parallelism model used in this file
 # ----------------------------------------------------------------
-# Multi-start optimization runs sequentially to avoid NLopt threading issues.
-# For parallelization, use Distributed.jl with separate processes instead.
+# NLopt is not thread-safe in a single Julia process.
+# In practice: do NOT call optimize(...) concurrently from multiple threads.
+# Therefore, all NLopt loops here are sequential within each process.
+# Parallel speedup is done with Distributed.jl (multiple worker processes),
+# where each worker runs its own sequential NLopt calls on a chunk.
 
 using Distributed
 using Distributed: WorkerPool
@@ -13,9 +16,9 @@ using Distributed: WorkerPool
 function construct_lnlike_xy(distrib_xy, data; dist_type=:uni)
     """
     Construct log-likelihood function for parameters given (iid) data
-    in original coordinates. 
-    
-    Note xy is original parameterization but of arbitrary dimension 
+    in original coordinates.
+
+    Note xy is original parameterization but of arbitrary dimension
     (not necessarily two).
 
     Parameters:
@@ -39,7 +42,7 @@ function construct_lnlike_to_max(lnlike)
     Parameters:
     - lnlike: Log-likelihood function taking parameter vector θ
 
-    Returns: Function suitable for NLopt maximization that computes both 
+    Returns: Function suitable for NLopt maximization that computes both
     function value and gradient at θ. The returned function takes parameters:
     - θ: Parameter vector
     - grad: Gradient vector to be filled
@@ -50,7 +53,7 @@ function construct_lnlike_to_max(lnlike)
         if length(grad) > 0  # Only compute gradient if vector provided
             if grad_type === :auto
                 grad[:] = ForwardDiff.gradient(lnlike, θ)
-            else 
+            else
                 grad[:] = finite_diff_gradient(lnlike, θ)
             end
         end
@@ -68,13 +71,13 @@ function compute_ϕ_Jacobian(ϕ_func, θ; method_type=:auto, compute_svd=false)
     """
     Compute Jacobian of ϕ mapping at given parameters, optionally with SVD.
     Works in any coordinate system.
-    
+
     Parameters:
     - ϕ_func: Function implementing the ϕ mapping. Should be function of θ only.
     - θ: Parameter vector at which to evaluate the Jacobian
-    - method_type: :auto for automatic differentiation (default), otherwise finite differences
+    - method_type: Differentiation method (currently only :auto is supported)
     - compute_svd: Whether to compute and return SVD (default: false)
-    
+
     Returns:
     - If compute_svd=false: Just the Jacobian matrix
     - If compute_svd=true: Tuple of (Jacobian, SVD factorization)
@@ -82,12 +85,10 @@ function compute_ϕ_Jacobian(ϕ_func, θ; method_type=:auto, compute_svd=false)
     if method_type === :auto
         J = ForwardDiff.jacobian(ϕ_func, θ)
     else
-        println("warning finite difference not implemented, no Jacobian")
-        # todo finite diff with checks
-        #J = finite_diff_gradient(ϕ_func, θ)
+        error("compute_ϕ_Jacobian: method_type=$method_type is not supported. Use method_type=:auto.")
     end
-    
-    if compute_svd 
+
+    if compute_svd
         println("Computing and returning SVD of Jacobian of φ mapping")
         U, S, Vt = svd(J)
         return (J, U, S, Vt)
@@ -108,18 +109,17 @@ function construct_ellipse_lnlike_approx(lnlike, θ_est; method_type=:auto, retu
     Parameters:
     - lnlike: Log-likelihood function taking parameter vector θ
     - θ_est: Parameter vector at which to make approximation
-    - method_type: :auto for automatic Hessian computation (default)
+    - method_type: Differentiation method (currently only :auto is supported)
     - return_h: Whether to return Hessian matrix (default: true)
 
-    Returns: 
+    Returns:
     - If return_h=true: Tuple of (quadratic approximation function, Hessian matrix)
     - If return_h=false: Quadratic approximation function only
     """
     if method_type === :auto
         H = -ForwardDiff.hessian(lnlike, θ_est)
     else
-        println("warning finite difference not implemented, no Hessian")
-        # todo finite diff 
+        error("construct_ellipse_lnlike_approx: method_type=$method_type is not supported. Use method_type=:auto.")
     end
     if return_h
         return θ -> -0.5*(θ-θ_est)'*H*(θ-θ_est), H
@@ -292,8 +292,8 @@ continuation" significantly speeds up optimization in smooth regions of paramete
 
 # Notes
 - Grid points are evaluated in the order provided
-- After the first point, ω_initial_extras (if provided) are regenerated around
-  the adaptive continuation point for better local exploration
+- ω_initial_extras (if provided) are regenerated once continuation has started
+  (current behavior: regenerate after the second point, then use for subsequent points)
 - Results are NOT normalized (caller should normalize if desired)
 """
 function profile_grid_sequential(lnlike_θ, ψ_grid::Vector{Vector{Float64}}, ψ_indices::Vector{Int},
@@ -349,8 +349,8 @@ function profile_grid_sequential(lnlike_θ, ψ_grid::Vector{Vector{Float64}}, ψ
         eps_bound = 1e-6
         ω_current = clamp.(ω_opt, ω_bounds_lower .+ eps_bound, ω_bounds_upper .- eps_bound)
 
-        # After first grid point, regenerate extras around continuation point
-        # This provides local exploration while maintaining continuation benefit
+        # Once continuation is established, regenerate extras around current point
+        # Current behavior: regenerate when i > 1 (used from the next iteration onward)
         if i > 1 && !isnothing(ω_initial_extras) && dim_ω > 0
             ω_extras_current = generate_initial_guesses(
                 ω_bounds_lower, ω_bounds_upper, length(ω_initial_extras);
@@ -374,10 +374,11 @@ end
                             xtol_rel=1e-9, ftol_rel=1e-9, optmaxtime=60.0, popsize=50,
                             n_chunks=nothing, worker_pool=nothing, track_convergence=false)
 
-Execute profile likelihood over a grid using distributed parallel execution.
+Execute profile likelihood over a grid using distributed process-level parallel execution.
 
-Splits grid into contiguous chunks, runs each chunk via `pmap` using `profile_grid_sequential()`,
-and concatenates results. Adaptive continuation works within each chunk but not between chunks.
+Splits the grid into contiguous chunks, runs chunks in parallel across workers via `pmap`,
+and concatenates results. Inside each chunk, execution is sequential via
+`profile_grid_sequential()`. Adaptive continuation works within each chunk but not between chunks.
 
 # Arguments
 - `lnlike_θ`: Log-likelihood function (must be serializable)
@@ -402,6 +403,7 @@ and concatenates results. Adaptive continuation works within each chunk but not 
 # Notes
 - Requires workers: `addprocs(4); @everywhere using ReparamTools`
 - Chunks are contiguous slices of ψ_grid
+- Chunks run in parallel across workers; each chunk runs sequentially internally
 - Continuation preserved WITHIN chunks, lost BETWEEN chunks
 - For 21×21 grid with 4 workers: ~14.7 hrs sequential → ~4 hrs distributed
 
@@ -509,14 +511,14 @@ function profile_target(lnlike_θ, ψ_indices, θ_bounds_lower, θ_bounds_upper,
     - θ_bounds_upper: Upper bounds for all parameters
     - ω_initial: Initial guess for nuisance parameters
     - grid_steps: Number of grid points for interest parameters (default: 100)
-    - ω_initial_extras: : Vector of additional initial guesses for nuisance parameters, 
+    - ω_initial_extras: Vector of additional initial guesses for nuisance parameters,
         where each guess is a vector of the same dimension as ω_initial (default: nothing)
     - method: Overall optimization method for nuisance parameters (default: :LD_TNEWTON_PRECOND)
     - local_method: Local optimization method if using a global method which requires it (default: :LD_TNEWTON_PRECOND)
     - xtol_rel: Relative tolerance in parameter values (default: 1e-9)
     - ftol_rel: Relative tolerance in function value (default: 1e-9)
     - optmaxtime: Maximum optimization time in seconds (default: 120)
-    - popsize: Population size for global optimization methods (default: 10)
+    - popsize: Population size for global optimization methods (default: 50)
     - use_distributed: Use distributed parallel execution (default: false)
     - n_chunks: Number of chunks for distributed execution (default: worker count)
     - worker_pool: Optional Distributed.WorkerPool to target specific workers (default: all)
@@ -529,8 +531,9 @@ function profile_target(lnlike_θ, ψ_indices, θ_bounds_lower, θ_bounds_upper,
     - lnlike_ψ_values: Profile log-likelihood values (normalized to max of 0)
 
     Notes:
-    - This function now delegates to profile_grid_sequential() for the actual work
-    - The layered architecture enables future distributed execution (see profile_grid_distributed)
+    - This function delegates execution to profile_grid_sequential() or profile_grid_distributed()
+    - For 2D targets, snake_direction defines the 1D traversal order of grid points
+    - In distributed mode, that ordered list is chunked; continuation is preserved within chunks only
     """
     # Ensure ψ_indices is Vector{Int} (handles empty [], scalar Int, and Vector{Any} cases)
     ψ_indices_int = ψ_indices isa AbstractVector ? convert(Vector{Int}, ψ_indices) : [Int(ψ_indices)]
@@ -723,7 +726,7 @@ function construct_upper_lower_profile_wise_CIs_for_mean(
     - l_level: Confidence level, e.g. 95 for 95% CI (default: 95)
     - df: Degrees of freedom (default: dimension of full parameter ψω)
 
-    Returns: 
+    Returns:
     - lower: Lower bounds of confidence interval
     - upper: Upper bounds of confidence interval
     - pred_matrix: Matrix of predictions at each parameter value
@@ -734,15 +737,15 @@ function construct_upper_lower_profile_wise_CIs_for_mean(
         df = length(ψω_values[1])
     end
     threshold = -quantile(Chisq(df), l_level/100)/2
-    
+
     # Filter by likelihood threshold
     ψω_filtered = ψω_values[lnlike_ψ_values .> threshold]
-    
+
     # One predicted mean vector per column
     pred_matrix = stack(mean.(distrib_ψω.(ψω_filtered)))
     lower = minimum(pred_matrix, dims=2)
     upper = maximum(pred_matrix, dims=2)
- 
+
     return lower, upper, pred_matrix
 end
 
@@ -752,7 +755,7 @@ end
 function get_1D_profiles_from_2D(ψ_values, lnlike_ψ_values)
     """
     Extract 1D profile likelihoods from 2D grid by maximizing over each parameter.
-    
+
     Parameters:
     - ψ_values: Array of 2D parameter vectors from grid evaluation
     - lnlike_ψ_values: Log-likelihood values at each grid point
@@ -768,13 +771,13 @@ function get_1D_profiles_from_2D(ψ_values, lnlike_ψ_values)
     # Split into grid components. Need unique to undo Cartesian product
     ψ1_values = unique([ψ1 for (ψ1, _) in ψ_values])
     ψ2_values = unique([ψ2 for (_, ψ2) in ψ_values])
-    
+
     # Reshape to grid format
     lnlike_ψ_values = reshape(lnlike_ψ_values, length(ψ1_values), length(ψ2_values))
-    
+
     # Convert to likelihood scale. Note: input assumed normalized
     like_ψ_values = exp.(lnlike_ψ_values)
-    
+
     # Get profile likelihoods by maximizing over other parameter
     like_ψ1_values = maximum(like_ψ_values, dims=2)
     like_ψ2_values = maximum(like_ψ_values, dims=1)
@@ -782,6 +785,6 @@ function get_1D_profiles_from_2D(ψ_values, lnlike_ψ_values)
     # Ensure profiles are 1D vectors
     like_ψ1_values = vec(like_ψ1_values)
     like_ψ2_values = vec(like_ψ2_values)
-    
+
     return ψ1_values, ψ2_values, like_ψ1_values, like_ψ2_values
 end
