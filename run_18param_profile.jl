@@ -146,7 +146,7 @@ end
 
 t_iir_start = time()
 S, N, N_perp, rank_J = ReparamTools.find_invariant_subspace(
-    ϕ_iir_log, θ_log_MLE; rtolJ=1e-7, verbose=true)
+    ϕ_iir_log, θ_log_MLE; rtol_rank=1e-7, verbose=true)
 println("IIR analysis completed in $(round(time() - t_iir_start, digits=1)) seconds")
 
 n_ident = size(N_perp, 2)

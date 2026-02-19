@@ -203,8 +203,8 @@ println("=" ^ 70)
 # Tolerance notes:
 # - With high-precision solver, try default tolerances first
 # - If needed, adjust rtolJ to respect singular value gap
-# - rtolJ=1e-7 ensures σ~4e-5 is classified as zero (4000× gap from σ~0.18)
-rtolJ_custom = 1e-7  # Respect the large singular value gap
+# - rtol_rank=1e-7 ensures σ~4e-5 is classified as zero (4000× gap from σ~0.18)
+rtol_rank_custom = 1e-7  # Respect the large singular value gap
 
 println("\nUsing high-precision ϕ with:")
 println("  Time points: $(length(t_iir)) (fine grid)")
@@ -212,7 +212,7 @@ println("  ODE tolerances: abstol=1e-10, reltol=1e-8")
 
 S, N, N_perp, rank_J = ReparamTools.find_invariant_subspace(
     ϕ_iir_log, θ_log_MLE;
-    rtolJ=rtolJ_custom,
+    rtol_rank=rtol_rank_custom,
     verbose=true
 )
 
@@ -460,7 +460,7 @@ if n_nonident == 0
     println("   The βK structure may still be present in the null space directions.")
     println("   Consider:")
     println("   1. Examining the last few singular values for gap structure")
-    println("   2. Relaxing the tolerance (rtolM parameter)")
+    println("   2. Relaxing the tolerance (rtol_invariance parameter)")
     println("   3. The problem might be borderline at this evaluation point")
 end
 
@@ -471,7 +471,7 @@ if n_nonident == 0
     println("CANNOT PROCEED TO PROFILING")
     println("=" ^ 70)
     println("No non-identifiable directions found. Check IIR results above.")
-    println("May need to adjust rtolM tolerance or examine singular value structure.")
+    println("May need to adjust rtol_invariance tolerance or examine singular value structure.")
     error("Stopping: expected 3 non-identifiable directions (βK products)")
 end
 

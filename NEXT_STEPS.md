@@ -9,7 +9,7 @@
 1. **Core algorithm** (`invariance.jl`): Algorithm 1 fully implemented
 2. **Pedagogical example** (`stat_model.jl`): Complete and verified
 3. **Ambitious example** (`repressilator.jl`): Complete with Discovery→Problem→Solution narrative
-4. **Strategic decision**: Single-stage IIR focus (robust and reliable)
+4. **Strategic decision**: Single-stage IIR focus
 5. **Multi-stage investigation**: Complete, findings documented, deferred to future work
 
 ### 📋 Immediate Priorities
@@ -75,24 +75,20 @@ The repressilator code is complete but needs end-to-end verification:
 ### Key Points to Emphasize
 
 **Response to "more ambitious examples" request:**
-> "We have implemented the Eisenberg & Hayashi (2010) repressilator as our ambitious mechanistic example. This 18-parameter nonlinear ODE system demonstrates that IIR:
+> "We have added the Eisenberg & Hayashi (2010) repressilator, an 18-parameter nonlinear ODE system. This demonstrates that IIR:
 > 1. Automatically discovers the same identifiable combinations (K/β ratios) as profile likelihood without symbolic computation
-> 2. Handles stiff ODE systems via finite-difference invariance testing
-> 3. Enables valid uncertainty quantification via profile-wise prediction intervals
->
-> The repressilator validates IIR on a realistic systems biology application and showcases practical advantages over traditional parameter-centric profiling."
+> 2. Handles stiff ODE systems via the Hessian-based invariance test
+> 3. Enables uncertainty quantification via profile-wise prediction intervals"
 
 **Response to questions about multi-stage approach:**
-> "Our investigation of sequential/multi-stage IIR revealed an important research direction: basis selection for optimal compositional reduction. While the single-stage method reliably identifies invariant monomial structure, sequential application depends critically on intermediate basis alignment with target combinations. We briefly discuss this in Future Work, positioning single-stage IIR as the robust, production-ready contribution."
+> "Sequential/multi-stage IIR reveals an open research direction: basis selection for compositional reduction. The single-stage method identifies invariant monomial structure, but sequential application depends on intermediate basis alignment. We briefly discuss this in Future Work."
 
-**Emphasis on method robustness:**
-> "We have strategically focused the revision on single-stage IIR with monomial transformations (ψ = exp(A log(θ))). This approach:
-> - Works reliably across diverse model types (statistical models, ODE systems)
-> - Has clear theoretical foundation (invariant null space criterion)
-> - Produces interpretable results (integer exponents via Varimax rotation)
-> - Requires no symbolic computation
->
-> This positions IIR as a practical, numerically robust method for practitioners."
+**On method focus:**
+> "The revision focuses on single-stage IIR with monomial transformations (ψ = exp(A log(θ))):
+> - Works for tested model types (statistical models, ODE systems)
+> - Clear theoretical foundation (invariant null space criterion)
+> - Interpretable results (integer exponents via Varimax rotation)
+> - No symbolic computation required"
 
 ## 5. Supplementary Material (Optional)
 
@@ -102,7 +98,7 @@ Consider including as supplementary material:
 - [ ] Discussion of when multi-stage works vs when it doesn't
 - [ ] Technical details on Varimax rotation implementation
 
-**Positioning**: "The main text focuses on single-stage IIR as the robust contribution. The supplement explores multi-stage extensions, revealing important open problems for future research."
+**Positioning**: "Main text covers single-stage IIR. Supplement explores multi-stage extensions and their limitations."
 
 ## 6. Code Repository Cleanup (LOW PRIORITY)
 
@@ -113,6 +109,7 @@ Before potential public release:
 - [ ] After legacy audit, prune legacy-only helper paths (e.g., unused `obs_matrix` usage and utilities like `construct_observation_matrix` if no longer needed)
 - [ ] Nice-to-have cleanup: refine `generate_initial_guesses()` boundary fallback perturbations to use inward-only random steps (less clamp waste at bounds)
 - [ ] Nice-to-have cleanup: consider in-house `varimax` implementation (replace `FactorLoadingMatrices` dependency if maintainability/control benefits outweigh effort)
+- [ ] Docstring style consistency: move `"""` docstrings from inside functions (Python style) to before functions (Julia convention). Currently mixed — user-written functions have docstrings inside (silently discarded), agent-written functions (`profile_point`, `profile_grid_*`) have them correctly before. Affects `utils.jl`, `parameterizations.jl`, `core.jl`.
 - [ ] Update README with installation and quick start
 - [ ] Add license file
 - [ ] Consider archiving on Zenodo for paper citation
@@ -133,9 +130,9 @@ Before potential public release:
 **Decision**: Single-stage in main text, multi-stage brief mention in future work
 
 **Rationale**:
-- Single-stage is robust and reliable
-- Multi-stage reveals interesting open problems but not production-ready
-- Honest scientific assessment strengthens paper
+- Single-stage works well for tested cases
+- Multi-stage has open problems
+- Paper is stronger with honest assessment
 
 ### ✅ How to position PK model findings?
 **Decision**: Brief mention in future work, detailed analysis in supplement (optional)
@@ -180,6 +177,6 @@ The revision is ready when:
 
 **Terminology consistency**: Document uses "image reparameterization" and "minimal image reparameterization" consistently. Make sure manuscript matches.
 
-**Key message**: IIR is a **practical, robust numerical method** for discovering parameter combinations without symbolic computation. It works reliably for diverse model types when applied as single-stage monomial transformation.
+**Key message**: IIR is a numerical method for discovering parameter combinations without symbolic computation. Tested on statistical models and ODE systems using single-stage monomial transformation.
 
-**Honest assessment**: Multi-stage extensions are interesting research directions but reveal open problems (basis selection). This honesty strengthens scientific credibility.
+**Multi-stage**: Open problems around basis selection. Worth noting honestly in future work.

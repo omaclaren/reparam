@@ -469,7 +469,7 @@ println(repeat("=", 70))
 t_iir_start = time()
 S, N, N_perp, rank_J = find_invariant_subspace(
     ϕ_log, θ_log_MLE
-    # Uses default rtolM = 32√eps ≈ 4.8e-7, calibrated for stiff ODEs
+    # Uses default rtol_invariance = 1e-6
     # Hessian-based invariance test works with nested AD!
 )
 t_iir_elapsed = time() - t_iir_start
@@ -586,7 +586,7 @@ if size(N, 2) > 0
     t_orig_start = time()
     S_orig, N_orig, N_perp_orig, rank_orig = find_invariant_subspace(
         ϕ_original, θ_MLE
-        # Uses default rtolM (same as log-space for fair comparison)
+        # Uses default rtol_invariance
     )
     t_orig_elapsed = time() - t_orig_start
 

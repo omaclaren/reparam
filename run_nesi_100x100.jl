@@ -117,7 +117,7 @@ end
 ϕ_iir_log(θ_log) = ϕ_iir_highprec(exp.(θ_log))
 
 S, N, N_perp, rank_J = ReparamTools.find_invariant_subspace(
-    ϕ_iir_log, θ_log_MLE; rtolJ=1e-7, verbose=true)
+    ϕ_iir_log, θ_log_MLE; rtol_rank=1e-7, verbose=true)
 
 n_ident = size(N_perp, 2)
 n_nonident = size(N, 2)

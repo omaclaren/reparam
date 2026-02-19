@@ -17,7 +17,7 @@ The IIR paper has been through peer review at SIAM/ASA Journal on Uncertainty Qu
 
 ### Why Single-Stage Focus?
 
-**Single-stage IIR is robust:**
+**Single-stage IIR works well in tested cases:**
 - ✅ Algorithm 1 identifies correct rank/invariant subspace reliably
 - ✅ Works across diverse model types (statistical, ODE systems)
 - ✅ Varimax rotation produces interpretable monomial combinations
@@ -29,7 +29,7 @@ The IIR paper has been through peer review at SIAM/ASA Journal on Uncertainty Qu
 - ⚠️ Varimax optimizes sparsity, not compositional reducibility
 - ⚠️ Opens complicated questions about optimal basis selection (open research problem)
 
-**Decision**: Focus paper on single-stage method as solid, practical contribution. Multi-stage briefly mentioned in future work with honest assessment of limitations.
+**Decision**: Focus paper on single-stage method. Multi-stage briefly mentioned in future work with honest assessment of limitations.
 
 ## Examples for Paper
 
@@ -61,7 +61,7 @@ The IIR paper has been through peer review at SIAM/ASA Journal on Uncertainty Qu
 - Rank: 15/18 (3 non-identifiable directions)
 - Invariant null space: βK products (3-dimensional)
 - Identifiable combinations: K/β ratios (up to sign/reciprocal ambiguity)
-- Finite-difference invariance test works for stiff ODEs (atolM=1e-6)
+- Hessian-based invariance test works for stiff ODEs (tested on repressilator)
 
 **Profile Likelihood Demonstration** ✅ Complete:
 Shows that profiling IIR-identified combinations (K₁/β₁ identifiable, β₁K₁ non-identifiable) reveals the true identifiability structure. **50×50 grid selected for publication** (cleaner than 100×100 which had optimizer artifacts in low K₁/β₁ region).
@@ -102,20 +102,20 @@ Shows that profiling IIR-identified combinations (K₁/β₁ identifiable, β₁
 ## Core Implementation
 
 ### invariance.jl
-**Function**: `find_invariant_subspace(ϕ_func, θ0; compute_J, rtolJ, atolM, invariance_method)`
+**Function**: `find_invariant_subspace(ϕ_func, θ0; compute_J, rtol_rank, rtol_invariance)`
 
 **Algorithm**:
 1. Compute Jacobian J at θ0 using automatic differentiation
-2. Determine rank via SVD with relative tolerance rtolJ
+2. Determine rank via SVD with relative tolerance rtol_rank
 3. Extract null space candidates from right singular vectors
 4. Test each null vector for invariance using Hessian-based criterion
 5. Separate N (invariant) from N_perp (potentially identifiable)
 
 **Parameters**:
-- `rtolJ = sqrt(eps())` ≈ 1.5e-8: Relative tolerance for Jacobian rank
-- `atolM = 1e-10`: Absolute tolerance for invariance test (stricter for smooth problems)
-- `atolM = 1e-6`: Relaxed tolerance for stiff ODE systems
-- `invariance_method = :hessian_based` (default) or `:finite_difference` (for stiff ODEs)
+- `rtol_rank = 1e-8`: Relative tolerance for Jacobian rank
+- `rtol_invariance = 1e-6`: Relative tolerance for invariance test
+  - Effective threshold: τ_inv = rtol_invariance * σ_max (scales with Jacobian magnitude)
+  - May need adjustment for different problem types; use verbose=true to check classification
 
 **Returns**: `(S, N, N_perp, rank_J)` where
 - S: Singular values
@@ -188,27 +188,22 @@ reparam/
 
 ### 1. Tolerance Selection
 
-**Jacobian rank (rtolJ)**: Relative tolerance
-- Default: `sqrt(eps())` ≈ 1.5e-8
+**Jacobian rank (rtol_rank)**: Relative tolerance
+- Default: 1e-8
 - Scales with problem magnitude
-- Threshold: `τ = rtolJ * σ_max`
+- Threshold: `τ = rtol_rank * σ_max`
 
-**Invariance test (atolM)**: Absolute tolerance
-- Default: 1e-10 (smooth problems)
-- Relaxed: 1e-6 (stiff ODEs with numerical noise)
-- Does NOT scale (testing if Hessian products ≈ 0)
+**Invariance test (rtol_invariance)**: Relative tolerance
+- Default: 1e-6
+- Effective threshold: τ_inv = rtol_invariance * σ_max (scales with Jacobian magnitude)
+- May need adjustment for different problem types; use verbose=true to check classification
 
-### 2. Invariance Methods
+### 2. Invariance Method
 
-**:hessian_based** (default):
-- Uses nested automatic differentiation
-- Most accurate for smooth problems
-- May fail for stiff ODEs
-
-**:finite_difference** (for stiff systems):
-- Only uses first-order AD
-- Numerically probes parameter perturbations
-- Essential for repressilator and similar ODE models
+**Hessian-based** (only method):
+- Uses nested automatic differentiation (ForwardDiff)
+- Efficiently computes Hessian-vector products: differentiates J(θ)*V_0 instead of full J(θ)
+- Tested on smooth (stat_model) and stiff ODE (repressilator) systems
 
 ### 3. Matrix Construction
 
@@ -284,7 +279,7 @@ Even when rank = p (full rank), **always compute and report**:
   - Stage 2 with f=identity cannot recover them
   - **Root cause**: Varimax optimizes sparsity, not compositional reducibility
 
-**Conclusion**: Multi-stage IIR reveals important open research problem (basis selection for compositional reduction) but is not ready for production use. Single-stage method is robust and reliable.
+**Conclusion**: Multi-stage IIR reveals an open research problem (basis selection for compositional reduction). Single-stage method works well for tested cases.
 
 ## Paper Positioning
 
@@ -326,19 +321,20 @@ For paper figures, need to manually select which IIR coordinates correspond to g
 ### For Manuscript
 - [x] stat_model complete ✅
 - [x] Repressilator profile computation complete (100×100 grid)
+- [ ] Note in paper: τ_inv = rtol_invariance × σ₁ scales the invariance test relative to J's first-order signal. This is motivated by perturbation theory — we're checking if second-order leakage out of the null space is negligible compared to the range of J. Scaling by σ₁(M_test) instead would fail when the entire null space is invariant (noise vs noise).
 - [ ] Repressilator profile demonstration figure (format for paper)
 - [ ] Update Methods section to match invariance.jl implementation
 - [ ] Write Results section highlighting both examples
 
 ### For Reviewer Response
-- [ ] Draft response emphasizing single-stage robustness
-- [ ] Highlight repressilator as ambitious mechanistic example
-- [ ] Explain strategic focus on reliable method over speculative extensions
+- [ ] Draft reviewer response for single-stage focus
+- [ ] Highlight repressilator example
+- [ ] Explain focus on single-stage over multi-stage
 
 ## Questions Resolved
 
 1. ~~Which ambitious example?~~ → Repressilator
-2. ~~Single vs multi-stage focus?~~ → Single-stage (robust and reliable)
+2. ~~Single vs multi-stage focus?~~ → Single-stage
 3. ~~How to handle sequential IIR findings?~~ → Brief mention in future work
 4. ~~Development strategy for profiling?~~ → Incremental: 2D → 2D+nuisance → 6-param → 18-param
 

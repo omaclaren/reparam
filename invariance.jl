@@ -4,9 +4,8 @@
 
 function find_invariant_subspace(ϕ_func, θ0;
                                  compute_J=compute_ϕ_Jacobian,
-                                 rtolJ=sqrt(eps(real(eltype(θ0)))),
-                                 atolM=nothing,  # Absolute tolerance (deprecated, use rtolM instead)
-                                 rtolM=32*sqrt(eps(real(eltype(θ0)))),  # Relative tolerance (default: 32√eps ≈ 4.8e-7 for stiff systems)
+                                 rtol_rank=1e-8,
+                                 rtol_invariance=1e-6,
                                  kwargs...)
 
     """
@@ -31,14 +30,10 @@ function find_invariant_subspace(ϕ_func, θ0;
     - `θ0`: Point in current parameter space to evaluate the Jacobian (typically MLE in f-transformed space)
     - `compute_J`: Function to compute Jacobian (default: compute_ϕ_Jacobian).
                    Can pass custom implementation for flexibility.
-    - `rtolJ`: Relative tolerance for determining numerical rank of J (default: √eps ≈ 1.5e-8)
-    - `atolM`: Absolute tolerance for invariance test (default: nothing, deprecated).
-               Only use for backward compatibility with old code that requires fixed absolute tolerance.
-    - `rtolM`: Relative tolerance for invariance test (default: 32√eps ≈ 4.8e-7).
-               Effective tolerance is τM = rtolM * σ_max, which scales with Jacobian magnitude.
-               The default value is calibrated for stiff ODE systems and provides ~2× safety margin.
-               For smooth problems, can tighten to √eps; for very stiff systems, may need up to 1e-6.
-               Heuristic: rtolM ≳ 1.5 * max(MS_invariant) / σ_max where MS are singular values of M_test.
+    - `rtol_rank`: Relative tolerance for determining numerical rank of J (default: 1e-8)
+    - `rtol_invariance`: Relative tolerance for invariance test (default: 1e-6).
+               Effective tolerance is τ = rtol_invariance * σ_max, which scales with Jacobian magnitude.
+               May need adjustment for different problem types; use verbose=true to check classification.
 
     # Returns
     - `S`: Singular values from the initial Jacobian SVD
@@ -81,15 +76,15 @@ function find_invariant_subspace(ϕ_func, θ0;
     J = compute_J(ϕ_func, θ0)
     m, p = size(J)  # m = distribution params, p = mechanistic params
     
-    # CRITICAL: full=true for complete nullspace when p>m
+    # full=true needed for complete null space when p > m
     svd_result = svd(J; full=true)
     S = svd_result.S
     V = svd_result.V  # p×p
     
     # Relative (approximate) rank determination
     σmax = maximum(S)
-    τJ = rtolJ * σmax
-    rankJ = count(>(τJ), S)
+    τ_rank = rtol_rank * σmax
+    rankJ = count(>(τ_rank), S)
     
     V_r = V[:, 1:rankJ]        # Right singular vectors for non-zero singular values
     V_0 = V[:, rankJ+1:end]    # Right singular vectors for zero singular values (null space basis)
@@ -104,25 +99,10 @@ function find_invariant_subspace(ϕ_func, θ0;
     # --- 2. Extract Invariant Component via Higher-Order Test ---
     r0 = size(V_0, 2)
 
-    # Compute effective invariance tolerance
-    # Prefer rtolM (relative, scales with problem) over atolM (absolute, legacy)
-    if !isnothing(atolM)
-        # Backward compatibility: use absolute tolerance if explicitly provided
-        τM = atolM
-    else
-        # Default: use relative tolerance (consistent with rtolJ)
-        τM = rtolM * σmax
-    end
+    # Invariance tolerance: relative, scales with Jacobian magnitude
+    τ_inv = rtol_invariance * σmax
 
-    # Check if finite-difference method is requested
-    if haskey(kwargs, :invariance_method) && kwargs[:invariance_method] == :finite_difference
-        error("Finite-difference invariance test is not currently supported.\n" *
-              "The previous implementation was found to be incorrect.\n" *
-              "Please use the default Hessian-based method (remove invariance_method kwarg).\n" *
-              "If you encounter nested AD errors, this indicates a limitation of the current implementation.")
-    end
-
-    # Hessian-based invariance test (default and recommended method)
+    # Hessian-based invariance test
     # Efficiently compute Hessian-vector products: differentiate J(θ)*V_0 instead of full J(θ)
     # This gives (m*r0)×p instead of (m*p)×p - significant savings when r0 << p
     flat_JV_func = θ -> vec(compute_J(ϕ_func, θ) * V_0)
@@ -139,19 +119,19 @@ function find_invariant_subspace(ϕ_func, θ0;
     # Reduced SVD to separate invariant from non-invariant null space directions
     M_test_svd = svd(M_test; full=false)
     MS = M_test_svd.S
-    # Use τM threshold (relative or absolute depending on parameters)
+    # Use relative threshold τ_inv = rtol_invariance * σ_max
     # We expect MS ≈ 0 for invariant null space
-    rankM = count(>(τM), MS)
+    rankM = count(>(τ_inv), MS)
 
     # DIAGNOSTIC OUTPUT
     if haskey(kwargs, :verbose) && kwargs[:verbose]
         println("\n  Hessian-based invariance test diagnostics:")
-        println("    τM (threshold): $τM")
+        println("    τ_inv (threshold): $τ_inv")
         println("    M_test singular values (should be ~0 for invariant):")
         for i in 1:min(length(MS), r0)
-            ratio = MS[i] / τM
-            status = MS[i] > τM ? "✗ NON-INVARIANT" : "✓ invariant"
-            println("      MS[$i] = $(round(MS[i], sigdigits=4)) ($(round(ratio, digits=2))×τM) $status")
+            ratio = MS[i] / τ_inv
+            status = MS[i] > τ_inv ? "✗ NON-INVARIANT" : "✓ invariant"
+            println("      MS[$i] = $(round(MS[i], sigdigits=4)) ($(round(ratio, digits=2))×τ_inv) $status")
         end
         println("    Classification: $rankM non-invariant, $(r0-rankM) invariant")
     end
