@@ -1,3 +1,18 @@
+# ============================================================================
+# KNOWN INCORRECT — DO NOT USE FOR PAPER
+# ============================================================================
+# Issues identified (2025-02-23):
+# 1. Parameterisation likely wrong: ψ_vals appear to be in log(ψ) space but
+#    the ψ_to_θ transform may not handle this correctly. MLE predictions look
+#    plausible but grid point predictions may be in wrong space.
+# 2. Method is wrong: uses fixed MLE row/column slices instead of proper 1D
+#    profile extraction (maximize over other direction). This conflates nuisance
+#    variation with target parameter effects — evidenced by m₂ showing reversed
+#    pattern (non-identifiable width > identifiable width).
+# 3. Results NOT verified by user before committing.
+# See context/context_20260223_phase6_prediction_intervals_broken.md for details.
+# ============================================================================
+#
 # Compute prediction intervals from saved 2D profile likelihood results
 #
 # Post-processes .jls files from run_repressilator_profile.jl (NeSI output).
