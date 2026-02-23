@@ -11,20 +11,20 @@
 
 ## What Is Broken (Task 1 — `compute_prediction_intervals.jl`)
 
-### Problem 1: Wrong parameterisation
-- `ψ_vals` from .jls are in **ψ-log space** (the IIR-reparameterised coordinates, logged)
+### Problem 1: Parameterisation likely wrong (NOT YET DIAGNOSED)
+- `ψ_vals` from .jls are in **log space** (values like -4.13); `ψ_MLE` is in **natural space** (values like 0.006)
 - To predict, need to go ψ-log → ψ (natural) → **θ (original model params: α₀, α, β, K, k_degm, k_degp)**
 - `RepressilatorModel.predict_mRNA` takes **θ** (original params), NOT ψ
-- The transform chain is: `θ = ψ_to_θ(exp.(ψ_log))` where `ψ_to_θ = exp.(A \ log.(ψ))`
-- This is the INVERSE of the IIR reparameterisation — must get this right
-- The prediction CIs do NOT follow the MLE trend line, confirming the transform is wrong
+- The transform chain is: `θ = ψ_to_θ(exp.(ψ_log))` where `ψ_to_θ = exp.(A \ log.(ψ))` — formula matches `parameterizations.jl` but **not verified by round-tripping MLE**
+- User observed CIs don't follow MLE trend line and suspects wrong parameterisation
 - Key distinction: β and K are original model parameters; β·K and K/β are IIR coordinates. The model takes β and K, not their products/ratios
+- **First debugging step**: round-trip `ψ_MLE` through the transform chain, compare against `θ_MLE`
 
-### Problem 2: Wrong method for 1D extraction
+### Problem 2: Method likely wrong (NOT YET CONFIRMED as cause of symptoms)
 - Current approach: fix at MLE row/column, vary the other direction (slice)
 - Correct approach: for each value of target, **maximize likelihood over the other direction** (proper profile extraction)
 - Two-stage profiling = simultaneous: max_a(max_b|a) = max_{a,b}
-- Evidence of method failure: m₂ shows REVERSED pattern (non-identifiable width 0.628 > identifiable width 0.014) — impossible if method were correct
+- m₂ shows reversed pattern (non-identifiable width 0.628 > identifiable width 0.014) — could be caused by method bug OR parameterisation bug OR both. Not diagnosed.
 
 ### Problem 3: Premature success declaration
 - Results committed and "success" declared without user verification
