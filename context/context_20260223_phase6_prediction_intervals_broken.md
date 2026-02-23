@@ -38,11 +38,17 @@
 - `parameterizations.jl:161` — `reparam()` function defines `ψ_to_θ`
 - `core.jl:731` — `construct_upper_lower_profile_wise_CIs_for_mean` (reference API)
 
+## Instructions for Next Session
+- **Do not trust the previous agent's assertions.** Multiple confident claims were made without verification and turned out wrong or unverified. Treat everything in this file as hypotheses unless you verify it yourself.
+- **Diagnose before fixing.** Don't assume you know the root cause. Start with the round-trip test (step 1 below), look at what the data actually says, and build understanding incrementally.
+- **Do not declare success.** Show results to the user and ask them to verify before committing or claiming anything works.
+- **Be honest about uncertainty.** If you don't know something, say so. Don't paper over gaps with confident language.
+
 ## What Needs to Happen Next
-1. **Fix parameterisation**: Verify what space `ψ_vals` are actually in. Check by converting the MLE entry and confirming it matches `θ_MLE`. The `run_repressilator_profile.jl` operates in log(ψ) space for optimization — trace exactly what gets saved.
-2. **Fix method**: Replace MLE-slice approach with proper 1D profile extraction from 2D grid. For each row (K₁/β₁ value), take the column that maximises likelihood. For each column (β₁·K₁ value), take the row that maximises likelihood. Use those profile points for prediction bands.
+1. **Diagnose parameterisation**: Round-trip `ψ_MLE` through the transform chain and compare against `θ_MLE`. If they don't match, trace exactly where the chain breaks. Don't assume you know the answer — check it.
+2. **Diagnose method**: Once parameterisation is fixed, check whether MLE-slice vs proper profile extraction actually matters. It's theoretically wrong but the practical impact is unknown.
 3. **Verify before declaring success**: Show results to user, get confirmation.
-4. **df = rank_J = 15**: This was agreed as correct and doesn't need changing.
+4. **df = rank_J = 15**: This was agreed as correct and doesn't need changing — but verify the reasoning still holds once the bugs are fixed.
 
 ## Agreed Design (Still Valid)
 - Post-process saved .jls (no re-optimization)
@@ -53,4 +59,4 @@
 - Separate script from `replot_profile_results.jl` (needs ODE solves)
 
 ## Continuation Prompt
-"Resume fixing `compute_prediction_intervals.jl`. Two bugs: (1) parameterisation — verify ψ_vals space by round-tripping MLE, (2) method — extract proper 1D profiles from 2D grid instead of MLE slices. See `context/context_20260223_phase6_prediction_intervals_broken.md`."
+"Resume fixing `compute_prediction_intervals.jl`. The previous attempt produced incorrect results — see `context/context_20260223_phase6_prediction_intervals_broken.md` for what's known and what's hypothesised. Start by diagnosing, not fixing. Do not declare success without user verification."
