@@ -53,7 +53,7 @@ The IIR paper has been through peer review at SIAM/ASA Journal on Uncertainty Qu
 **Purpose**: Demonstrate IIR on realistic mechanistic ODE model (reviewer request)
 
 **Model**: Eisenberg & Hayashi (2010) 3-gene repressilator
-- Parameters: 18 (fixing n=2 from original 19)
+- Parameters: 18 (fixing n=2.5 from original 19)
 - System: 6 coupled nonlinear ODEs (stiff)
 - Observables: All 3 mRNA time series
 

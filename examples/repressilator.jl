@@ -113,7 +113,7 @@ println("=" ^ 70)
 
 println(repeat("=", 70))
 println("Repressilator Model (Eisenberg & Hayashi Setup)")
-println("18 Free Parameters (n fixed at 3)")
+println("18 Free Parameters (n fixed at 2.5)")
 println("Expected identifiable: K₁/β₁, K₂/β₂, K₃/β₃ ratios")
 println(repeat("=", 70))
 
@@ -172,8 +172,8 @@ k_degp₁_true = 0.0012
 k_degp₂_true = 0.0011
 k_degp₃_true = 0.0013
 
-# Hill coefficient (fixed at 3.0 in model)
-n_true = 3.0
+# Hill coefficient (fixed at 2.5 in model)
+n_true = 2.5
 
 # Parameter names
 param_names = ["α₀₁", "α₀₂", "α₀₃",

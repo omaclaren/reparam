@@ -1,3 +1,8 @@
+# SUPERSEDED — orphaned inline copy, never used by any NeSI submit script.
+# The active NeSI script is run_repressilator_profile.jl (called by nesi/submit_50x50.sl etc).
+# This file has stale profiling bounds and no snake_direction/chunking support.
+#
+# Original description:
 # NeSI runner for 100x100 IIR profiling
 # Designed to run on Mahuika with 36 cores
 

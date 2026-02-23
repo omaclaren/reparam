@@ -1,3 +1,9 @@
+# SUPERSEDED by run_repressilator_profile.jl (Jan 2026)
+# This was a development precursor. The active NeSI script is
+# run_repressilator_profile.jl, which has wider profiling bounds,
+# snake_direction optimization, and chunked distributed profiling.
+#
+# Original description:
 # IIR-Guided Profiling - Full 18 Parameter Version
 # Extension of iir_guided_profiling.jl to all 18 repressilator parameters
 #
