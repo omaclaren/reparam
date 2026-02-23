@@ -178,6 +178,10 @@ function profile_point(lnlike_θ, ψ_fixed::Vector{Float64}, ψ_indices::Vector{
     ω_indices = setdiff(1:dim_all, ψ_indices)
     dim_ω = length(ω_indices)
 
+    if length(ψ_fixed) != length(ψ_indices)
+        error("profile_point: length(ψ_fixed)=$(length(ψ_fixed)) must match length(ψ_indices)=$(length(ψ_indices)).")
+    end
+
     # Build index mapping for reconstructing full θ vector
     ψω_to_θ_indices = construct_ψω_to_θ_indices(dim_all, ψ_indices, ω_indices)
     ψω_to_θ = ψω -> ψω[ψω_to_θ_indices]
@@ -188,6 +192,17 @@ function profile_point(lnlike_θ, ψ_fixed::Vector{Float64}, ψ_indices::Vector{
         lnlike_opt = lnlike_θ(θ_opt)
         converged_to = :NO_OPTIMIZATION
         return θ_opt, Float64[], lnlike_opt, converged_to
+    end
+
+    if length(ω_initial) != dim_ω
+        error("profile_point: length(ω_initial)=$(length(ω_initial)) must match nuisance dimension $dim_ω.")
+    end
+    if !isnothing(ω_initial_extras)
+        for (k, ω₀) in enumerate(ω_initial_extras)
+            if length(ω₀) != dim_ω
+                error("profile_point: ω_initial_extras[$k] has length $(length(ω₀)); expected $dim_ω.")
+            end
+        end
     end
 
     # Extract bounds for nuisance parameters
