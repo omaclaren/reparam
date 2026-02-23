@@ -45,13 +45,21 @@ julia --project=. compute_prediction_intervals.jl nesi/repressilator_16nuisance_
 1. User visual/scientific verification of the two regenerated figures.
 2. Manuscript/caption wording: make explicit that union is over available profile-wise directions and is a profile-wise skeleton approximation.
 3. Clarify interpretation: with one identifiable + one near-non-identifiable direction, the union is expected to be close to the identifiable envelope (limited incremental information).
-4. If needed later: extend from available-direction union to broader per-combination unions by running additional profile directions, especially multiple identifiable directions.
+4. Plan follow-up (not immediate): extend from available-direction union to broader per-combination unions by running additional profile directions, especially multiple identifiable directions.
+
+## Planned Task Queue (deferred)
+- [ ] Decide scope: keep single illustrative identifiable combo in main text vs add supplementary multi-combo robustness.
+- [ ] Run/verify IIR combination ranking by degree of identifiability (using singular values / profile sharpness proxies) for candidate ordering.
+- [ ] Select additional identifiable combinations to profile (baseline candidates: K₁/β₁, K₂/β₂, K₃/β₃).
+- [ ] Decide whether to include additional non-(K/β) combinations if ranking indicates strong influence and interpretability.
+- [ ] If expanded set is chosen, compute union over that profiled set and compare against current two-direction union.
 
 ## Next-Session Reminder (from user)
 - In PWA presentation we usually show influence of each parameter combination on each output.
 - Current union is over one identifiable and one near-non-identifiable direction, so it does not add much beyond the identifiable band.
+- For this in-sample task, “most identified” and “most prediction-influential” are expected to be very similar (both tied to local likelihood/Jacobian sensitivity), with possible divergence more relevant out-of-sample.
 - The richer target is union over multiple identifiable profile-wise directions.
 - The union envelope should be interpreted as union over **available** individual profile-wise intervals unless a broader set of directions is explicitly profiled.
 
 ## Continuation Prompt
-"Continue from the gridded-MLE aligned `compute_prediction_intervals.jl` with PWA union figure now implemented. Focus on manuscript-ready wording/annotation and any small presentation cleanup; keep ψ-order reconstruction and profile-path extraction logic unchanged."
+"Continue from the gridded-MLE aligned `compute_prediction_intervals.jl` with PWA union figure now implemented. Next: do a deferred planning pass for additional identifiable combinations (starting with Kᵢ/βᵢ), include an IIR-based ranking check to prioritize combinations, and decide whether any non-(K/β) combinations should be added; keep ψ-order reconstruction and profile-path extraction logic unchanged."
