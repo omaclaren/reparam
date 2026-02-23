@@ -44,10 +44,13 @@ julia --project=. compute_prediction_intervals.jl nesi/repressilator_16nuisance_
 ## Next Steps
 1. User visual/scientific verification of the two regenerated figures.
 2. Manuscript/caption wording: make explicit that union is over available profile-wise directions and is a profile-wise skeleton approximation.
-3. If needed later: extend from available-direction union to broader per-combination unions by running additional profile directions.
+3. Clarify interpretation: with one identifiable + one near-non-identifiable direction, the union is expected to be close to the identifiable envelope (limited incremental information).
+4. If needed later: extend from available-direction union to broader per-combination unions by running additional profile directions, especially multiple identifiable directions.
 
 ## Next-Session Reminder (from user)
 - In PWA presentation we usually show influence of each parameter combination on each output.
+- Current union is over one identifiable and one near-non-identifiable direction, so it does not add much beyond the identifiable band.
+- The richer target is union over multiple identifiable profile-wise directions.
 - The union envelope should be interpreted as union over **available** individual profile-wise intervals unless a broader set of directions is explicitly profiled.
 
 ## Continuation Prompt
