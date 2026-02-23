@@ -40,5 +40,10 @@ julia --project=. compute_prediction_intervals.jl nesi/repressilator_16nuisance_
 2. If accepted, use this figure/data for manuscript text and captioning.
 3. Optional cleanup: reduce console diagnostic verbosity once final.
 
+## Next-Session Reminder (from user)
+- For PWA-style presentation, we usually show the influence of **each parameter combination** on **each output**.
+- Also include the **union envelope over all individual profile-wise intervals** (as in Simpson & Maclaren, PLOS CB framing), not only the two-direction comparison panel.
+- This is a planning note for next session; no implementation done yet.
+
 ## Continuation Prompt
-"Continue from the gridded-MLE aligned `compute_prediction_intervals.jl`. If needed, do minor presentation cleanup only; keep ψ-order reconstruction and profile-path extraction logic unchanged."
+"Continue from the gridded-MLE aligned `compute_prediction_intervals.jl`. Next, plan/implement PWA-style per-combination influence plots per output plus the union over all individual profile-wise intervals (Simpson & Maclaren PLOS CB style), while keeping ψ-order reconstruction and profile-path extraction logic unchanged."
