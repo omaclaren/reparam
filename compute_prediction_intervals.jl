@@ -2,9 +2,11 @@
 # KNOWN INCORRECT — DO NOT USE FOR PAPER
 # ============================================================================
 # Issues identified (2025-02-23):
-# 1. Parameterisation likely wrong: ψ_vals appear to be in log(ψ) space but
-#    the ψ_to_θ transform may not handle this correctly. MLE predictions look
-#    plausible but grid point predictions may be in wrong space.
+# 1. Parameterisation likely wrong: ψ_vals are in log(ψ) space (IIR coordinates).
+#    Must convert ψ-log → ψ (natural) → θ (original model params: β, K, etc.)
+#    RepressilatorModel.predict_mRNA takes θ (original params), NOT ψ.
+#    β and K are original model parameters; β·K and K/β are IIR coordinates.
+#    The inverse IIR transform (ψ → θ) must be correct for predictions to work.
 # 2. Method is wrong: uses fixed MLE row/column slices instead of proper 1D
 #    profile extraction (maximize over other direction). This conflates nuisance
 #    variation with target parameter effects — evidenced by m₂ showing reversed

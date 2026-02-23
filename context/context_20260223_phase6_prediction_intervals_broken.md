@@ -11,12 +11,14 @@
 
 ## What Is Broken (Task 1 — `compute_prediction_intervals.jl`)
 
-### Problem 1: Wrong parameterisation (likely)
-- `ψ_vals` from .jls appear to be in **log(ψ) space** (values like `[1.97, -4.13, ...]`)
-- `ψ_MLE` is in **natural ψ space** (values like `[0.001, 0.006, ...]`)
-- The script treats `ψ_vals` entries as log(ψ) and does `exp.()` then `ψ_to_θ()`, but this needs verification
-- `ψ_to_θ` from `ReparamTools.reparam()` is `exp.(A \ log.(ψ))` where `A = A_T_final'`
-- The prediction CIs do NOT follow the MLE trend line, confirming something is wrong with the transform
+### Problem 1: Wrong parameterisation
+- `ψ_vals` from .jls are in **ψ-log space** (the IIR-reparameterised coordinates, logged)
+- To predict, need to go ψ-log → ψ (natural) → **θ (original model params: α₀, α, β, K, k_degm, k_degp)**
+- `RepressilatorModel.predict_mRNA` takes **θ** (original params), NOT ψ
+- The transform chain is: `θ = ψ_to_θ(exp.(ψ_log))` where `ψ_to_θ = exp.(A \ log.(ψ))`
+- This is the INVERSE of the IIR reparameterisation — must get this right
+- The prediction CIs do NOT follow the MLE trend line, confirming the transform is wrong
+- Key distinction: β and K are original model parameters; β·K and K/β are IIR coordinates. The model takes β and K, not their products/ratios
 
 ### Problem 2: Wrong method for 1D extraction
 - Current approach: fix at MLE row/column, vary the other direction (slice)
