@@ -1,70 +1,91 @@
-# NeSI Setup for IIR Profiling
+# NeSI Setup for IIR Profiling (Current Workflow)
 
-**Date:** 2025-12-18
-**Project Code:** uoa04634
+**Updated:** 2026-02-24  
+**Project Code:** `uoa04634`
 
-## Status
+This document reflects the **current** repressilator profiling workflow.
 
-Local 50x50 profiling completed successfully. Results confirm IIR analysis:
-- K1/B1 (identifiable): 37/50 peaked profile
-- B1*K1 (non-identifiable): 50/50 flat profile
+## Active scripts (use these)
 
-Current results have some artifacts - need finer grid and more optimizer restarts for publication quality.
+- Main runner: `run_repressilator_profile.jl`
+- NeSI submit scripts:
+  - `nesi/submit_50x50.sl`
+  - `nesi/submit_100x100.sl`
+  - `nesi/submit_test_20x20.sl` (quick check)
 
-## NeSI Setup Steps
+## Superseded scripts (do not use)
 
-### 1. Local Preparation (DONE)
+- `iir_guided_profiling_18param.jl`
+- `nesi/run_nesi_50x50.jl`
+- `nesi/run_nesi_100x100.jl`
+
+---
+
+## 1) Local preparation
+
 ```bash
 julia setup_project.jl
 ```
-This adds all dependencies to Project.toml and generates Manifest.toml.
 
-### 2. Upload to NeSI
-Via ondemand.nesi.org.nz Files dashboard, upload:
-- `Project.toml`
-- `Manifest.toml`
-- `nesi_test.jl`
-- `submit_nesi.sl`
-- `iir_guided_profiling_18param.jl`
+This ensures `Project.toml` / `Manifest.toml` are ready.
+
+## 2) Upload to NeSI
+
+Via OnDemand Files, upload/update:
+
+- `Project.toml`, `Manifest.toml`
 - `ReparamTools.jl`
+- `core.jl`, `invariance.jl`, `parameterizations.jl`, `visualization.jl` (if changed)
+- `run_repressilator_profile.jl`
 - `examples/RepressilatorModel.jl`
-- (and any other needed files)
+- `nesi/submit_50x50.sl`, `nesi/submit_100x100.sl` (if changed)
 
-### 3. Submit Test Job
+Also upload any plotting/post-processing scripts you plan to run locally (e.g., `replot_profile_results.jl`, `compute_prediction_intervals.jl`) to keep versions synced.
+
+## 3) Optional test job
+
 ```bash
 cd /path/to/reparam
 sbatch submit_nesi.sl
 ```
 
-### 4. Check Status
+Check:
+
 ```bash
 squeue --me
 ```
 
-### 5. View Output
-Look for `nesi_test_XXXX.out` file.
+## 4) Run profiling jobs
 
-## Files for NeSI
+```bash
+cd /path/to/reparam/nesi
+sbatch submit_test_20x20.sl   # quick smoke test
+sbatch submit_50x50.sl        # publication-quality baseline
+sbatch submit_100x100.sl      # higher resolution (longer runtime)
+```
 
-Key files to upload:
-- `Project.toml`, `Manifest.toml` - dependencies
-- `nesi_test.jl` - test script
-- `submit_nesi.sl` - SLURM submission script
-- `iir_guided_profiling_18param.jl` - main profiling script
-- `ReparamTools.jl` - core module
-- `examples/RepressilatorModel.jl` - model definition
+## 5) Outputs
 
-## Next Steps for Publication-Quality Results
+Main result files are written in `nesi/`, e.g.
 
-1. Run on NeSI with more cores (e.g., 32+)
-2. Increase grid to 75x75 or 100x100
-3. Increase `n_extra_guesses` (more optimizer restarts)
-4. Consider longer `optmaxtime` per point
+- `repressilator_16nuisance_50x50_results.jls`
+- `repressilator_16nuisance_100x100_results.jls`
 
-## Current Local Results
+Download `.jls` outputs and plot **locally** (standard workflow).
 
-50x50 grid, 7 workers, ~2.5h compute time (excluding laptop suspend):
-- Confirms IIR-identified structure
-- K1/B1 peaked (identifiable)
-- B1*K1 flat (non-identifiable)
-- Plot: `iir_guided_profiling_18param_result.png`
+---
+
+## Typical local post-processing
+
+```bash
+julia --project=. replot_profile_results.jl nesi/repressilator_16nuisance_50x50_results.jls
+julia --project=. compute_prediction_intervals.jl nesi/repressilator_16nuisance_50x50_results.jls
+```
+
+---
+
+## Notes
+
+- NeSI runs are for profiling compute; plotting is usually done locally.
+- Keep commits/file uploads targeted to changed files only.
+- Prefer the `nesi/submit_*.sl` scripts over older root-level submit/runner files.
