@@ -15,8 +15,9 @@
 #   julia --project=. compute_prediction_intervals.jl nesi/repressilator_16nuisance_50x50_results.jls
 #
 # Output:
-#   <results>_predictions.png  — 3×2 panel figure (3 mRNA species × 2 directions)
-#   <results>_predictions.jls  — saved prediction data for further analysis
+#   <results>_predictions.png            — 3×2 panel figure (3 mRNA species × 2 profile directions)
+#   <results>_predictions_pwa_union.png  — 3×1 PWA-style overlay (individual intervals + union)
+#   <results>_predictions.jls            — saved prediction data for further analysis
 
 using Serialization
 using Distributions
@@ -330,9 +331,15 @@ if n_survive_nonident == 0
     error("No valid prediction points for non-identifiable profile after thresholding")
 end
 
+# Union over available individual profile-wise intervals in this results file.
+# Here: identifiable-direction profile interval ∪ non-identifiable-direction profile interval.
+lower_union = min.(lower_vary_ident, lower_vary_nonident)
+upper_union = max.(upper_vary_ident, upper_vary_nonident)
+
 # === REPORT ===
 width_ident = [mean(upper_vary_ident[s, :] - lower_vary_ident[s, :]) for s in 1:n_species]
 width_nonident = [mean(upper_vary_nonident[s, :] - lower_vary_nonident[s, :]) for s in 1:n_species]
+width_union = [mean(upper_union[s, :] - lower_union[s, :]) for s in 1:n_species]
 
 println("\n" * "=" ^ 72)
 println("PREDICTION INTERVAL SUMMARY (PROFILE-BASED)")
@@ -344,11 +351,12 @@ println("  Surviving profile points: $n_survive_nonident / $(length(active_nonid
 
 species_names = ["m₁", "m₂", "m₃"]
 println("\nPer-species mean prediction widths:")
-println("  Species   Identifiable   Non-identifiable   Ratio")
+println("  Species   Identifiable   Non-identifiable   Union(avail)   Ident/Non")
 for s in 1:n_species
     ratio = width_ident[s] / max(width_nonident[s], 1e-12)
-    println("  $(species_names[s])      $(round(width_ident[s], digits=4))         $(round(width_nonident[s], digits=4))             $(round(ratio, digits=1))×")
+    println("  $(species_names[s])      $(round(width_ident[s], digits=4))         $(round(width_nonident[s], digits=4))         $(round(width_union[s], digits=4))   $(round(ratio, digits=1))×")
 end
+println("\nNote: Union(avail) is over individual profile-wise intervals available in this results file.")
 
 # Diagnostic: is a reference trajectory inside each interval band?
 function outside_counts(pred_ref, lower_band, upper_band)
@@ -357,14 +365,18 @@ end
 
 outside_ident_orig = outside_counts(pred_MLE_mat, lower_vary_ident, upper_vary_ident)
 outside_nonident_orig = outside_counts(pred_MLE_mat, lower_vary_nonident, upper_vary_nonident)
+outside_union_orig = outside_counts(pred_MLE_mat, lower_union, upper_union)
 outside_ident_grid = outside_counts(pred_gridded_MLE_mat, lower_vary_ident, upper_vary_ident)
 outside_nonident_grid = outside_counts(pred_gridded_MLE_mat, lower_vary_nonident, upper_vary_nonident)
+outside_union_grid = outside_counts(pred_gridded_MLE_mat, lower_union, upper_union)
 
 println("\nReference-curve inclusion diagnostic (outside count / $(n_time)):")
 println("  Original MLE vs identifiable band: $(outside_ident_orig)")
 println("  Original MLE vs non-identifiable band: $(outside_nonident_orig)")
+println("  Original MLE vs union band: $(outside_union_orig)")
 println("  Gridded MLE vs identifiable band: $(outside_ident_grid)")
 println("  Gridded MLE vs non-identifiable band: $(outside_nonident_grid)")
+println("  Gridded MLE vs union band: $(outside_union_grid)")
 
 # === PLOTTING ===
 println("\nGenerating prediction interval plots...")
@@ -417,12 +429,63 @@ output_png = "$(output_base)_predictions.png"
 savefig(plt, output_png)
 println("Saved: $output_png")
 
+# Additional PWA-style comparison: individual profile-wise intervals + their union
+println("Generating PWA-style comparison plot (individual + union)...")
+plots_pwa = []
+
+for s in 1:n_species
+    ylim = species_ylims(s, pred_gridded_MLE_mat, data_mat)
+
+    lo_id = clamp.(lower_vary_ident[s, :], ylim[1], ylim[2])
+    hi_id = clamp.(upper_vary_ident[s, :], ylim[1], ylim[2])
+    lo_ni = clamp.(lower_vary_nonident[s, :], ylim[1], ylim[2])
+    hi_ni = clamp.(upper_vary_nonident[s, :], ylim[1], ylim[2])
+    lo_u = clamp.(lower_union[s, :], ylim[1], ylim[2])
+    hi_u = clamp.(upper_union[s, :], ylim[1], ylim[2])
+
+    label_union = s == 1 ? "Union over individual profiles" : ""
+    label_ident = s == 1 ? "K₁/β₁ profile" : ""
+    label_nonident = s == 1 ? "β₁·K₁ profile" : ""
+    label_mle = s == 1 ? "MLE" : ""
+    label_data = s == 1 ? "Data" : ""
+
+    p = plot(t_pred, lo_u, lw=0,
+             fillrange=hi_u, fillalpha=0.18, color=:mediumpurple3,
+             label=label_union,
+             xlabel="Time (s)", ylabel="Concentration",
+             title="PWA-style intervals (available profiles): $(species_labels[s])",
+             legend=:topright, grid=false, ylims=ylim)
+
+    plot!(p, t_pred, lo_id, lw=0,
+          fillrange=hi_id, fillalpha=0.22, color=:deepskyblue3,
+          label=label_ident)
+
+    plot!(p, t_pred, lo_ni, lw=0,
+          fillrange=hi_ni, fillalpha=0.22, color=:darkorange2,
+          label=label_nonident)
+
+    plot!(p, t_pred, pred_gridded_MLE_mat[s, :], lw=2.2, color=:black, label=label_mle)
+
+    scatter!(p, collect(t_obs), data_mat[s, :],
+             mc=:black, msc=:match, ms=3, markershape=:xcross,
+             label=label_data)
+
+    push!(plots_pwa, p)
+end
+
+plt_pwa = plot(plots_pwa..., layout=(3, 1), size=(1100, 1100))
+output_png_pwa = "$(output_base)_predictions_pwa_union.png"
+savefig(plt_pwa, output_png_pwa)
+println("Saved: $output_png_pwa")
+
 # === SAVE PREDICTION DATA ===
 pred_results = Dict(
     "lower_vary_ident" => lower_vary_ident,
     "upper_vary_ident" => upper_vary_ident,
     "lower_vary_nonident" => lower_vary_nonident,
     "upper_vary_nonident" => upper_vary_nonident,
+    "lower_union" => lower_union,
+    "upper_union" => upper_union,
     "pred_MLE" => pred_gridded_MLE_mat,
     "pred_gridded_MLE" => pred_gridded_MLE_mat,
     "pred_original_MLE" => pred_MLE_mat,
@@ -437,6 +500,7 @@ pred_results = Dict(
     "n_survive_nonident" => n_survive_nonident,
     "width_ident" => width_ident,
     "width_nonident" => width_nonident,
+    "width_union" => width_union,
     "mle_row" => mle_row,
     "mle_col" => mle_col,
     "k_gridded_mle" => k_gridded_mle,
@@ -446,8 +510,12 @@ pred_results = Dict(
     "θ_gridded_MLE" => θ_gridded_MLE,
     "outside_ident_original" => outside_ident_orig,
     "outside_nonident_original" => outside_nonident_orig,
+    "outside_union_original" => outside_union_orig,
     "outside_ident_gridded" => outside_ident_grid,
     "outside_nonident_gridded" => outside_nonident_grid,
+    "outside_union_gridded" => outside_union_grid,
+    "output_png" => output_png,
+    "output_png_pwa_union" => output_png_pwa,
     "rank_J" => rank_J,
     "ll_profile_ident" => ll_profile_ident,
     "ll_profile_nonident" => ll_profile_nonident,
