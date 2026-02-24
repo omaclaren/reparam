@@ -1,17 +1,34 @@
-# IIR Diagnostics Recovered from Saved Repressilator Results
+# IIR sensitivity ranking from saved repressilator result
 
-Generated: 2026-02-24 15:08:08
+Generated: 2026-02-24 15:44:47
 
-No profile reruns were performed. Diagnostics were recomputed at saved θ_MLE.
+Input file: `nesi/repressilator_16nuisance_50x50_results.jls`
+Grid: 50
+Mode: FULL PROFILE (16 nuisance)
 
-| file | rank(saved/recomputed) | n_ident(saved/recomp) | n_nonident(saved/recomp) | σ₁ | σ_r | gap σ_r/σ_{r+1} | target classes |
-|---|---:|---:|---:|---:|---:|---:|---|
-| repressilator_16nuisance_50x50_results.jls | 15/15 | 15/15 | 3/3 | 8262.0 | 14.61 | 687500.0 | K1/β1, β1·K1 |
+Saved rank: 15
+Recomputed rank: 15
+σ₁ = 8262.163301168415
+σ_r = 14.614471318250608
+σ_{r+1} = 2.125750526645953e-5
+gap σ_r/σ_{r+1} = 687497.0103528367
 
-## Notes
-- `gap σ_r/σ_{r+1}` is the rank-separation diagnostic at the recomputed point.
-- `n_noninvariant_null_recomputed = n_ident_recomputed - rank_recomputed`.
-- Target classes are inferred from saved `A_T_final` columns.
-- For manuscript claims, use the chosen publication result file (currently 50x50) and its own saved `θ_MLE`.
-- If two files have identical `θ_MLE` and identical `A_T_final`, target indices should match.
-- If `θ_MLE` and/or `A_T_final` differ across files, target index numbers may differ; compare monomial class (e.g., K₁/β₁) rather than raw ψ index.
+## Identifiable-direction ranking
+
+| rank | ψ index | sigma_eff | monomial |
+|---:|---:|---:|---|
+| 1 | 12 | 3969.981124 | `β₃^-1.05 * K₃^1.05` |
+| 2 | 9 | 3812.020887 | `β₁^-1.05 * K₁^1.05` |
+| 3 | 8 | 2954.744519 | `α₃^1.05` |
+| 4 | 10 | 2836.534481 | `k_degp₂^1.05` |
+| 5 | 7 | 2431.151415 | `k_degm₃^1.05` |
+| 6 | 13 | 2251.0486 | `α₁^1.05` |
+| 7 | 14 | 2026.953189 | `k_degp₃^1.05` |
+| 8 | 11 | 1997.208121 | `k_degm₁^1.05` |
+| 9 | 2 | 1984.298257 | `k_degm₂^1.05` |
+| 10 | 1 | 1341.60825 | `k_degp₁^1.05` |
+| 11 | 6 | 705.990258 | `β₂^-1.05 * K₂^1.05` |
+| 12 | 4 | 462.800551 | `α₂^1.05` |
+| 13 | 3 | 425.45197 | `α₀₃^1.05` |
+| 14 | 15 | 322.524006 | `α₀₁^1.05` |
+| 15 | 5 | 304.480568 | `α₀₂^1.05` |

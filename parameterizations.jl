@@ -104,56 +104,62 @@ end
 
 function scale_and_round(evecs; round_within=0.5, column_scales=nothing)
     """
-    Scale and round eigenvectors for more interpretable parameter transformations.
+    Scale and round eigenvectors for interpretable integer-exponent transformations.
 
-    Note mainly used when using coarser grid for parameter estimation. 
- 
     Parameters:
-    - evecs: Matrix of eigenvectors
-    - round_within: Threshold for rounding (default: 0.5)
+    - evecs: Matrix of eigenvectors (columns = basis vectors)
+    - round_within: Threshold for (i) choosing nonzero entries during scaling and
+      (ii) tolerated distance from an integer exponent after scaling (default: 0.5)
     - column_scales: Vector of scaling factors for each column (optional)
- 
+
     Returns:
-    - Matrix of scaled and rounded eigenvectors
+    - Matrix of scaled and integer-rounded eigenvectors
     """
     if column_scales === nothing
-        column_scales = ones(size(evecs,2))
+        column_scales = ones(size(evecs, 2))
     end
- 
+
     # Scale first
     evecs_scaled = similar(evecs)
-    evecs_scaled_rounded = similar(evecs)
-    
-    # Rescale each column so smallest non-zero is one
+
+    # Rescale each column so smallest nonzero entry (above threshold) is one
     for (i, col) in enumerate(eachcol(evecs))
-        # Find values above threshold
         above_threshold = abs.(col) .> round_within
         if any(above_threshold)
-            # Scale by smallest value above threshold
             col_above = col[above_threshold]
             min_nonzero = col_above[argmin(abs.(col_above))]
             evecs_scaled[:, i] = col / min_nonzero
         else
-            # All values below threshold - scale by maximum absolute value
             max_val = maximum(abs.(col))
             if max_val > eps()
                 evecs_scaled[:, i] = col / col[argmax(abs.(col))]
             else
-                # Column is essentially zero
                 evecs_scaled[:, i] = col
             end
         end
     end
-    
-    # Round last
-    evecs_scaled_rounded = round.(evecs_scaled/round_within)*round_within
-    # Apply column scales
+
+    # Round to nearest integer exponents
+    evecs_scaled_rounded = round.(evecs_scaled)
+
+    # Hard check: significant entries must be close to integers
+    for i in 1:size(evecs_scaled, 2)
+        sig = abs.(evecs_scaled[:, i]) .> round_within
+        if any(sig)
+            max_dev = maximum(abs.(evecs_scaled[sig, i] .- evecs_scaled_rounded[sig, i]))
+            if max_dev > round_within
+                error("scale_and_round: column $i is not close enough to integer exponents (max deviation = $max_dev, tolerance = $round_within)")
+            end
+        end
+    end
+
+    # Apply optional column scales
     for i in 1:length(column_scales)
         evecs_scaled_rounded[:, i] *= column_scales[i]
     end
 
     return evecs_scaled_rounded
- end
+end
 
 # --------------------------------------------------------
 # Coordinate Transformation Methods
@@ -236,7 +242,7 @@ function construct_distrib_XY(distrib_xy, XYtoxy)
     Returns: Distribution function taking XY coordinates
     """
     return XY -> distrib_xy(XYtoxy(XY))
-end 
+end
 
 # --------------------------------------------------------
 # Parameter Re-ordering Methods
@@ -255,7 +261,7 @@ function construct_ψω_to_θ_indices(dim_all, ψ_indices, ω_indices)
     Returns: Vector defining the mapping from (ψ,ω) ordering to θ ordering
     """
     rearrange_indices = zeros(Int, dim_all)
-    
+
     # Map interest parameters
     for (i, ti) in enumerate(ψ_indices)
         rearrange_indices[ti] = i
@@ -269,5 +275,3 @@ function construct_ψω_to_θ_indices(dim_all, ψ_indices, ω_indices)
 
     return rearrange_indices
 end
-
-
