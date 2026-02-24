@@ -315,7 +315,10 @@ function main(files::Vector{String})
         println(io, "## Notes")
         println(io, "- `gap σ_r/σ_{r+1}` is the rank-separation diagnostic at the recomputed point.")
         println(io, "- `n_noninvariant_null_recomputed = n_ident_recomputed - rank_recomputed`.")
-        println(io, "- Target classes are inferred from saved `A_T_final` columns (basis can be permuted/sign-flipped across runs).")
+        println(io, "- Target classes are inferred from saved `A_T_final` columns.")
+        println(io, "- For manuscript claims, use the chosen publication result file (currently 50x50) and its own saved `θ_MLE`.")
+        println(io, "- If two files have identical `θ_MLE` and identical `A_T_final`, target indices should match.")
+        println(io, "- If `θ_MLE` and/or `A_T_final` differ across files, target index numbers may differ; compare monomial class (e.g., K₁/β₁) rather than raw ψ index.")
     end
 
     println("\nSaved:")
