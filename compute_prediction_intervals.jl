@@ -357,6 +357,7 @@ for s in 1:n_species
     println("  $(species_names[s])      $(round(width_ident[s], digits=4))         $(round(width_nonident[s], digits=4))         $(round(width_union[s], digits=4))   $(round(ratio, digits=1))×")
 end
 println("\nNote: Union(avail) is over individual profile-wise intervals available in this results file.")
+println("      It is a skeletonized approximation to the pushforward of the full acceptance set.")
 
 # Diagnostic: is a reference trajectory inside each interval band?
 function outside_counts(pred_ref, lower_band, upper_band)
@@ -453,7 +454,7 @@ for s in 1:n_species
              fillrange=hi_u, fillalpha=0.18, color=:mediumpurple3,
              label=label_union,
              xlabel="Time (s)", ylabel="Concentration",
-             title="PWA-style intervals (available profiles): $(species_labels[s])",
+
              legend=:topright, grid=false, ylims=ylim)
 
     plot!(p, t_pred, lo_id, lw=0,

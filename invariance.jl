@@ -12,15 +12,15 @@ function find_invariant_subspace(ϕ_func, θ0;
     Finds invariant null subspace and its orthogonal complement for the auxiliary mapping ϕ_func at point θ0.
 
     Implements Algorithm 1 from the paper: Invariant Image Reparameterisation (IIR).
-    
+
     Key steps:
     1. Local SVD in current parameterisation to find a candidate null space basis.
     2. Higher-order invariance test to separate invariant from non-invariant null space directions.
     3. Construction of the final reparameterization subspaces.
 
-    The function tests whether null space directions remain in the null space under small 
+    The function tests whether null space directions remain in the null space under small
     perturbations using the condition: H_i(θ*)α = 0 for all i, where H_i are Hessian slices.
-    
+
     This determines whether we have:
     - Minimal image reparameterization: if full null space is invariant (N is empty)
     - Image reparameterization: if only part of null space is invariant (N is non-empty)
@@ -47,45 +47,46 @@ function find_invariant_subspace(ϕ_func, θ0;
     The reparameterization matrix is A = N_perp', giving:
     - Minimal image: ψ(θ) = f⁻¹(A f(θ)) captures all identifiable combinations
     - Image: ψ(θ) = f⁻¹(A f(θ)) captures identifiable + some non-invariant combinations
-    
+
     # Examples
     ```julia
     # Standard usage (e.g., with f = log)
     S, N, N_perp, rankJ = find_invariant_subspace(ϕ_func, log.(θ_mle))
-    
+
     # Construct reparameterization matrix
     A = N_perp'
-    
+
     # Check type of reparameterization
     if size(N, 2) == 0
         println("Minimal image reparameterization - maximum reduction")
     else
         println("Image reparameterization - dimension \$(size(N, 2)) invariant null space remains")
     end
-    
+
     # With custom Jacobian computation
-    S, N, N_perp, rankJ = find_invariant_subspace(ϕ_func, θ0; 
+    S, N, N_perp, rankJ = find_invariant_subspace(ϕ_func, θ0;
         compute_J = (f, θ) -> FiniteDiff.finite_difference_jacobian(f, θ))
     ```
     """
 
+
     T = real(eltype(θ0))
-    
+
     # --- 1. Initial Transformation (Local SVD) ---
     # Compute Jacobian and perform full SVD to get complete null space basis
     J = compute_J(ϕ_func, θ0)
     m, p = size(J)  # m = distribution params, p = mechanistic params
-    
+
     # full=true needed for complete null space when p > m
     svd_result = svd(J; full=true)
     S = svd_result.S
     V = svd_result.V  # p×p
-    
+
     # Relative (approximate) rank determination
     σmax = maximum(S)
     τ_rank = rtol_rank * σmax
     rankJ = count(>(τ_rank), S)
-    
+
     V_r = V[:, 1:rankJ]        # Right singular vectors for non-zero singular values
     V_0 = V[:, rankJ+1:end]    # Right singular vectors for zero singular values (null space basis)
 
@@ -151,6 +152,3 @@ function find_invariant_subspace(ϕ_func, θ0;
 
     return S, N, N_perp, rankJ
 end
-
-
-
