@@ -1,6 +1,6 @@
 #!/bin/bash -e
 #SBATCH --job-name=iir_50x50
-#SBATCH --time=04:00:00
+#SBATCH --time=06:00:00
 #SBATCH --mem=64G
 #SBATCH --cpus-per-task=72
 #SBATCH --account=uoa04634
