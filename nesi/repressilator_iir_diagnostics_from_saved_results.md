@@ -1,8 +1,8 @@
 # IIR sensitivity ranking from saved repressilator result
 
-Generated: 2026-02-24 15:44:47
+Generated: 2026-02-25 10:24:24
 
-Input file: `nesi/repressilator_16nuisance_50x50_results.jls`
+Input file: `nesi/repressilator_16nuisance_50x50_results_pre_integer_fix.jls`
 Grid: 50
 Mode: FULL PROFILE (16 nuisance)
 

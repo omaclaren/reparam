@@ -1,0 +1,173 @@
+======================================
+IIR 50x50 Profile (current settings)
+======================================
+Job ID: 4725448
+Node: mc091
+CPUs: 72
+Started: Tue 24 Feb 2026 21:06:23 NZDT
+======================================
+SLURM detected: 72 CPUs
+Workers ready: 71
+      From worker 32:	  Activating project at `~/reparam`
+      From worker 63:	  Activating project at `~/reparam`
+      From worker 48:	  Activating project at `~/reparam`
+      From worker 71:	  Activating project at `~/reparam`
+      From worker 61:	  Activating project at `~/reparam`
+      From worker 14:	  Activating project at `~/reparam`
+      From worker 23:	  Activating project at `~/reparam`
+      From worker 8:	  Activating project at `~/reparam`
+      From worker 6:	  Activating project at `~/reparam`
+      From worker 47:	  Activating project at `~/reparam`
+      From worker 51:	  Activating project at `~/reparam`
+      From worker 45:	  Activating project at `~/reparam`
+      From worker 65:	  Activating project at `~/reparam`
+      From worker 52:	  Activating project at `~/reparam`
+      From worker 54:	  Activating project at `~/reparam`
+      From worker 42:	  Activating project at `~/reparam`
+      From worker 49:	  Activating project at `~/reparam`
+      From worker 27:	  Activating project at `~/reparam`
+      From worker 58:	  Activating project at `~/reparam`
+      From worker 19:	  Activating project at `~/reparam`
+      From worker 31:	  Activating project at `~/reparam`
+      From worker 50:	  Activating project at `~/reparam`
+      From worker 5:	  Activating project at `~/reparam`
+      From worker 70:	  Activating project at `~/reparam`
+      From worker 41:	  Activating project at `~/reparam`
+      From worker 62:	  Activating project at `~/reparam`
+      From worker 10:	  Activating project at `~/reparam`
+      From worker 30:	  Activating project at `~/reparam`
+      From worker 28:	  Activating project at `~/reparam`
+      From worker 15:	  Activating project at `~/reparam`
+      From worker 24:	  Activating project at `~/reparam`
+      From worker 69:	  Activating project at `~/reparam`
+      From worker 44:	  Activating project at `~/reparam`
+      From worker 53:	  Activating project at `~/reparam`
+      From worker 68:	  Activating project at `~/reparam`
+      From worker 4:	  Activating project at `~/reparam`
+      From worker 64:	  Activating project at `~/reparam`
+      From worker 22:	  Activating project at `~/reparam`
+      From worker 43:	  Activating project at `~/reparam`
+      From worker 3:	  Activating project at `~/reparam`
+      From worker 2:	  Activating project at `~/reparam`
+      From worker 37:	  Activating project at `~/reparam`
+      From worker 34:	  Activating project at `~/reparam`
+      From worker 40:	  Activating project at `~/reparam`
+      From worker 55:	  Activating project at `~/reparam`
+      From worker 38:	  Activating project at `~/reparam`
+      From worker 46:	  Activating project at `~/reparam`
+      From worker 66:	  Activating project at `~/reparam`
+      From worker 16:	  Activating project at `~/reparam`
+      From worker 57:	  Activating project at `~/reparam`
+      From worker 67:	  Activating project at `~/reparam`
+      From worker 35:	  Activating project at `~/reparam`
+      From worker 9:	  Activating project at `~/reparam`
+      From worker 60:	  Activating project at `~/reparam`
+      From worker 59:	  Activating project at `~/reparam`
+      From worker 21:	  Activating project at `~/reparam`
+      From worker 20:	  Activating project at `~/reparam`
+      From worker 11:	  Activating project at `~/reparam`
+      From worker 18:	  Activating project at `~/reparam`
+      From worker 13:	  Activating project at `~/reparam`
+      From worker 26:	  Activating project at `~/reparam`
+      From worker 56:	  Activating project at `~/reparam`
+      From worker 39:	  Activating project at `~/reparam`
+      From worker 25:	  Activating project at `~/reparam`
+      From worker 7:	  Activating project at `~/reparam`
+      From worker 36:	  Activating project at `~/reparam`
+      From worker 33:	  Activating project at `~/reparam`
+      From worker 72:	  Activating project at `~/reparam`
+      From worker 17:	  Activating project at `~/reparam`
+      From worker 12:	  Activating project at `~/reparam`
+      From worker 29:	  Activating project at `~/reparam`
+Modules loaded on all workers
+
+======================================================================
+REPRESSILATOR PROFILE LIKELIHOOD
+======================================================================
+Mode: FULL PROFILE (16 nuisance)
+Grid: 50 × 50 = 2500 points
+Workers: 71
+
+======================================================================
+FINDING MLE
+======================================================================
+Running MLE optimization with 20 restarts...
+MLE found in 210.1 seconds
+Log-likelihood at MLE: -84.92
+β₁_MLE = 0.03, K₁_MLE = 28.61
+
+======================================================================
+RUNNING IIR ANALYSIS
+======================================================================
+
+  Hessian-based invariance test diagnostics:
+    τ_inv (threshold): 0.008262163301168418
+    M_test singular values (should be ~0 for invariant):
+      MS[1] = 0.0028 (0.34×τ_inv) ✓ invariant
+      MS[2] = 0.0002351 (0.03×τ_inv) ✓ invariant
+      MS[3] = 9.653e-5 (0.01×τ_inv) ✓ invariant
+    Classification: 0 non-invariant, 3 invariant
+IIR analysis completed in 85.7 seconds
+
+Rank: 15 / 18
+Identifiable: 15, Non-identifiable: 3
+
+Identifying gene 1 coordinates...
+  ψ_9 = K₁/β₁ (identifiable)
+  ψ_17 = β₁·K₁ (non-identifiable)
+
+Target: ψ_9 (K₁/β₁), ψ_17 (β₁·K₁)
+
+======================================================================
+PROFILING SETUP
+======================================================================
+Mode: FULL PROFILE (16 nuisance)
+Target (2D grid): ψ_9, ψ_17
+Profiled nuisance (16): ψ_1, ψ_2, ψ_3, ψ_4, ψ_5, ψ_6, ψ_7, ψ_8, ψ_10, ψ_11, ψ_12, ψ_13, ψ_14, ψ_15, ψ_16, ψ_18
+Fixed at MLE (0): none
+
+Grid ranges:
+  K₁/β₁: [6.56, 37500.0]
+  β₁·K₁: [0.0196, 49.1]
+
+======================================================================
+COMPUTING PROFILE LIKELIHOOD
+======================================================================
+Grid: 50 × 50 = 2500 points
+Nuisance to optimize: 16
+Extra restarts: 15
+Chunks: 36
+Workers: 71
+
+Starting profiling...
+Distributed profiling: 2500 points → 36 chunks on 71 workers
+Chunk sizes: [70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 69, 69, 69, 69, 69, 69, 69, 69, 69, 69, 69, 69, 69, 69, 69, 69, 69, 69, 69, 69]
+
+Completed in 159.0 minutes
+Finite values: 2500/2500
+
+Results saved to repressilator_16nuisance_50x50_results.jls
+
+======================================================================
+RESULTS SUMMARY
+======================================================================
+K₁/β₁ (identifiable): 23/50 above 95% threshold
+β₁·K₁ (non-identifiable): 50/50 above 95% threshold
+
+======================================================================
+COMPLETE
+======================================================================
+Summary:
+  Mode: FULL PROFILE (16 nuisance)
+  Grid: 50 × 50
+  K₁/β₁ (identifiable): 23/50 above threshold (peaked profile expected)
+  β₁·K₁ (non-identifiable): 50/50 above threshold (flat profile expected)
+
+Output: repressilator_16nuisance_50x50_results.jls
+
+To generate plots, run:
+  julia replot_profile_results.jl repressilator_16nuisance_50x50_results.jls
+
+======================================
+Finished: Tue 24 Feb 2026 23:51:25 NZDT
+======================================
