@@ -67,97 +67,153 @@ nuisance_to_profile = get(results, "nuisance_to_profile", Int[])
 fixed_at_mle = get(results, "fixed_at_mle", Int[])
 mode = get(results, "mode", "unknown")
 
-function normalize_ψ_rows(ψ_vals_raw, n_points_expected)
-    if ψ_vals_raw isa AbstractVector
+"""
+standardize_ψ_grid_layout(ψ_vals_raw, n_points_expected, ψ_log_MLE, target_2d, nuisance_to_profile)
+    -> (ψ_log_grid, ψ_saved_rows)
+
+Convert saved ψ containers into a single, human-readable canonical layout.
+
+Output format (both vectors have length = number of grid points):
+- ψ_saved_rows[k] : raw saved log-ψ row for grid point `k` (as stored in file)
+- ψ_log_grid[k]   : full canonical log-ψ vector for grid point `k`
+                    (length = n_params, indexed in canonical ψ coordinate order)
+
+So conceptually:
+- row 1 = parameter vector at grid point 1
+- row 2 = parameter vector at grid point 2
+- ...
+
+This function also expands partial layouts (e.g., slice files storing only 2 targets)
+by filling non-stored coordinates from ψ_MLE.
+"""
+function standardize_ψ_grid_layout(
+    ψ_vals_raw,
+    n_points_expected::Int,
+    ψ_log_MLE::Vector{Float64},
+    target_2d::Vector{Int},
+    nuisance_to_profile::Vector{Int}
+)
+    # 1) Standardize container to vector-of-rows in saved layout
+    ψ_saved_rows = if ψ_vals_raw isa AbstractVector
         if isempty(ψ_vals_raw)
-            return Vector{Vector{Float64}}()
+            Vector{Vector{Float64}}()
         elseif ψ_vals_raw[1] isa AbstractVector
-            return [collect(Float64.(v)) for v in ψ_vals_raw]
+            [collect(Float64.(v)) for v in ψ_vals_raw]
         else
             n_points_expected == 1 || error("ψ_vals is flat but ll_vals has $n_points_expected points")
-            return [collect(Float64.(ψ_vals_raw))]
+            [collect(Float64.(ψ_vals_raw))]
         end
     elseif ψ_vals_raw isa AbstractMatrix
         nr, nc = size(ψ_vals_raw)
         if nr == n_points_expected
-            return [vec(Float64.(ψ_vals_raw[i, :])) for i in 1:nr]
+            [vec(Float64.(ψ_vals_raw[i, :])) for i in 1:nr]
         elseif nc == n_points_expected
-            return [vec(Float64.(ψ_vals_raw[:, i])) for i in 1:nc]
+            [vec(Float64.(ψ_vals_raw[:, i])) for i in 1:nc]
         else
             error("Cannot align ψ_vals size ($nr, $nc) with ll_vals length $n_points_expected")
         end
     else
         error("Unsupported ψ_vals container type: $(typeof(ψ_vals_raw))")
     end
-end
 
-ψ_vals = normalize_ψ_rows(ψ_vals_raw, length(ll_vals))
+    # 2) Expand each row to full canonical log-ψ layout
+    n_params = length(ψ_log_MLE)
+    opt_indices = vcat(target_2d, nuisance_to_profile)
+    ψ_log_grid = Vector{Vector{Float64}}(undef, length(ψ_saved_rows))
+
+    for k in eachindex(ψ_saved_rows)
+        ψ_log_saved = ψ_saved_rows[k]
+        n_saved = length(ψ_log_saved)
+
+        # IMPORTANT: check opt_indices layout before generic n_params fallback.
+        # For full-profile repressilator files, n_saved == length(opt_indices) == n_params,
+        # but rows are stored in optimization order [target_2d; nuisance_to_profile],
+        # not canonical ψ index order.
+        if n_saved == length(opt_indices)
+            ψ_log_full = copy(ψ_log_MLE)
+            ψ_log_full[opt_indices] = ψ_log_saved
+            ψ_log_grid[k] = ψ_log_full
+        elseif n_saved == length(target_2d)
+            ψ_log_full = copy(ψ_log_MLE)
+            ψ_log_full[target_2d] = ψ_log_saved
+            ψ_log_grid[k] = ψ_log_full
+        elseif n_saved == n_params
+            ψ_log_grid[k] = copy(ψ_log_saved)
+        else
+            error("Cannot standardize ψ layout at grid point $k: saved length $n_saved, opt_indices length $(length(opt_indices)), n_params $n_params")
+        end
+    end
+
+    return ψ_log_grid, ψ_saved_rows
+end
 
 n_params = length(θ_MLE)
 ψ_log_MLE = log.(ψ_MLE)
+ψ_log_grid, ψ_saved_rows = standardize_ψ_grid_layout(
+    ψ_vals_raw, length(ll_vals), ψ_log_MLE, target_2d, nuisance_to_profile)
 
 println("Grid: $GRID × $GRID")
-println("Stored points: ll=$(length(ll_vals)), ψ=$(length(ψ_vals))")
+println("Stored points: ll=$(length(ll_vals)), ψ=$(length(ψ_log_grid))")
 GRID^2 == length(ll_vals) || println("  WARNING: GRID^2 = $(GRID^2), ll_vals has $(length(ll_vals)) entries")
 println("Mode: $mode")
 println("Rank: $rank_J, Identifiable: $n_ident, Non-identifiable: $n_nonident")
 println("Target coordinates: ψ_$(target_2d[1]) (identifiable), ψ_$(target_2d[2]) (non-identifiable)")
 println("Nuisance profiled: $(length(nuisance_to_profile)), fixed at MLE: $(length(fixed_at_mle))")
+println("Saved ψ row lengths: $(sort(unique(length.(ψ_saved_rows))))")
+println("Standardized ψ row length: $n_params")
 
 # ψ in natural scale -> θ
 ψ_to_θ(ψ) = exp.(A_T_final' \ log.(ψ))
-
-# Saved ψ rows can have different layouts depending on run mode.
-# Reconstruct full canonical log-ψ vector (length n_params).
-function reconstruct_full_ψ_log(
-    ψ_log_saved::Vector{Float64}, ψ_log_MLE::Vector{Float64},
-    target_2d::Vector{Int}, nuisance_to_profile::Vector{Int}
-)
-    n_params = length(ψ_log_MLE)
-    n_saved = length(ψ_log_saved)
-    opt_indices = vcat(target_2d, nuisance_to_profile)
-
-    if n_saved == length(opt_indices)
-        ψ_log_full = copy(ψ_log_MLE)
-        ψ_log_full[opt_indices] = ψ_log_saved
-        return ψ_log_full
-    elseif n_saved == length(target_2d)
-        ψ_log_full = copy(ψ_log_MLE)
-        ψ_log_full[target_2d] = ψ_log_saved
-        return ψ_log_full
-    elseif n_saved == n_params
-        return copy(ψ_log_saved)
-    else
-        error("Cannot reconstruct ψ layout: saved length $n_saved, opt_indices length $(length(opt_indices)), n_params $n_params")
-    end
-end
 
 # MLE round-trip check
 θ_roundtrip = ψ_to_θ(ψ_MLE)
 rt_err = maximum(abs.((θ_roundtrip .- θ_MLE) ./ θ_MLE))
 println("MLE round-trip max relative error: $(round(rt_err, sigdigits=3))")
 
-# === MODEL / DATA SETUP (must match run_repressilator_profile.jl) ===
-NT, T_end = 8, 10000.0
-t_obs = LinRange(0, T_end, NT)
-X0 = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-σ = 10.0
+# === MODEL / DATA SETUP ===
+# Preferred path: load stored observation data/metadata from results file.
+# Fallback for legacy result files: regenerate synthetic data with legacy constants.
+
+const n_species = 3
+
+has_stored_data = all(haskey(results, k) for k in ["data", "t_obs", "X0", "σ"])
+
+if has_stored_data
+    data = vec(Float64.(results["data"]))
+    t_obs = collect(Float64.(results["t_obs"]))
+    X0 = collect(Float64.(results["X0"]))
+    σ = Float64(results["σ"])
+    NT = haskey(results, "NT") ? Int(results["NT"]) : length(t_obs)
+    T_end = haskey(results, "T_end") ? Float64(results["T_end"]) : maximum(t_obs)
+
+    length(t_obs) == NT || error("Stored NT=$NT does not match length(t_obs)=$(length(t_obs))")
+    length(data) == n_species * NT || error("Stored data length $(length(data)) incompatible with n_species*NT=$(n_species*NT)")
+
+    println("Loaded observation data/metadata from results file.")
+else
+    println("WARNING: Results file does not include stored data. Falling back to legacy synthetic-data regeneration.")
+
+    NT, T_end = 8, 10000.0
+    t_obs = collect(LinRange(0, T_end, NT))
+    X0 = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    σ = 10.0
+
+    θ_true = [0.008, 0.009, 0.010,
+              1.0, 1.2, 1.5,
+              0.02, 0.025, 0.015,
+              30.0, 28.0, 32.0,
+              0.006, 0.0055, 0.0065,
+              0.0012, 0.0011, 0.0013]
+
+    Random.seed!(42)
+    y_true = RepressilatorModel.predict_mRNA(θ_true, t_obs, X0)
+    data = y_true + σ * randn(length(y_true))
+end
+
+data_mat = reshape(data, n_species, NT)
 
 t_pred = collect(LinRange(0, T_end, 501))
 n_time = length(t_pred)
-n_species = 3
-
-θ_true = [0.008, 0.009, 0.010,
-          1.0, 1.2, 1.5,
-          0.02, 0.025, 0.015,
-          30.0, 28.0, 32.0,
-          0.006, 0.0055, 0.0065,
-          0.0012, 0.0011, 0.0013]
-
-Random.seed!(42)
-y_true = RepressilatorModel.predict_mRNA(θ_true, t_obs, X0)
-data = y_true + σ * randn(length(y_true))
-data_mat = reshape(data, 3, NT)
 
 predict_mRNA_fine(θ) = RepressilatorModel.predict_mRNA(θ, t_pred, X0)
 
@@ -192,7 +248,7 @@ mle_col = argmin(abs.(target2_log_grid .- ψ_MLE_target2_log))
 k_gridded_mle = argmax(ll_vals)
 grid_mle_row = ((k_gridded_mle - 1) % GRID) + 1
 grid_mle_col = ((k_gridded_mle - 1) ÷ GRID) + 1
-ψ_log_full_grid_mle = reconstruct_full_ψ_log(ψ_vals[k_gridded_mle], ψ_log_MLE, target_2d, nuisance_to_profile)
+ψ_log_full_grid_mle = ψ_log_grid[k_gridded_mle]
 ψ_full_grid_mle = exp.(ψ_log_full_grid_mle)
 θ_gridded_MLE = ψ_to_θ(ψ_full_grid_mle)
 pred_gridded_MLE = predict_mRNA_fine(θ_gridded_MLE)
@@ -247,8 +303,7 @@ pred_lookup = Dict{Int, Matrix{Float64}}()  # k -> (3 × n_time)
 
 for (n, k) in enumerate(needed_indices)
     try
-        ψ_log_saved = ψ_vals[k]
-        ψ_log_full = reconstruct_full_ψ_log(ψ_log_saved, ψ_log_MLE, target_2d, nuisance_to_profile)
+        ψ_log_full = ψ_log_grid[k]
         ψ_full = exp.(ψ_log_full)
         θ = ψ_to_θ(ψ_full)
 

@@ -37,9 +37,10 @@ Before doing edits/commands beyond reads:
 2. Decide whether any extra convenience wrappers are needed (likely no).
 
 ## Deferred cleanup task (recorded)
-- Hybrid mode (`--mode=hybrid`) was private experimental work and is low-priority to remove directly.
-- Planned cleanup (when time allows):
-  1. remove hybrid branch from `run_repressilator_profile.jl`,
-  2. remove hybrid mentions from usage/comments/docs,
-  3. mark `wald_profile_comparison.jl` + `repressilator_hybrid_*.jls` as archival/delete,
-  4. simplify post-processing assumptions/loaders accordingly.
+- Hybrid mode (`--mode=hybrid`) was private experimental work.
+- ✅ Completed now:
+  1. removed hybrid branch from `run_repressilator_profile.jl`,
+  2. updated active usage/docs to slice/profile workflow.
+- Remaining low-priority cleanup:
+  1. mark `wald_profile_comparison.jl` + `repressilator_hybrid_*.jls` as archival/delete,
+  2. prune stale hybrid notes in legacy context/docs if desired.

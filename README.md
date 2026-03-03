@@ -91,6 +91,10 @@ See [examples/stat_model.jl](examples/stat_model.jl) for complete workflow.
   2. 1D profile over identifiable target (`K₁/β₁`),
   3. 1D profile over non-identifiable target (`β₁K₁`).
 
+Notes:
+- `run_repressilator_profile.jl` now supports **slice/profile** modes (hybrid removed).
+- Repressilator result files now store observation data/metadata (`data`, `t_obs`, `X0`, `σ`, etc.) so post-processing does not need to regenerate data from RNG state.
+
 Example:
 ```bash
 julia --project=. repressilator_prediction_intervals_from_2d_profile.jl nesi/repressilator_16nuisance_50x50_results.jls

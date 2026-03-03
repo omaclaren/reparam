@@ -1,16 +1,14 @@
 # Unified Repressilator Profile Likelihood Script
-# Supports slice, hybrid (linear path), and full profile modes
+# Supports slice and profile modes (hybrid mode removed)
 #
 # Usage:
 #   julia run_repressilator_profile.jl --nuisance=0              # Slice at MLE
-#   julia run_repressilator_profile.jl --mode=hybrid --grid=100  # Hybrid (linear path approx)
 #   julia run_repressilator_profile.jl --nuisance=16 --grid=50   # Full profile
 #   julia run_repressilator_profile.jl --nuisance=16 --workers=7 # Parallel
 #
 # Modes:
-#   slice (--nuisance=0): Fix all nuisance at MLE, evaluate likelihood on grid
-#   hybrid (--mode=hybrid): Linear path approximation for nuisance (fast, anti-conservative)
-#   profile (--nuisance>0): Full optimization over nuisance (slow, accurate)
+#   slice (--nuisance=0 or --mode=slice): Fix all nuisance at MLE, evaluate likelihood on grid
+#   profile (--nuisance>0 or --mode=profile): Optimize nuisance at each grid point
 #
 # On NeSI/SLURM, workers auto-detected from SLURM_CPUS_PER_TASK
 
@@ -43,17 +41,17 @@ end
 
 N_NUISANCE = parse_int_arg(ARGS, "--nuisance=", 16)  # Default: full profile
 GRID = parse_int_arg(ARGS, "--grid=", 50)
-MODE = parse_string_arg(ARGS, "--mode=", "auto")  # auto, slice, hybrid, profile
+MODE = parse_string_arg(ARGS, "--mode=", "auto")  # auto, slice, profile
 
 # Determine actual mode
 if MODE == "hybrid"
-    USE_HYBRID = true
-    N_NUISANCE = 16  # Hybrid handles all nuisance via linear path
-elseif MODE == "slice" || N_NUISANCE == 0
-    USE_HYBRID = false
+    error("--mode=hybrid has been removed. Use --nuisance=0 (slice) or --nuisance>0 (profile).")
+elseif MODE == "slice"
     N_NUISANCE = 0
-else
-    USE_HYBRID = false
+elseif MODE == "profile"
+    # keep N_NUISANCE as provided
+elseif MODE != "auto"
+    error("Unknown --mode=$MODE. Allowed: auto, slice, profile")
 end
 
 # Validate nuisance count
@@ -64,7 +62,7 @@ end
 # === DISTRIBUTED SETUP ===
 using Distributed
 
-USE_DISTRIBUTED = N_NUISANCE > 0 && !USE_HYBRID  # Only need distributed for full profiling
+USE_DISTRIBUTED = N_NUISANCE > 0  # Need distributed for nuisance profiling
 
 if USE_DISTRIBUTED
     if haskey(ENV, "SLURM_CPUS_PER_TASK")
@@ -100,23 +98,17 @@ if USE_DISTRIBUTED
     end
     println("Modules loaded on all workers")
 else
-    # Single-threaded for slice or hybrid (no workers added)
+    # Single-threaded for slice (no workers added)
     include(joinpath(@__DIR__, "ReparamTools.jl"))
     include(joinpath(@__DIR__, "examples/RepressilatorModel.jl"))
     using .ReparamTools
     using .RepressilatorModel
     using Distributions, LinearAlgebra, Random, ForwardDiff, Statistics
-    if USE_HYBRID
-        println("Single-threaded mode (hybrid/linear path)")
-    else
-        println("Single-threaded mode (slice)")
-    end
+    println("Single-threaded mode (slice)")
 end
 
 # === MODE DESCRIPTION ===
-mode_str = if USE_HYBRID
-    "HYBRID (linear path approximation)"
-elseif N_NUISANCE == 0
+mode_str = if N_NUISANCE == 0
     "SLICE (no nuisance, fixed at MLE)"
 elseif N_NUISANCE == 16
     "FULL PROFILE (16 nuisance)"
@@ -323,11 +315,7 @@ all_other_ψ = setdiff(1:n_params, target_2d)
 # then gene 2/3 products, then everything else
 # This is a heuristic - the identifiable combos are more "important" to profile
 
-if USE_HYBRID
-    # Hybrid: all nuisance handled via linear path (conceptually "profiled")
-    nuisance_to_profile = all_other_ψ
-    fixed_at_mle = Int[]
-elseif N_NUISANCE == 0
+if N_NUISANCE == 0
     nuisance_to_profile = Int[]
     fixed_at_mle = all_other_ψ
 elseif N_NUISANCE >= 16
@@ -359,9 +347,7 @@ println("  β₁·K₁: [$(round(ψ_target2_grid[1], sigdigits=3)), $(round(ψ_t
 
 # === RUN PROFILING ===
 println("\n" * "=" ^ 70)
-if USE_HYBRID
-    println("COMPUTING HYBRID PROFILE (linear path approximation)")
-elseif N_NUISANCE == 0
+if N_NUISANCE == 0
     println("COMPUTING SLICE (evaluating likelihood on grid)")
 else
     println("COMPUTING PROFILE LIKELIHOOD")
@@ -370,204 +356,8 @@ println("=" ^ 70)
 
 t_profile_start = time()
 
-# Storage for diagnostics (hybrid mode)
-gradient_norms = Float64[]
-
-if USE_HYBRID
-    # === HYBRID MODE: Linear path approximation for nuisance ===
-    #
-    # Algorithm:
-    # 1. Compute Hessian H of log-likelihood in ψ-space at MLE
-    # 2. Partition into interest (I) and nuisance (N)
-    # 3. At each grid point: δψ_N = -H_NN⁺ H_NI (ψ_I - ψ_I_MLE)
-    # 4. Evaluate true likelihood at (ψ_I, ψ_N_MLE + δψ_N)
-    # 5. Compute gradient diagnostic
-
-    println("Setting up hybrid profiling...")
-    println("  Computing Hessian at MLE (in log-ψ space)...")
-    flush(stdout)
-
-    # Define log-likelihood in log-ψ space (ensures positivity)
-    function lnlike_ψ_log_full(ψ_log)
-        try
-            ψ = exp.(ψ_log)
-            θ = ψ_to_θ(ψ)
-            if any(θ .<= 0) || any(!isfinite, θ)
-                return -Inf
-            end
-            return lnlike_θ(θ)
-        catch
-            return -Inf
-        end
-    end
-
-    # Work in log-ψ space
-    ψ_log_MLE = log.(ψ_MLE)
-
-    # Compute Hessian via ForwardDiff in log-ψ space
-    H_full = -ForwardDiff.hessian(lnlike_ψ_log_full, ψ_log_MLE)
-
-    # Symmetrize (numerical safety)
-    H_full = 0.5 * (H_full + H_full')
-
-    # Partition indices
-    interest_idx = target_2d
-    nuisance_idx = setdiff(1:n_params, target_2d)
-
-    # Extract blocks
-    H_II = H_full[interest_idx, interest_idx]
-    H_IN = H_full[interest_idx, nuisance_idx]
-    H_NI = H_full[nuisance_idx, interest_idx]
-    H_NN = H_full[nuisance_idx, nuisance_idx]
-
-    # Eigendecompose H_NN to handle non-identifiable directions
-    eigen_NN = eigen(Symmetric(H_NN))
-    λ_NN = eigen_NN.values
-    U_NN = eigen_NN.vectors
-
-    # Check PSD: H = -∇²ℓ should be PSD at a maximum
-    n_negative = sum(λ_NN .< -1e-10 * maximum(abs.(λ_NN)))
-    if n_negative > 0
-        println("  WARNING: $n_negative negative eigenvalues in H_NN (not at local max?)")
-        println("    Min eigenvalue: $(minimum(λ_NN))")
-    end
-
-    # Use POSITIVE-part eigenvalues only (safer than abs - avoids inverting saddle directions)
-    λ_pos = max.(λ_NN, 0.0)
-    λ_max = maximum(λ_pos)
-    rtol_eig = 1e-8
-    ident_mask = λ_pos .> rtol_eig * λ_max
-    n_ident_nuisance = sum(ident_mask)
-    n_flat_nuisance = sum(.!ident_mask)
-
-    println("  H_NN eigenvalue spectrum:")
-    println("    Identifiable (positive curvature): $n_ident_nuisance directions")
-    println("    Flat/saddle (non-identifiable): $n_flat_nuisance directions")
-    if n_flat_nuisance > 0 && any(λ_pos[ident_mask] .> 0)
-        gap = minimum(λ_pos[ident_mask]) / max(maximum(λ_pos[.!ident_mask]), 1e-15)
-        println("    Spectral gap: $(round(gap, sigdigits=2))×")
-    end
-
-    # Compute pseudoinverse using only identifiable (positive curvature) directions
-    # H_NN⁺ = U_r * Λ_r⁻¹ * U_rᵀ
-    U_r = U_NN[:, ident_mask]
-    Λ_r = λ_pos[ident_mask]  # Strictly positive
-    H_NN_pinv = U_r * Diagonal(1.0 ./ Λ_r) * U_r'
-
-    # Precompute path matrix (explicit projection form for clarity)
-    # path_matrix = -H_NN⁺ H_NI = -U_r Λ_r⁻¹ (U_rᵀ H_NI)
-    path_matrix = -(U_r * Diagonal(1.0 ./ Λ_r) * (U_r' * H_NI))
-
-    # For gradient diagnostic: curvature-scaled projected score
-    Λ_r_sqrt_inv = Diagonal(1.0 ./ sqrt.(Λ_r))
-
-    println("\nEvaluating $(GRID^2) grid points with linear path approximation...")
-    flush(stdout)
-
-    # Pre-allocate
-    ll_vals = zeros(GRID^2)
-    ψ_vals = zeros(2, GRID^2)
-    gradient_norms = zeros(GRID^2)
-
-    # Reference values in log-ψ space
-    ψ_log_I_MLE = ψ_log_MLE[interest_idx]
-    ψ_log_N_MLE = ψ_log_MLE[nuisance_idx]
-
-    # Gradient function for diagnostics (in log-ψ space)
-    function grad_N_lnlike_log(ψ_log_full)
-        try
-            g = ForwardDiff.gradient(lnlike_ψ_log_full, ψ_log_full)
-            return g[nuisance_idx]
-        catch
-            return fill(NaN, length(nuisance_idx))
-        end
-    end
-
-    # Loop in column-major order (target1 fast, target2 slow) - matches profile_target output
-    # No snake ordering needed since we're not optimizing (just evaluating likelihood)
-    local k = 0
-    local n_debug = 3  # Debug first few points
-    for (j, ψ2) in enumerate(ψ_target2_grid)   # j = target2 index (outer/slow)
-        for (i, ψ1) in enumerate(ψ_target1_grid)  # i = target1 index (inner/fast)
-            k += 1
-
-            # Interest parameter deviation in LOG-ψ space
-            ψ_log_I = [log(ψ1), log(ψ2)]
-            δψ_log_I = ψ_log_I - ψ_log_I_MLE
-
-            # Linear path approximation for nuisance in LOG-ψ space
-            δψ_log_N = path_matrix * δψ_log_I
-            ψ_log_N = ψ_log_N_MLE + δψ_log_N
-
-            # Build full log-ψ vector
-            ψ_log_full_k = copy(ψ_log_MLE)
-            ψ_log_full_k[interest_idx] = ψ_log_I
-            ψ_log_full_k[nuisance_idx] = ψ_log_N
-
-            # Debug output for first few points
-            if k <= n_debug
-                ψ_full_k = exp.(ψ_log_full_k)
-                println("\n  Debug point $k:")
-                println("    ψ_I = $([ψ1, ψ2])")
-                println("    δψ_log_I = $δψ_log_I")
-                println("    ||δψ_log_N|| = $(norm(δψ_log_N))")
-                println("    min(ψ) = $(minimum(ψ_full_k)), max(ψ) = $(maximum(ψ_full_k))")
-                θ_test = ψ_to_θ(ψ_full_k)
-                println("    min(θ) = $(minimum(θ_test)), max(θ) = $(maximum(θ_test))")
-            end
-
-            # Evaluate true likelihood (function takes log-ψ)
-            ll_vals[k] = lnlike_ψ_log_full(ψ_log_full_k)
-            ψ_vals[:, k] = ψ_log_I  # Already in log space
-
-            # Gradient diagnostic: ||g_scaled|| = ||Λ_r^{-1/2} U_rᵀ ∇_N log L||
-            if isfinite(ll_vals[k])
-                g_N = grad_N_lnlike_log(ψ_log_full_k)
-                if all(isfinite.(g_N))
-                    g_proj = U_r' * g_N  # Project onto identifiable subspace
-                    g_scaled = Λ_r_sqrt_inv * g_proj
-                    gradient_norms[k] = norm(g_scaled)
-                else
-                    gradient_norms[k] = NaN
-                end
-            else
-                gradient_norms[k] = NaN
-            end
-        end
-        # Progress (after each target2 column)
-        if j % max(1, GRID ÷ 10) == 0
-            println("  Column $j/$GRID complete")
-            flush(stdout)
-        end
-    end
-
-    # Convert to match expected format
-    ψ_vals = ψ_vals'  # Transpose to N×2
-
-    # Report gradient diagnostics
-    # The diagnostic is ||Λ_r^{-1/2} U_rᵀ ∇_N ℓ|| = curvature-scaled projected nuisance score
-    # Interpretation: size of implied one-step Newton correction in identifiable nuisance subspace
-    # Values << 1: near the nuisance optimum (linear path approximation valid)
-    # Values >> 1: far from nuisance optimum (approximation breaking down)
-    valid_grads = gradient_norms[isfinite.(gradient_norms)]
-    println("\nProjected nuisance score diagnostic (||Λ_r^{-1/2} U_rᵀ ∇_N ℓ||):")
-    println("  (Measures distance from nuisance optimum in curvature-scaled units)")
-    if isempty(valid_grads)
-        println("  WARNING: All gradient computations failed (NaN)")
-        println("  This may indicate issues with autodiff or parameter bounds")
-    else
-        println("  Valid points: $(length(valid_grads))/$(length(gradient_norms))")
-        println("  Median: $(round(median(valid_grads), sigdigits=3))")
-        println("  Max: $(round(maximum(valid_grads), sigdigits=3))")
-        n_good = sum(valid_grads .< 1.0)
-        println("  Points with diagnostic < 1 (good approximation): $n_good/$(length(valid_grads))")
-        if n_good < length(valid_grads)
-            println("  Points with diagnostic > 10 (poor approximation): $(sum(valid_grads .> 10))/$(length(valid_grads))")
-        end
-    end
-
-elseif N_NUISANCE == 0
-    # SLICE: Use profile_target with empty nuisance (matches working minimal_2D_IIR_coords.jl)
+if N_NUISANCE == 0
+    # SLICE: Use profile_target with empty nuisance
     # This ensures correct grid ordering for reshape
     println("Evaluating $(GRID^2) grid points via profile_target...")
     flush(stdout)
@@ -593,7 +383,6 @@ elseif N_NUISANCE == 0
     ψ_log_upper_targets = [ψ_log_upper[target_2d[1]], ψ_log_upper[target_2d[2]]]
 
     # Use profile_target with empty nuisance array (Float64[])
-    # This is the pattern from working minimal_2D_IIR_coords.jl
     ψ_vals, ll_vals = ReparamTools.profile_target(
         lnlike_slice_ψ_log, [1, 2], ψ_log_lower_targets, ψ_log_upper_targets, Float64[];
         grid_steps=GRID, use_distributed=false)
@@ -717,11 +506,7 @@ println("Finite values: $(sum(isfinite.(ll_vals)))/$(length(ll_vals))")
 # === SAVE RESULTS ===
 using Serialization
 
-output_base = if USE_HYBRID
-    "repressilator_hybrid_$(GRID)x$(GRID)"
-else
-    "repressilator_$(N_NUISANCE)nuisance_$(GRID)x$(GRID)"
-end
+output_base = "repressilator_$(N_NUISANCE)nuisance_$(GRID)x$(GRID)"
 
 results = Dict(
     "ψ_vals" => ψ_vals,
@@ -741,7 +526,16 @@ results = Dict(
     "n_ident" => n_ident,
     "n_nonident" => n_nonident,
     "mode" => mode_str,
-    "gradient_norms" => USE_HYBRID ? gradient_norms : Float64[]
+    # Stored observation data + metadata for reproducible post-processing
+    "data" => data,
+    "y_true" => y_true,
+    "t_obs" => collect(t_obs),
+    "X0" => X0,
+    "σ" => σ,
+    "θ_true" => θ_true,
+    "data_seed" => 42,
+    "NT" => NT,
+    "T_end" => T_end
 )
 
 serialize("$(output_base)_results.jls", results)
