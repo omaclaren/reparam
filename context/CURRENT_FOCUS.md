@@ -41,6 +41,8 @@ Before doing edits/commands beyond reads:
 - ✅ Completed now:
   1. removed hybrid branch from `run_repressilator_profile.jl`,
   2. updated active usage/docs to slice/profile workflow.
+- ✅ Completed now:
+  1. archived `wald_profile_comparison.jl`, `hybrid_profile_likelihood_summary.md`,
+     `repressilator_hybrid_*.jls`, and related hybrid PNGs to `archive/hybrid/`.
 - Remaining low-priority cleanup:
-  1. mark `wald_profile_comparison.jl` + `repressilator_hybrid_*.jls` as archival/delete,
-  2. prune stale hybrid notes in legacy context/docs if desired.
+  1. prune stale hybrid notes in legacy context/docs if desired.

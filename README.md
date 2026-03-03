@@ -94,6 +94,7 @@ See [examples/stat_model.jl](examples/stat_model.jl) for complete workflow.
 Notes:
 - `run_repressilator_profile.jl` now supports **slice/profile** modes (hybrid removed).
 - Repressilator result files now store observation data/metadata (`data`, `t_obs`, `X0`, `σ`, etc.) so post-processing does not need to regenerate data from RNG state.
+- Historical hybrid artifacts are archived under `archive/hybrid/`.
 
 Example:
 ```bash
