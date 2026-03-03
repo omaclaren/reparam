@@ -40,7 +40,7 @@ Via OnDemand Files, upload/update:
 - `examples/RepressilatorModel.jl`
 - `nesi/submit_50x50.sl`, `nesi/submit_100x100.sl` (if changed)
 
-Also upload any plotting/post-processing scripts you plan to run locally (e.g., `replot_profile_results.jl`, `compute_prediction_intervals.jl`) to keep versions synced.
+Also upload any plotting/post-processing scripts you plan to run locally (e.g., `replot_profile_results.jl`, `repressilator_prediction_intervals_from_2d_profile.jl`) to keep versions synced.
 
 ## 3) Optional test job
 
@@ -79,7 +79,7 @@ Download `.jls` outputs and plot **locally** (standard workflow).
 
 ```bash
 julia --project=. replot_profile_results.jl nesi/repressilator_16nuisance_50x50_results.jls
-julia --project=. compute_prediction_intervals.jl nesi/repressilator_16nuisance_50x50_results.jls
+julia --project=. repressilator_prediction_intervals_from_2d_profile.jl nesi/repressilator_16nuisance_50x50_results.jls
 ```
 
 ---

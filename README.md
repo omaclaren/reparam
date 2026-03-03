@@ -84,6 +84,18 @@ See [examples/stat_model.jl](examples/stat_model.jl) for complete workflow.
 - Profile-wise prediction uncertainty
 - Validation against profile likelihood (Eisenberg 2010)
 
+### Repressilator Post-processing Utilities
+- `replot_profile_results.jl` - Replot saved 2D profile likelihood surfaces from `.jls` results
+- `repressilator_prediction_intervals_from_2d_profile.jl` - Specialized utility for repressilator runs that compares prediction envelopes from:
+  1. full accepted 2D pushforward,
+  2. 1D profile over identifiable target (`K₁/β₁`),
+  3. 1D profile over non-identifiable target (`β₁K₁`).
+
+Example:
+```bash
+julia --project=. repressilator_prediction_intervals_from_2d_profile.jl nesi/repressilator_16nuisance_50x50_results.jls
+```
+
 ### Legacy Examples
 - `transport_model.jl` - Diffusive transport in composite medium
 - `mm_model.jl` - Michaelis-Menten/Monod kinetics
@@ -100,9 +112,11 @@ reparam/
 ├── utils.jl                  # Helper functions
 ├── parameterizations.jl      # Transformations, Varimax rotation
 ├── visualization.jl          # Plotting utilities
+├── run_repressilator_profile.jl                      # Canonical repressilator profiling runner
+├── repressilator_prediction_intervals_from_2d_profile.jl  # Repressilator prediction-band post-processing
 ├── examples/
 │   ├── stat_model.jl         # Pedagogical example
-│   ├── repressilator.jl  # Ambitious ODE example
+│   ├── repressilator.jl      # Ambitious ODE example
 │   └── [other examples]
 ├── CLAUDE.md                 # Complete project documentation
 ├── NEXT_STEPS.md            # Actionable next steps
