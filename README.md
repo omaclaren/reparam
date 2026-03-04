@@ -95,6 +95,7 @@ Notes:
 - `run_repressilator_profile.jl` now supports **slice/profile** modes (hybrid removed).
 - Repressilator result files now store observation data/metadata (`data`, `t_obs`, `X0`, `σ`, etc.) so post-processing does not need to regenerate data from RNG state.
 - Historical hybrid artifacts are archived under `archive/hybrid/`.
+- Legacy/sequential writeups are archived under `archive/legacy-sequential/` (as available).
 
 Example:
 ```bash
@@ -123,17 +124,18 @@ reparam/
 │   ├── stat_model.jl         # Pedagogical example
 │   ├── repressilator.jl      # Ambitious ODE example
 │   └── [other examples]
-├── CLAUDE.md                 # Complete project documentation
-├── NEXT_STEPS.md            # Actionable next steps
-└── PROJECT_SUMMARY.md       # Quick overview
+├── AGENTS.md                 # Canonical internal project context/strategy
+├── CLAUDE.md                 # Compatibility shim pointing to AGENTS.md
+├── NEXT_STEPS.md             # Actionable backlog
+└── archive/                  # Archived legacy artifacts and notes
 ```
 
 ## Documentation
 
 **For developers/contributors**:
-- [CLAUDE.md](CLAUDE.md) - Full project status and technical notes
-- [NEXT_STEPS.md](NEXT_STEPS.md) - Broader task backlog (contains historical items)
-- [PROJECT_SUMMARY.md](PROJECT_SUMMARY.md) - High-level overview
+- [AGENTS.md](AGENTS.md) - Canonical project context, strategy, and workflow status
+- [NEXT_STEPS.md](NEXT_STEPS.md) - Actionable backlog (ownership + manuscript + merge)
+- [CLAUDE.md](CLAUDE.md) - Compatibility shim (redirects to AGENTS.md)
 
 ## Method Details
 
