@@ -131,8 +131,9 @@ reparam/
 ## Documentation
 
 **For developers/contributors**:
-- [CLAUDE.md](CLAUDE.md) - Complete project status, technical notes, implementation details
-- [NEXT_STEPS.md](NEXT_STEPS.md) - Immediate tasks for manuscript finalization
+- [PROJECT_STATUS_CURRENT.md](PROJECT_STATUS_CURRENT.md) - Current article/workflow/ownership status (recommended first read)
+- [CLAUDE.md](CLAUDE.md) - Full project notes and historical technical detail
+- [NEXT_STEPS.md](NEXT_STEPS.md) - Broader task backlog (contains historical items)
 - [PROJECT_SUMMARY.md](PROJECT_SUMMARY.md) - High-level overview
 
 ## Method Details
