@@ -1,6 +1,7 @@
 # Invariant Image Reparameterisation (IIR)
 
-**Status:** Under revision at SIAM/ASA Journal on Uncertainty Quantification
+**Status:** Under revision at SIAM/ASA Journal on Uncertainty Quantification  
+**Current active sprint:** Repressilator closeout (figure/text integration + workflow finalization)
 
 This repository contains a Julia implementation of methods for automatically discovering identifiable parameter combinations in mathematical models using numerical invariance testing.
 
