@@ -1,11 +1,23 @@
 # Project Status: Invariant Image Reparameterisation (IIR)
 
-**Last Updated:** 2025-12-10
-**Phase:** Paper Revision - Profile Likelihood Demonstration In Progress
+**Last Updated:** 2026-03-04
+**Phase:** Paper Revision - Repressilator Figure/Manuscript Integration
 
 ## Overview
 
 The IIR paper has been through peer review at SIAM/ASA Journal on Uncertainty Quantification. We are implementing changes to address reviewer feedback. The core contribution is now clearly defined: **a single-stage numerical method for discovering image reparameterizations** that separates identifiable from non-identifiable parameter combinations using monomial transformations.
+
+## Recent Updates (2026-03-04)
+
+- Repressilator prediction post-processing refocused on comparison of:
+  1. full accepted 2D pushforward,
+  2. 1D profile over identifiable coordinate (`K₁/β₁`),
+  3. 1D profile over non-identifiable coordinate (`β₁K₁`).
+- Active script renamed to:
+  - `repressilator_prediction_intervals_from_2d_profile.jl`
+- Post-processing now prefers stored observation data from results files (with legacy fallback warning).
+- `run_repressilator_profile.jl` updated to slice/profile workflow only (`--mode=hybrid` removed).
+- Deprecated hybrid artifacts moved to `archive/hybrid/`.
 
 ## Strategic Focus: Single-Stage IIR with Monomials
 
@@ -49,7 +61,7 @@ The IIR paper has been through peer review at SIAM/ASA Journal on Uncertainty Qu
 
 **Status**: Complete and verified
 
-### 2. Repressilator (Ambitious) - In Progress
+### 2. Repressilator (Ambitious) - Active (integration phase)
 **Purpose**: Demonstrate IIR on realistic mechanistic ODE model (reviewer request)
 
 **Model**: Eisenberg & Hayashi (2010) 3-gene repressilator
@@ -70,7 +82,7 @@ Shows that profiling IIR-identified combinations (K₁/β₁ identifiable, β₁
 1. ✅ 2D ideal case (`minimal_2D_IIR_coords.jl`) - calibrate optimizer, understand expected behavior
 2. ✅ 2D + 1 nuisance (`minimal_2D_IIR_nuisance.jl`) - verify nuisance handling
 3. ✅ 6 params: β, K subset (`iir_guided_profiling.jl`) - working
-4. ✅ 18 params: full model IIR (`iir_guided_profiling_18param.jl`) - **IIR complete, profiling next**
+4. ✅ 18 params: full model IIR complete; canonical profiling now via `run_repressilator_profile.jl`
 
 **18-Parameter IIR Results** (2025-12-10):
 - Rank: 15/18, gap 723,000× (unambiguous)
@@ -79,14 +91,15 @@ Shows that profiling IIR-identified combinations (K₁/β₁ identifiable, β₁
 - Gene 1 coordinates found: ψ₆ = K₁/β₁ (identifiable), ψ₁₇ = β₁K₁ (non-identifiable)
 - Key settings: fine time grid (501 pts) + tight ODE tolerances (abstol=1e-10, reltol=1e-8) for IIR; observation grid (8 pts) for likelihood
 
-**Next step**: Add 2D profiling over gene 1 coordinates (K₁/β₁ vs β₁K₁) with 16 nuisance parameters
+**Current step**: Integrate manuscript-facing figure/text using canonical 50×50 result and updated prediction-comparison workflow
 
 **Key files**:
 - `examples/repressilator.jl` - full IIR analysis (reference)
 - `examples/RepressilatorModel.jl` - model definition
-- `iir_guided_profiling.jl` - 6-param subset profiling
-- `iir_guided_profiling_18param.jl` - **18-param IIR complete, profiling to be added**
-- `minimal_2D_IIR_coords.jl`, `minimal_2D_IIR_nuisance.jl` - calibration scripts
+- `run_repressilator_profile.jl` - canonical slice/profile runner (hybrid removed)
+- `repressilator_prediction_intervals_from_2d_profile.jl` - prediction comparison postprocessing
+- `replot_profile_results.jl` - profile figure replotting
+- `extract_iir_diagnostics_from_results.jl` - diagnostics from saved results
 
 **Narrative** (target for paper):
 1. **Discovery**: IIR automatically identifies K/β structure without symbolic computation
@@ -307,7 +320,7 @@ Brief mention of multi-stage possibilities with honest assessment:
 - [x] 2D ideal case working (`minimal_2D_IIR_coords.jl`)
 - [x] 2D + nuisance working (`minimal_2D_IIR_nuisance.jl`)
 - [x] 6-param subset profiling working (`iir_guided_profiling.jl`)
-- [x] 18-param full model profiling (`nesi/repressilator_16nuisance_100x100_results.jls`)
+- [x] 18-param full model profiling (`nesi/repressilator_16nuisance_50x50_results.jls` canonical; 100×100 retained as diagnostic)
 - [x] snake_direction optimization validated (54× smoothness improvement)
 - [ ] Generate comparison figure: original params vs IIR coords (for paper)
 
@@ -320,9 +333,10 @@ For paper figures, need to manually select which IIR coordinates correspond to g
 
 ### For Manuscript
 - [x] stat_model complete ✅
-- [x] Repressilator profile computation complete (100×100 grid)
+- [x] Repressilator profile computation complete (canonical 50×50 grid)
+- [x] Repressilator prediction comparison figure generated/polished (full2D pushforward vs 1D identifiable vs 1D non-identifiable)
 - [ ] Note in paper: τ_inv = rtol_invariance × σ₁ scales the invariance test relative to J's first-order signal. This is motivated by perturbation theory — we're checking if second-order leakage out of the null space is negligible compared to the range of J. Scaling by σ₁(M_test) instead would fail when the entire null space is invariant (noise vs noise).
-- [ ] Repressilator profile demonstration figure (format for paper)
+- [ ] Final caption/text integration for repressilator figure(s)
 - [ ] Update Methods section to match invariance.jl implementation
 - [ ] Write Results section highlighting both examples
 

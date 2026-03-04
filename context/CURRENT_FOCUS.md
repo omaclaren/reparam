@@ -13,10 +13,6 @@ Repressilator post-processing clarity pass:
 
 Primary goal: keep the script simple, explicit, and paper-aligned.
 
-## Broader project context (do not lose sight)
-For article-level and whole-repo status (including non-repressilator scope), see:
-- `PROJECT_STATUS_CURRENT.md`
-
 
 ## Non-negotiable constraints
 1. Keep this as a **specialized repressilator utility**, not a fake-general tool.
