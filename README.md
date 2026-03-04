@@ -66,6 +66,10 @@ See [examples/stat_model.jl](examples/stat_model.jl) for complete workflow.
 
 ## Examples
 
+Paper-facing examples (current revision):
+- `examples/stat_model.jl`
+- repressilator workflow (`examples/repressilator.jl` + profiling/postprocessing scripts)
+
 ### 1. stat_model.jl (Pedagogical)
 **Model**: Poisson limit distribution
 **Parameters**: n (sample size), p (probability)
@@ -102,11 +106,13 @@ Example:
 julia --project=. repressilator_prediction_intervals_from_2d_profile.jl nesi/repressilator_16nuisance_50x50_results.jls
 ```
 
-### Legacy Examples
+### Legacy Examples (public repo, non-paper)
 - `transport_model.jl` - Diffusive transport in composite medium
 - `mm_model.jl` - Michaelis-Menten/Monod kinetics
 - `stat_sum_model.jl` - Multi-stage IIR exploration (not in paper)
 - `pk_model.jl` - Pharmacokinetic model revealing multi-stage limitations
+
+These examples are retained for public-repo breadth and are being kept compatible with the current codebase, but they are not part of the core manuscript evidence package.
 
 ## Repository Structure
 
