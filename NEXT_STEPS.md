@@ -6,9 +6,9 @@
 
 ---
 
-## PHASE 1 — Repressilator closeout (ACTIVE, BLOCKING)
+## PHASE 1 — Repressilator closeout (code/repo side complete; manuscript items remain)
 
-> Do not start Phase 2+ until all Phase 1 items are complete.
+> For current code/repo work, this phase is no longer blocking. Remaining unchecked items here are manuscript-side.
 
 ### 1. Figure/package finalization
 - [x] Regenerate/verify final full2D vs 1D-id vs 1D-nonid prediction comparison figure
@@ -40,7 +40,7 @@
 
 ---
 
-## PHASE 2 — stat_model paper example refresh (after Phase 1)
+## PHASE 2 — stat_model paper example refresh (code work substantially complete)
 
 - [x] Run `examples/stat_model.jl` with current codebase
 - [x] Confirm rank / identifiable / non-identifiable outputs remain as expected
@@ -50,13 +50,13 @@
   - Verified both `poisson_limit=true` (on-disk script) and `poisson_limit=false` (in-memory check) run successfully with current code.
   - Non-limit case remains structurally identifiable (full rank) but shows one-sided weakening toward the Poisson limit.
   - Current output compares two weak-coordinate choices: exact local SVD basis and rounded interpretable basis.
-- [ ] Decide whether to promote this practical probe into a reusable library helper (general vector-direction perturbations) and call it from `examples/stat_model.jl`
-  - Current implementation remains example-local in `examples/stat_model.jl`.
+- [x] Decide whether to promote this practical probe into a reusable library helper (general vector-direction perturbations) and call it from `examples/stat_model.jl`
+  - 2026-03-10 decision: keep the practical directional probe example-local for now.
 - [ ] Ensure manuscript wording matches current stat_model behavior
 
 ---
 
-## PHASE 3 — Legacy example compatibility (public repo, non-paper)
+## PHASE 3 — Legacy example compatibility (public repo, non-paper) (CURRENT CODE/REPO FOCUS)
 
 Public-facing keeper examples:
 - [ ] `examples/mm_model.jl`

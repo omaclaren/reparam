@@ -2,19 +2,21 @@
 
 **Last Updated:** 2026-03-10  
 **Primary working branch:** `revision1`  
-**Current sprint (blocking):** **Finish repressilator deliverables** before shifting to other work.
+**Current sprint:** **Phase 3 keeper-example cleanup** (`examples/mm_model.jl`, `examples/transport_model.jl`).
 
 ---
 
 ## 0) Working agreement for this phase
 
-1. **Repressilator-first until complete.**
-   - Do not shift active effort to stat_model refresh or legacy-example modernization until repressilator closeout tasks are done.
-2. **Then stat_model refresh.**
-3. **Then legacy-example compatibility for public repo.**
+1. **Current code/repo focus: Phase 3 keeper examples.**
+   - Work in guided/incremental mode on `examples/mm_model.jl` and `examples/transport_model.jl`.
+2. **Repressilator remaining items are manuscript-side.**
+   - Do not reopen repressilator code work unless a concrete repo/code issue appears.
+3. **stat_model code refresh is sufficiently complete to move on.**
+   - Keep the practical directional probe example-local for now.
 4. **Then selective merge (`revision1` -> `main`).**
 
-This keeps momentum on the work already in progress and prevents context thrash.
+This keeps the docs aligned with the actual current repo focus.
 
 ---
 
@@ -54,7 +56,7 @@ Threshold policy: accepted-set comparisons use `df = rank_J`.
 
 ## 3) Phase plan from here
 
-## Phase 1 (ACTIVE NOW): Repressilator closeout
+## Phase 1 (code/repo side complete; manuscript items remain): Repressilator closeout
 
 ### Required outputs
 - Final/verified prediction comparison figure (full2D vs 1D-id vs 1D-nonid)
@@ -72,20 +74,20 @@ Threshold policy: accepted-set comparisons use `df = rank_J`.
 
 ---
 
-## Phase 2 (after Phase 1): stat_model refresh (paper)
+## Phase 2 (core code work done; manuscript wording remains): stat_model refresh (paper)
 
-- Re-run `examples/stat_model.jl` against current code.
-- Verify outputs align with manuscript claims.
-- Add/verify directional practical near-invariance check for the non-limit case (one-sided behavior along weakest direction).
-- Decide whether this practical check should live as a reusable library helper (general vector-direction perturbation probe) or remain example-local.
-- Update comments/text if drift exists.
+- `examples/stat_model.jl` has been rerun against current code.
+- Outputs have been checked against current expectations.
+- Directional practical near-invariance check has been added for the non-limit case.
+- Current decision: keep the practical directional probe example-local for now (do not promote it to a reusable library helper yet).
+- Any remaining work here is mainly manuscript wording / commentary alignment.
 
 ### Exit criteria
 - stat_model is current, reproducible, and manuscript-consistent.
 
 ---
 
-## Phase 3 (after Phase 2): legacy examples for public repo (non-paper)
+## Phase 3 (CURRENT CODE/REPO FOCUS): legacy examples for public repo (non-paper)
 
 Public-facing keepers to refresh:
 - `examples/mm_model.jl`
@@ -116,18 +118,22 @@ Per-example policy for public-facing keepers:
 
 ## Phase 4 (after Phase 3): selective merge to `main`
 
-### Include
-- Active validated workflow scripts
-- Necessary core-module improvements
-- Minimal current docs (`README.md`, `AGENTS.md`, `NEXT_STEPS.md`)
-- Provenance archives (`archive/hybrid/`, `archive/legacy-sequential/`)
+### Merge framing
+- Decide deliberately what to include in `main`; do not assume any file or directory is automatically in-scope.
+- Build the merge as an explicit include/exclude decision with file-by-file rationale.
+- Likely candidates to evaluate include:
+  - validated workflow scripts,
+  - necessary core-module improvements,
+  - current docs where they genuinely help the public repo,
+  - historical/provenance material only if it is worth carrying into `main`.
 
-### Exclude
+### Default exclusions unless there is a clear reason otherwise
 - local noise / temp artifacts
 - stale experimental clutter
+- anything whose role in `main` is unclear or not yet justified
 
 ### Exit criteria
-- Merge diff is explainable file-by-file and maintainable.
+- Merge diff is explainable file-by-file, with explicit rationale for both what is included and what is left out.
 
 ---
 
