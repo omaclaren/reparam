@@ -418,6 +418,32 @@ for i in 1:size(N_perp_inv, 2)
     end
 end
 
+# Practical rank check for near-identifiable settings (heuristic)
+println("\nPractical Identifiability Check (heuristic):")
+σ_rel = S_inv[1] > 0 ? S_inv ./ S_inv[1] : zeros(length(S_inv))
+println("  Relative singular values (σᵢ/σ₁): ", round.(σ_rel, digits=4))
+
+practical_rank_cutoffs = [0.2, 0.1, 0.05]
+for cutoff in practical_rank_cutoffs
+    practical_rank = count(>=(cutoff), σ_rel)
+    println("  cutoff = ", cutoff, "  => practical rank ≈ ", practical_rank)
+end
+
+default_practical_cutoff = 0.2
+practical_rank_default = count(>=(default_practical_cutoff), σ_rel)
+
+if practical_rank_default < rank_inv
+    println("  Suggestion at cutoff ", default_practical_cutoff, ":")
+    println("    Keep first ", practical_rank_default, " combination(s) as well-identified.")
+    println("    Treat the remaining ", rank_inv - practical_rank_default, " as weakly identified.")
+    if practical_rank_default > 0
+        println("    Kept direction(s) in log space:")
+        display(round.(N_perp_inv[:, 1:practical_rank_default], digits=3))
+    end
+else
+    println("  Suggestion at cutoff ", default_practical_cutoff, ": keep full dimension.")
+end
+
 println("\n" * "="^60)
 println("Model-Specific Notes")
 println("="^60)

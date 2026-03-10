@@ -1,6 +1,6 @@
 # NEXT STEPS — IIR Revision Backlog
 
-**Last Updated:** 2026-03-04  
+**Last Updated:** 2026-03-10  
 **Branch:** `revision1`  
 **Canonical plan:** `AGENTS.md`
 
@@ -11,9 +11,13 @@
 > Do not start Phase 2+ until all Phase 1 items are complete.
 
 ### 1. Figure/package finalization
-- [ ] Regenerate/verify final full2D vs 1D-id vs 1D-nonid prediction comparison figure
-- [ ] Confirm figure is generated from canonical `nesi/repressilator_16nuisance_50x50_results.jls`
-- [ ] Confirm final filename/path used by manuscript workflow
+- [x] Regenerate/verify final full2D vs 1D-id vs 1D-nonid prediction comparison figure
+- [x] Confirm figure is generated from canonical `nesi/repressilator_16nuisance_50x50_results.jls`
+- [x] Confirm final filename/path used by manuscript workflow
+  - 2026-03-10: regenerated canonical artifacts from `nesi/repressilator_16nuisance_50x50_results.jls` using current `repressilator_prediction_intervals_from_2d_profile.jl`.
+  - Backed up prior predictions data: `nesi/repressilator_16nuisance_50x50_results_predictions_pre_rename_keys.jls`.
+  - Current outputs: `nesi/repressilator_16nuisance_50x50_results_predictions_full2d_vs_profiles.png` and `nesi/repressilator_16nuisance_50x50_results_predictions.jls`.
+  - Prediction-envelope key names in `..._predictions.jls` now use accepted-set naming (`lower_pred_from_accepted_ψ1ψ2`, etc.); old keys (`lower_full2d`, etc.) remain in the backup file above.
 
 ### 2. Manuscript integration (repressilator)
 - [ ] Finalize caption for 3-way prediction comparison figure
@@ -21,14 +25,18 @@
 - [ ] Ensure repressilator Methods/Results wording matches current implementation
 
 ### 3. Repressilator utility ownership pass
-- [ ] Final walkthrough: `run_repressilator_profile.jl`
-- [ ] Final walkthrough: `replot_profile_results.jl`
-- [ ] Final walkthrough: `extract_iir_diagnostics_from_results.jl`
-- [ ] Final walkthrough: `repressilator_prediction_intervals_from_2d_profile.jl`
+- [x] Final walkthrough: `run_repressilator_profile.jl`
+- [x] Final walkthrough: `replot_profile_results.jl`
+- [x] Final walkthrough: `extract_iir_diagnostics_from_results.jl`
+- [x] Final walkthrough: `repressilator_prediction_intervals_from_2d_profile.jl`
 
 ### 4. Repressilator consistency checks
-- [ ] Verify required stored-data keys contract is explicit and stable
-- [ ] Verify postprocessor behavior is clear for old `.jls` files (fallback/warning path)
+- [x] Verify required stored-data keys contract is explicit and stable
+  - `run_repressilator_profile.jl` writes `data`, `t_obs`, `X0`, `σ`, `NT`, `T_end` into results.
+  - `repressilator_prediction_intervals_from_2d_profile.jl` prefers stored data keys and validates dimensions; legacy files fall back to seeded regeneration with warning.
+- [x] Verify postprocessor behavior is clear for old `.jls` files (fallback/warning path)
+  - 2026-03-05 verification (legacy canonical artifact): `nesi/repressilator_16nuisance_50x50_results.jls` lacks stored data keys, so fallback seed-42 regeneration path is expected.
+  - Full-grid check (2500/2500 points): recomputed likelihoods match saved `ll_vals` up to constant offset `-83.18443557844786`; max residual after offset `1.66e-10` (mean `6.47e-13`).
 
 ---
 
@@ -37,6 +45,9 @@
 - [ ] Run `examples/stat_model.jl` with current codebase
 - [ ] Confirm rank / identifiable / non-identifiable outputs remain as expected
 - [ ] Update script comments/output text if drift exists
+- [ ] Add directional practical near-invariance probe for non-limit case (±δ along weakest singular direction in log-space)
+- [ ] Report one-sided asymmetry diagnostics for practical weakness (e.g., ε₊(δ), ε₋(δ), optional drift d₊(δ), d₋(δ))
+- [ ] Decide whether to promote this practical probe into a reusable library helper (general vector-direction perturbations) and call it from `examples/stat_model.jl`
 - [ ] Ensure manuscript wording matches current stat_model behavior
 
 ---

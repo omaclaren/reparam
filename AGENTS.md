@@ -1,6 +1,6 @@
 # AGENTS.md — Master Overview & Execution Plan (reparam)
 
-**Last Updated:** 2026-03-04  
+**Last Updated:** 2026-03-10  
 **Primary working branch:** `revision1`  
 **Current sprint (blocking):** **Finish repressilator deliverables** before shifting to other work.
 
@@ -76,6 +76,8 @@ Threshold policy: accepted-set comparisons use `df = rank_J`.
 
 - Re-run `examples/stat_model.jl` against current code.
 - Verify outputs align with manuscript claims.
+- Add/verify directional practical near-invariance check for the non-limit case (one-sided behavior along weakest direction).
+- Decide whether this practical check should live as a reusable library helper (general vector-direction perturbation probe) or remain example-local.
 - Update comments/text if drift exists.
 
 ### Exit criteria
