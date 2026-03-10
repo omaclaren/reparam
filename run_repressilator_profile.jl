@@ -17,26 +17,30 @@ Pkg.activate(".")
 Pkg.instantiate()
 
 # === PARSE ARGUMENTS ===
-function parse_int_arg(args, prefix, default)
+function parse_kv_arg(args, prefix)
     for arg in args
         if startswith(arg, prefix)
-            return parse(Int, split(arg, "=")[2])
+            value = arg[length(prefix)+1:end]
+            isempty(value) && error("Missing value for argument prefix '$prefix'")
+            return value
         end
     end
-    return default
+    return nothing
 end
 
-function parse_bool_arg(args, flag)
-    return flag in args
+function parse_int_arg(args, prefix, default)
+    value = parse_kv_arg(args, prefix)
+    value === nothing && return default
+    try
+        return parse(Int, value)
+    catch
+        error("Invalid integer for argument '$prefix': '$value'")
+    end
 end
 
 function parse_string_arg(args, prefix, default)
-    for arg in args
-        if startswith(arg, prefix)
-            return split(arg, "=")[2]
-        end
-    end
-    return default
+    value = parse_kv_arg(args, prefix)
+    return value === nothing ? default : value
 end
 
 N_NUISANCE = parse_int_arg(ARGS, "--nuisance=", 16)  # Default: full profile
@@ -178,7 +182,7 @@ println("FINDING MLE")
 println("=" ^ 70)
 
 θ_log_initial = 0.5 * (θ_log_lower + θ_log_upper)
-n_mle_guesses = 20  # Slightly more than original 15 for wider bounds
+n_mle_guesses = 20
 mle_guesses = ReparamTools.generate_initial_guesses(θ_log_lower, θ_log_upper, n_mle_guesses)
 
 println("Running MLE optimization with $n_mle_guesses restarts...")
@@ -254,43 +258,49 @@ A_T_final = hcat(N_perp_clean, N_clean)
 θ_to_ψ, ψ_to_θ = ReparamTools.reparam(A_T_final)
 ψ_MLE = θ_to_ψ(θ_MLE)
 
-# === FIND GENE 1 COORDINATES ===
+# === FIND TARGET COORDINATES (GENE 1) ===
 println("\nIdentifying gene 1 coordinates...")
 
-gene1_ident_idx = nothing
-gene1_nonident_idx = nothing
+# Helper: rounded coefficient pattern for exactly two active indices
+function two_term_pattern(v, idx_a, idx_b)
+    vr = round.(Int, v)
+    a = vr[idx_a]
+    b = vr[idx_b]
+    others = sum(abs, vr) - abs(a) - abs(b)
+    return a, b, others
+end
 
 # Find K₁/β₁ (identifiable)
-for j in 1:n_ident
-    v = A_T_final[:, j]
-    k_rounded = round(Int, v[K1_idx])
-    b_rounded = round(Int, v[β1_idx])
-    other_sum = sum(abs.(round.(Int, v[[i for i in 1:n_params if i != β1_idx && i != K1_idx]])))
-    if k_rounded == 1 && b_rounded == -1 && other_sum == 0
-        global gene1_ident_idx = j
-        println("  ψ_$j = K₁/β₁ (identifiable)")
-        break
+target_ident_idx = let idx = nothing
+    for j in 1:n_ident
+        k_coef, b_coef, others = two_term_pattern(A_T_final[:, j], K1_idx, β1_idx)
+        if k_coef == 1 && b_coef == -1 && others == 0
+            println("  ψ_$j = K₁/β₁ (identifiable)")
+            idx = j
+            break
+        end
     end
+    idx
 end
 
 # Find β₁·K₁ (non-identifiable)
-for j in 1:n_nonident
-    v = N_clean[:, j]
-    k_rounded = round(Int, v[K1_idx])
-    b_rounded = round(Int, v[β1_idx])
-    other_sum = sum(abs.(round.(Int, v[[i for i in 1:n_params if i != β1_idx && i != K1_idx]])))
-    if b_rounded == k_rounded && abs(b_rounded) >= 1 && other_sum == 0
-        global gene1_nonident_idx = n_ident + j
-        println("  ψ_$(n_ident + j) = β₁·K₁ (non-identifiable)")
-        break
+target_nonident_idx = let idx = nothing
+    for j in 1:n_nonident
+        k_coef, b_coef, others = two_term_pattern(N_clean[:, j], K1_idx, β1_idx)
+        if b_coef == k_coef && abs(b_coef) >= 1 && others == 0
+            println("  ψ_$(n_ident + j) = β₁·K₁ (non-identifiable)")
+            idx = n_ident + j
+            break
+        end
     end
+    idx
 end
 
-if isnothing(gene1_ident_idx) || isnothing(gene1_nonident_idx)
+if isnothing(target_ident_idx) || isnothing(target_nonident_idx)
     error("Could not identify gene 1 coordinates!")
 end
 
-target_2d = [gene1_ident_idx, gene1_nonident_idx]
+target_2d = Int[target_ident_idx, target_nonident_idx]
 println("\nTarget: ψ_$(target_2d[1]) (K₁/β₁), ψ_$(target_2d[2]) (β₁·K₁)")
 
 # === COMPUTE ψ-SPACE BOUNDS ===
@@ -362,7 +372,9 @@ if N_NUISANCE == 0
     println("Evaluating $(GRID^2) grid points via profile_target...")
     flush(stdout)
 
-    # Build likelihood that fixes other parameters at MLE
+    # Slice mode: nuisance ψ coordinates are fixed at ψ_MLE.
+    # Only the two target coordinates are varied on the grid.
+    # Broad try/catch keeps long grid runs robust to occasional ODE/transform failures.
     function lnlike_slice_ψ_log(ψ_log_targets)
         try
             ψ_full = copy(ψ_MLE)
@@ -455,7 +467,8 @@ else
     end
 
     # Build bounds for optimization
-    # Order: [target1, target2, nuisance...]
+    # 2D-by-design: optimization vector order is [target1, target2, nuisance...],
+    # so nuisance entries start at position 3.
     opt_indices = vcat(target_2d, nuisance_to_profile)
     ψ_log_lower_opt = ψ_log_lower[opt_indices]
     ψ_log_upper_opt = ψ_log_upper[opt_indices]

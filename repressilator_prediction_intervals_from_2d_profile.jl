@@ -231,7 +231,7 @@ println("  threshold = $(round(threshold, digits=4))")
 println("  points above threshold (2D): $(sum(ll_vals .> threshold)) / $(length(ll_vals))")
 
 # === GRID / PROFILE EXTRACTION ===
-ll_matrix = reshape(ll_vals, GRID, GRID)  # rows=target1, cols=target2 (column-major)
+lnlike_grid_ψ1_ψ2 = reshape(ll_vals, GRID, GRID)  # rows=target1, cols=target2 (column-major)
 
 ψ_log_lower = log.(ψ_lower)
 ψ_log_upper = log.(ψ_upper)
@@ -256,37 +256,40 @@ pred_gridded_MLE_mat = reshape(pred_gridded_MLE, n_species, n_time)
 
 println("  original MLE nearest grid: row $mle_row, col $mle_col")
 println("  gridded MLE: row $grid_mle_row, col $grid_mle_col, idx $k_gridded_mle")
-println("  ll(original-MLE-nearest) = $(round(ll_matrix[mle_row, mle_col], digits=4))")
+println("  ll(original-MLE-nearest) = $(round(lnlike_grid_ψ1_ψ2[mle_row, mle_col], digits=4))")
 println("  ll(gridded MLE)          = $(round(ll_vals[k_gridded_mle], digits=4))")
 
 # 1D profiles from direct argmax on saved 2D grid
-j_star_ident = [argmax(view(ll_matrix, i, :)) for i in 1:GRID]
-ll_profile_ident = [ll_matrix[i, j_star_ident[i]] for i in 1:GRID]
+ψ1_argmax_ψ2_indices = [argmax(view(lnlike_grid_ψ1_ψ2, i, :)) for i in 1:GRID]
+lnlike_profile_ψ1 = [lnlike_grid_ψ1_ψ2[i, ψ1_argmax_ψ2_indices[i]] for i in 1:GRID]
 
-i_star_nonident = [argmax(view(ll_matrix, :, j)) for j in 1:GRID]
-ll_profile_nonident = [ll_matrix[i_star_nonident[j], j] for j in 1:GRID]
+ψ2_argmax_ψ1_indices = [argmax(view(lnlike_grid_ψ1_ψ2, :, j)) for j in 1:GRID]
+lnlike_profile_ψ2 = [lnlike_grid_ψ1_ψ2[ψ2_argmax_ψ1_indices[j], j] for j in 1:GRID]
 
-active_ident = findall(ll_profile_ident .> threshold)
-active_nonident = findall(ll_profile_nonident .> threshold)
-active_full2d = findall(ll_vals .> threshold)
+# accepted_ψ1_indices / accepted_ψ2_indices are 1D axis indices (ψ1 rows or ψ2 cols).
+# accepted_ψ1ψ2_indices are indices into the full joint ψ1-ψ2 grid (ll_vals ordering).
+accepted_ψ1_indices = findall(lnlike_profile_ψ1 .> threshold)
+accepted_ψ2_indices = findall(lnlike_profile_ψ2 .> threshold)
+accepted_ψ1ψ2_indices = findall(ll_vals .> threshold)
 
 println("\nAccepted sets:")
-println("  full 2D accepted points: $(length(active_full2d)) / $(length(ll_vals))")
-println("  identifiable 1D profile points: $(length(active_ident)) / $GRID")
-println("  non-identifiable 1D profile points: $(length(active_nonident)) / $GRID")
+println("  full 2D accepted points: $(length(accepted_ψ1ψ2_indices)) / $(length(ll_vals))")
+println("  identifiable 1D profile points: $(length(accepted_ψ1_indices)) / $GRID")
+println("  non-identifiable 1D profile points: $(length(accepted_ψ2_indices)) / $GRID")
 
-isempty(active_full2d) && error("No full-2D points exceed threshold")
-isempty(active_ident) && error("No identifiable-profile points exceed threshold")
-isempty(active_nonident) && error("No non-identifiable-profile points exceed threshold")
+isempty(accepted_ψ1ψ2_indices) && error("No full-2D points exceed threshold")
+isempty(accepted_ψ1_indices) && error("No identifiable-profile points exceed threshold")
+isempty(accepted_ψ2_indices) && error("No non-identifiable-profile points exceed threshold")
 
 linear_idx(i, j, GRID) = (j - 1) * GRID + i
-ident_profile_indices = Int[linear_idx(i, j_star_ident[i], GRID) for i in active_ident]
-nonident_profile_indices = Int[linear_idx(i_star_nonident[j], j, GRID) for j in active_nonident]
-full2d_indices = Int.(active_full2d)
+# accepted_ψ*_profile_path_indices are full-grid indices for accepted points along each profile path.
+accepted_ψ1_profile_path_indices = Int[linear_idx(i, ψ1_argmax_ψ2_indices[i], GRID) for i in accepted_ψ1_indices]
+accepted_ψ2_profile_path_indices = Int[linear_idx(ψ2_argmax_ψ1_indices[j], j, GRID) for j in accepted_ψ2_indices]
+accepted_ψ1ψ2_indices = Int.(accepted_ψ1ψ2_indices)
 
 # One solve pass for all needed points
-needed_indices = unique(vcat(full2d_indices, ident_profile_indices, nonident_profile_indices))
-println("  unique points requiring ODE solves: $(length(needed_indices))")
+prediction_eval_indices = unique(vcat(accepted_ψ1ψ2_indices, accepted_ψ1_profile_path_indices, accepted_ψ2_profile_path_indices))
+println("  unique points requiring ODE solves: $(length(prediction_eval_indices))")
 
 # === PREDICTIONS AT ACCEPTED POINTS ===
 println("\nComputing predictions...")
@@ -301,7 +304,7 @@ failure_exception = 0
 
 pred_lookup = Dict{Int, Matrix{Float64}}()  # k -> (3 × n_time)
 
-for (n, k) in enumerate(needed_indices)
+for (n, k) in enumerate(prediction_eval_indices)
     try
         ψ_log_full = ψ_log_grid[k]
         ψ_full = exp.(ψ_log_full)
@@ -324,11 +327,11 @@ for (n, k) in enumerate(needed_indices)
         global failure_exception += 1
     end
 
-    if n % 50 == 0 || n == length(needed_indices)
+    if n % 50 == 0 || n == length(prediction_eval_indices)
         elapsed = time() - t_start
         rate = n / max(elapsed, 1e-9)
-        remaining = (length(needed_indices) - n) / rate
-        println("  $n / $(length(needed_indices)) processed ($(round(remaining, digits=1))s remaining)")
+        remaining = (length(prediction_eval_indices) - n) / rate
+        println("  $n / $(length(prediction_eval_indices)) processed ($(round(remaining, digits=1))s remaining)")
         flush(stdout)
     end
 end
@@ -357,21 +360,21 @@ function envelope_from_indices(indices::Vector{Int}, pred_lookup::Dict{Int, Matr
     return lower, upper, n_used
 end
 
-lower_full2d, upper_full2d, n_survive_full2d = envelope_from_indices(
-    full2d_indices, pred_lookup, n_species, n_time)
-lower_ident, upper_ident, n_survive_ident = envelope_from_indices(
-    ident_profile_indices, pred_lookup, n_species, n_time)
-lower_nonident, upper_nonident, n_survive_nonident = envelope_from_indices(
-    nonident_profile_indices, pred_lookup, n_species, n_time)
+lower_pred_from_accepted_ψ1ψ2, upper_pred_from_accepted_ψ1ψ2, n_survive_full2d = envelope_from_indices(
+    accepted_ψ1ψ2_indices, pred_lookup, n_species, n_time)
+lower_pred_from_accepted_ψ1_profile, upper_pred_from_accepted_ψ1_profile, n_survive_ident = envelope_from_indices(
+    accepted_ψ1_profile_path_indices, pred_lookup, n_species, n_time)
+lower_pred_from_accepted_ψ2_profile, upper_pred_from_accepted_ψ2_profile, n_survive_nonident = envelope_from_indices(
+    accepted_ψ2_profile_path_indices, pred_lookup, n_species, n_time)
 
 n_survive_full2d > 0 || error("No valid prediction points for full 2D accepted set")
 n_survive_ident > 0 || error("No valid prediction points for identifiable profile")
 n_survive_nonident > 0 || error("No valid prediction points for non-identifiable profile")
 
 # === SUMMARY ===
-width_full2d = [mean(upper_full2d[s, :] - lower_full2d[s, :]) for s in 1:n_species]
-width_ident = [mean(upper_ident[s, :] - lower_ident[s, :]) for s in 1:n_species]
-width_nonident = [mean(upper_nonident[s, :] - lower_nonident[s, :]) for s in 1:n_species]
+width_full2d = [mean(upper_pred_from_accepted_ψ1ψ2[s, :] - lower_pred_from_accepted_ψ1ψ2[s, :]) for s in 1:n_species]
+width_ident = [mean(upper_pred_from_accepted_ψ1_profile[s, :] - lower_pred_from_accepted_ψ1_profile[s, :]) for s in 1:n_species]
+width_nonident = [mean(upper_pred_from_accepted_ψ2_profile[s, :] - lower_pred_from_accepted_ψ2_profile[s, :]) for s in 1:n_species]
 
 species_names = ["m₁", "m₂", "m₃"]
 
@@ -379,9 +382,9 @@ println("\n" * "="^74)
 println("PREDICTION INTERVAL SUMMARY")
 println("="^74)
 println("Accepted points used:")
-println("  full 2D:          $n_survive_full2d / $(length(full2d_indices))")
-println("  identifiable 1D:  $n_survive_ident / $(length(ident_profile_indices))")
-println("  non-identifiable 1D: $n_survive_nonident / $(length(nonident_profile_indices))")
+println("  full 2D:          $n_survive_full2d / $(length(accepted_ψ1ψ2_indices))")
+println("  identifiable 1D:  $n_survive_ident / $(length(accepted_ψ1_profile_path_indices))")
+println("  non-identifiable 1D: $n_survive_nonident / $(length(accepted_ψ2_profile_path_indices))")
 
 println("\nPer-species mean width comparison:")
 println("  Species   Full-2D      1D Ident      1D Non-ident   Ident/Full   Non-ident/Full")
@@ -396,9 +399,9 @@ function outside_counts(pred_ref, lower_band, upper_band)
      for s in 1:size(pred_ref, 1)]
 end
 
-outside_full2d_grid = outside_counts(pred_gridded_MLE_mat, lower_full2d, upper_full2d)
-outside_ident_grid = outside_counts(pred_gridded_MLE_mat, lower_ident, upper_ident)
-outside_nonident_grid = outside_counts(pred_gridded_MLE_mat, lower_nonident, upper_nonident)
+outside_full2d_grid = outside_counts(pred_gridded_MLE_mat, lower_pred_from_accepted_ψ1ψ2, upper_pred_from_accepted_ψ1ψ2)
+outside_ident_grid = outside_counts(pred_gridded_MLE_mat, lower_pred_from_accepted_ψ1_profile, upper_pred_from_accepted_ψ1_profile)
+outside_nonident_grid = outside_counts(pred_gridded_MLE_mat, lower_pred_from_accepted_ψ2_profile, upper_pred_from_accepted_ψ2_profile)
 
 println("\nGridded-MLE outside counts (out of $n_time):")
 println("  full 2D band: $outside_full2d_grid")
@@ -421,20 +424,20 @@ LEGEND_FS = 11
 species_labels = ["mRNA 1 (m₁)", "mRNA 2 (m₂)", "mRNA 3 (m₃)"]
 
 case_specs = [
-    (latexstring("\\mathrm{Full\\ 2D\\ pushforward}:\\ (K_1/\\beta_1,\\ \\beta_1 K_1)"), lower_full2d, upper_full2d, :purple),
-    (latexstring("\\mathrm{1D\\ profile\\ over}\\ K_1/\\beta_1"), lower_ident, upper_ident, :deepskyblue3),
-    (latexstring("\\mathrm{1D\\ profile\\ over}\\ \\beta_1 K_1"), lower_nonident, upper_nonident, :darkorange2),
+    (latexstring("\\mathrm{Full\\ 2D\\ pushforward}:\\ (K_1/\\beta_1,\\ \\beta_1 K_1)"), lower_pred_from_accepted_ψ1ψ2, upper_pred_from_accepted_ψ1ψ2, :purple),
+    (latexstring("\\mathrm{1D\\ profile\\ over}\\ K_1/\\beta_1"), lower_pred_from_accepted_ψ1_profile, upper_pred_from_accepted_ψ1_profile, :deepskyblue3),
+    (latexstring("\\mathrm{1D\\ profile\\ over}\\ \\beta_1 K_1"), lower_pred_from_accepted_ψ2_profile, upper_pred_from_accepted_ψ2_profile, :darkorange2),
 ]
 
-function species_ylims(s, pred_gridded_MLE_mat, data_mat, upper_full2d)
-    y_max = max(maximum(pred_gridded_MLE_mat[s, :]), maximum(data_mat[s, :]), maximum(upper_full2d[s, :]))
+function species_ylims(s, pred_gridded_MLE_mat, data_mat, upper_pred_from_accepted_ψ1ψ2)
+    y_max = max(maximum(pred_gridded_MLE_mat[s, :]), maximum(data_mat[s, :]), maximum(upper_pred_from_accepted_ψ1ψ2[s, :]))
     return (0.0, y_max * 1.25)
 end
 
 plots_array = Any[]
 
 for s in 1:n_species
-    ylim = species_ylims(s, pred_gridded_MLE_mat, data_mat, upper_full2d)
+    ylim = species_ylims(s, pred_gridded_MLE_mat, data_mat, upper_pred_from_accepted_ψ1ψ2)
 
     for (c, (case_title, lower_band, upper_band, case_color)) in enumerate(case_specs)
         lo = clamp.(lower_band[s, :], ylim[1], ylim[2])
@@ -481,12 +484,12 @@ println("Saved: $output_png")
 
 # === SAVE DATA ===
 pred_results = Dict(
-    "lower_full2d" => lower_full2d,
-    "upper_full2d" => upper_full2d,
-    "lower_ident" => lower_ident,
-    "upper_ident" => upper_ident,
-    "lower_nonident" => lower_nonident,
-    "upper_nonident" => upper_nonident,
+    "lower_pred_from_accepted_ψ1ψ2" => lower_pred_from_accepted_ψ1ψ2,
+    "upper_pred_from_accepted_ψ1ψ2" => upper_pred_from_accepted_ψ1ψ2,
+    "lower_pred_from_accepted_ψ1_profile" => lower_pred_from_accepted_ψ1_profile,
+    "upper_pred_from_accepted_ψ1_profile" => upper_pred_from_accepted_ψ1_profile,
+    "lower_pred_from_accepted_ψ2_profile" => lower_pred_from_accepted_ψ2_profile,
+    "upper_pred_from_accepted_ψ2_profile" => upper_pred_from_accepted_ψ2_profile,
     "pred_gridded_MLE" => pred_gridded_MLE_mat,
     "pred_original_MLE" => pred_original_MLE_mat,
     "t_pred" => t_pred,
@@ -505,13 +508,13 @@ pred_results = Dict(
     "width_full2d" => width_full2d,
     "width_ident" => width_ident,
     "width_nonident" => width_nonident,
-    "full2d_indices" => full2d_indices,
-    "profile_indices_ident" => ident_profile_indices,
-    "profile_indices_nonident" => nonident_profile_indices,
-    "ll_profile_ident" => ll_profile_ident,
-    "ll_profile_nonident" => ll_profile_nonident,
-    "active_ident_rows" => active_ident,
-    "active_nonident_cols" => active_nonident,
+    "full2d_indices" => accepted_ψ1ψ2_indices,
+    "profile_indices_ident" => accepted_ψ1_profile_path_indices,
+    "profile_indices_nonident" => accepted_ψ2_profile_path_indices,
+    "ll_profile_ident" => lnlike_profile_ψ1,
+    "ll_profile_nonident" => lnlike_profile_ψ2,
+    "active_ident_rows" => accepted_ψ1_indices,
+    "active_nonident_cols" => accepted_ψ2_indices,
     "outside_full2d_gridded" => outside_full2d_grid,
     "outside_ident_gridded" => outside_ident_grid,
     "outside_nonident_gridded" => outside_nonident_grid,

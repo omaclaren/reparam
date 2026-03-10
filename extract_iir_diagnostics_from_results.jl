@@ -31,15 +31,15 @@ isfile(input_file) || error("Input file not found: $input_file")
 results = deserialize(input_file)
 
 required = ["θ_MLE", "A_T_final", "rank_J", "n_ident"]
-missing = filter(k -> !haskey(results, k), required)
-isempty(missing) || error("Missing keys in results file: $(missing)")
+missing_keys = filter(k -> !haskey(results, k), required)
+isempty(missing_keys) || error("Missing keys in results file: $(missing_keys)")
 
 θ_MLE = Vector{Float64}(results["θ_MLE"])
 A_T_final = Matrix{Float64}(results["A_T_final"])
 rank_saved = Int(results["rank_J"])
 n_ident_saved = Int(results["n_ident"])
 
-grid = get(results, "GRID", missing)
+grid = get(results, "GRID", "unknown")
 mode = get(results, "mode", "unknown")
 
 # ---------------------------------------------------------------
@@ -49,6 +49,8 @@ X0 = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 T_end = 10000.0
 t_iir = LinRange(0, T_end, 501)
 
+# highprec: tighter ODE tolerances for most accurate Jacobian/rank diagnostics.
+# Profiling uses looser defaults for speed.
 function ϕ_iir_highprec(θ)
     sol_matrix = RepressilatorModel.solve_repressilator(t_iir, θ, X0; abstol=1e-10, reltol=1e-8)
     mRNA = sol_matrix[1:3, :]
@@ -70,8 +72,12 @@ S, _, _, rank_recomputed = ReparamTools.find_invariant_subspace(
 # ---------------------------------------------------------------
 # 3) Rank identifiable directions by sigma_eff
 # ---------------------------------------------------------------
-# In saved repressilator outputs, identifiable directions are the first n_ident columns
-n_ident = min(n_ident_saved, size(A_T_final, 2))
+# Assumption from run_repressilator_profile.jl:
+# A_T_final columns are ordered as [identifiable..., non-identifiable...].
+# This script ranks only the first n_ident columns as identifiable directions.
+n_cols = size(A_T_final, 2)
+n_ident_saved <= n_cols || error("Inconsistent saved dimensions: n_ident=$n_ident_saved but A_T_final has $n_cols columns")
+n_ident = n_ident_saved
 
 param_names = get(results, "param_names",
     ["α₀₁", "α₀₂", "α₀₃", "α₁", "α₂", "α₃",
@@ -92,6 +98,8 @@ end
 rows = NamedTuple[]
 for j in 1:n_ident
     v = Vector{Float64}(A_T_final[:, j])
+    # Directional sensitivity gain in observable space.
+    # For unit-norm v, sigma_eff reduces to ||J * v||.
     sigma_eff = norm(J * v) / max(norm(v), eps())
     coeff_vector = join(string.(round.(v, digits=6)), ";")
     monomial = monomial_string(v, param_names)

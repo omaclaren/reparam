@@ -94,12 +94,12 @@ println("\n1D Profile analysis:")
 println("  K₁/β₁ (identifiable): $n_above_1/$GRID above 95% threshold")
 println("  β₁·K₁ (non-identifiable): $n_above_2/$GRID above 95% threshold")
 
-# === HELPER: Transform ψ targets to θ-space ===
-function ψ_targets_to_θ1(ψ_t1, ψ_t2, ψ_ref, target_idx, ψ_to_θ_func)
+# === HELPER: Transform ψ targets to (β₁, K₁) in θ-space ===
+function ψ_targets_to_β1K1(ψ_t1, ψ_t2, ψ_ref, target_ψ_indices, ψ_to_θ_map)
     ψ_full = copy(ψ_ref)
-    ψ_full[target_idx[1]] = ψ_t1
-    ψ_full[target_idx[2]] = ψ_t2
-    θ = ψ_to_θ_func(ψ_full)
+    ψ_full[target_ψ_indices[1]] = ψ_t1
+    ψ_full[target_ψ_indices[2]] = ψ_t2
+    θ = ψ_to_θ_map(ψ_full)
     return θ[7], θ[10]  # β₁, K₁
 end
 
@@ -132,52 +132,52 @@ contour!(ψ_target1_grid, ψ_target2_grid, like_matrix', levels=[lstar_2d], colo
          xscale=:log10, label="95% CI")
 
 # Plot 2: Transform to θ-space
-β_flat = Float64[]
-K_flat = Float64[]
-like_flat = Float64[]
+β1_points_θ = Float64[]
+K1_points_θ = Float64[]
+like_values_ψ_grid_mapped_to_θ_points = Float64[]
 
 for (i, ψ_t1) in enumerate(ψ_target1_grid)
     for (j, ψ_t2) in enumerate(ψ_target2_grid)
-        β, K = ψ_targets_to_θ1(ψ_t1, ψ_t2, ψ_MLE, target_2d, ψ_to_θ)
-        push!(β_flat, β)
-        push!(K_flat, K)
-        push!(like_flat, like_matrix[i, j])
+        β1_val, K1_val = ψ_targets_to_β1K1(ψ_t1, ψ_t2, ψ_MLE, target_2d, ψ_to_θ)
+        push!(β1_points_θ, β1_val)
+        push!(K1_points_θ, K1_val)
+        push!(like_values_ψ_grid_mapped_to_θ_points, like_matrix[i, j])
     end
 end
 
 # Filter to fixed plotting region
-in_region = (β_flat .>= β_plot_min) .& (β_flat .<= β_plot_max) .&
-            (K_flat .>= K_plot_min) .& (K_flat .<= K_plot_max)
-β_filt = β_flat[in_region]
-K_filt = K_flat[in_region]
-like_filt = like_flat[in_region]
+in_region = (β1_points_θ .>= β_plot_min) .& (β1_points_θ .<= β_plot_max) .&
+            (K1_points_θ .>= K_plot_min) .& (K1_points_θ .<= K_plot_max)
+β1_points_θ_inbounds = β1_points_θ[in_region]
+K1_points_θ_inbounds = K1_points_θ[in_region]
+like_values_ψ_grid_mapped_to_θ_points_inbounds = like_values_ψ_grid_mapped_to_θ_points[in_region]
 
 # Interpolate to regular grid for contourf
-β_reg = range(β_plot_min, β_plot_max, length=100)
-K_reg = range(K_plot_min, K_plot_max, length=100)
+β1_grid_θ = range(β_plot_min, β_plot_max, length=100)
+K1_grid_θ = range(K_plot_min, K_plot_max, length=100)
 
 # Normalize scattered points to [0,1] for RBF interpolation
-β_norm = (β_filt .- β_plot_min) ./ (β_plot_max - β_plot_min)
-K_norm = (K_filt .- K_plot_min) ./ (K_plot_max - K_plot_min)
+β1_norm = (β1_points_θ_inbounds .- β_plot_min) ./ (β_plot_max - β_plot_min)
+K1_norm = (K1_points_θ_inbounds .- K_plot_min) ./ (K_plot_max - K_plot_min)
 
 # Create ThinPlate RBF interpolant in normalized space
-points_norm = hcat(β_norm, K_norm)'  # 2 × N matrix
-itp = interpolate(ThinPlate(), points_norm, like_filt)
+points_norm = hcat(β1_norm, K1_norm)'  # 2 × N matrix
+itp = interpolate(ThinPlate(), points_norm, like_values_ψ_grid_mapped_to_θ_points_inbounds)
 
 # Evaluate on regular grid
-like_θ_reg = zeros(length(β_reg), length(K_reg))
-for (i, β) in enumerate(β_reg)
-    β_n = (β - β_plot_min) / (β_plot_max - β_plot_min)
-    for (j, K) in enumerate(K_reg)
-        K_n = (K - K_plot_min) / (K_plot_max - K_plot_min)
-        like_θ_reg[i, j] = evaluate(itp, [β_n, K_n])[1]
+like_θ_reg = zeros(length(β1_grid_θ), length(K1_grid_θ))
+for (i, β1_val) in enumerate(β1_grid_θ)
+    β1_n = (β1_val - β_plot_min) / (β_plot_max - β_plot_min)
+    for (j, K1_val) in enumerate(K1_grid_θ)
+        K1_n = (K1_val - K_plot_min) / (K_plot_max - K_plot_min)
+        like_θ_reg[i, j] = evaluate(itp, [β1_n, K1_n])[1]
     end
 end
 
 # Clamp to [0, 1]
 like_θ_reg = clamp.(like_θ_reg, 0.0, 1.0)
 
-p2 = contourf(collect(β_reg), collect(K_reg), like_θ_reg', color=:dense, levels=20, lw=0,
+p2 = contourf(collect(β1_grid_θ), collect(K1_grid_θ), like_θ_reg', color=:dense, levels=20, lw=0,
              xlabel="β₁", ylabel="K₁", title="Profile in θ-space\n$subtitle",
              xlims=(β_plot_min, β_plot_max), ylims=(K_plot_min, K_plot_max), clims=(0,1))
 scatter!([θ_MLE[β1_idx]], [θ_MLE[K1_idx]], mc=:darkgoldenrod, msc=:match, ms=10, markershape=:star, label="MLE")
@@ -187,18 +187,18 @@ try
     c = Contour.contour(collect(ψ_target1_grid), collect(ψ_target2_grid), like_matrix, lstar_2d)
     for line in Contour.lines(c)
         ψ_t1_c, ψ_t2_c = Contour.coordinates(line)
-        β_c = Float64[]
-        K_c = Float64[]
+        β1_contour = Float64[]
+        K1_contour = Float64[]
         for (pt1, pt2) in zip(ψ_t1_c, ψ_t2_c)
-            β, K = ψ_targets_to_θ1(pt1, pt2, ψ_MLE, target_2d, ψ_to_θ)
+            β1_val, K1_val = ψ_targets_to_β1K1(pt1, pt2, ψ_MLE, target_2d, ψ_to_θ)
             # Only include points within plot bounds
-            if β_plot_min <= β <= β_plot_max && K_plot_min <= K <= K_plot_max
-                push!(β_c, β)
-                push!(K_c, K)
+            if β_plot_min <= β1_val <= β_plot_max && K_plot_min <= K1_val <= K_plot_max
+                push!(β1_contour, β1_val)
+                push!(K1_contour, K1_val)
             end
         end
-        if length(β_c) > 1
-            plot!(p2, β_c, K_c, color=:black, lw=2, label="")
+        if length(β1_contour) > 1
+            plot!(p2, β1_contour, K1_contour, color=:black, lw=2, label="")
         end
     end
 catch e
