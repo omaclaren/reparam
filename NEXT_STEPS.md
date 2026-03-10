@@ -42,12 +42,16 @@
 
 ## PHASE 2 — stat_model paper example refresh (after Phase 1)
 
-- [ ] Run `examples/stat_model.jl` with current codebase
-- [ ] Confirm rank / identifiable / non-identifiable outputs remain as expected
-- [ ] Update script comments/output text if drift exists
-- [ ] Add directional practical near-invariance probe for non-limit case (±δ along weakest singular direction in log-space)
-- [ ] Report one-sided asymmetry diagnostics for practical weakness (e.g., ε₊(δ), ε₋(δ), optional drift d₊(δ), d₋(δ))
+- [x] Run `examples/stat_model.jl` with current codebase
+- [x] Confirm rank / identifiable / non-identifiable outputs remain as expected
+- [x] Update script comments/output text if drift exists
+- [x] Add directional practical near-invariance probe for non-limit case (±δ along weakest singular direction in log-space)
+- [x] Report one-sided asymmetry diagnostics for practical weakness (e.g., ε₊(δ), ε₋(δ), optional drift d₊(δ), d₋(δ))
+  - Verified both `poisson_limit=true` (on-disk script) and `poisson_limit=false` (in-memory check) run successfully with current code.
+  - Non-limit case remains structurally identifiable (full rank) but shows one-sided weakening toward the Poisson limit.
+  - Current output compares two weak-coordinate choices: exact local SVD basis and rounded interpretable basis.
 - [ ] Decide whether to promote this practical probe into a reusable library helper (general vector-direction perturbations) and call it from `examples/stat_model.jl`
+  - Current implementation remains example-local in `examples/stat_model.jl`.
 - [ ] Ensure manuscript wording matches current stat_model behavior
 
 ---
