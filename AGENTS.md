@@ -87,19 +87,30 @@ Threshold policy: accepted-set comparisons use `df = rank_J`.
 
 ## Phase 3 (after Phase 2): legacy examples for public repo (non-paper)
 
-Targets:
+Public-facing keepers to refresh:
 - `examples/mm_model.jl`
 - `examples/transport_model.jl`
+
+Exploratory examples to keep on `revision1` but not treat as public `main` examples:
 - `examples/pk_model.jl`
 - `examples/stat_sum_model.jl`
 
-Per-example policy:
+Working style for this phase:
+- Do cleanup in guided/incremental mode: inspect, discuss, then edit one example at a time.
+- Treat this as moderate cleanup, not just status-header polish.
+
+Per-example policy for public-facing keepers:
 1. Make runnable with current APIs where practical.
-2. Add clear status header (legacy/exploratory/non-paper).
-3. If not worth updating, archive with explicit rationale.
+2. Add clear status header (legacy/supplementary/non-paper).
+3. Keep minimal run instructions current.
+4. Add explicit invariance-test logic (`find_invariant_subspace`) for both `examples/mm_model.jl` and `examples/transport_model.jl`, since current keeper scripts appear to rely mainly on SVD/rounding.
+5. For `examples/transport_model.jl`, assess whether a Varimax-based interpretable basis should be added for the public-facing version.
 
 ### Exit criteria
-- Each legacy example is either compatible-and-kept or clearly archived.
+- `examples/mm_model.jl` and `examples/transport_model.jl` are compatible-and-kept.
+- Both public-facing keeper examples include explicit invariance testing.
+- `examples/transport_model.jl` has an explicit, documented decision on interpretable-basis / Varimax construction.
+- `examples/pk_model.jl` and `examples/stat_sum_model.jl` are explicitly treated as exploratory/non-public for merge planning.
 
 ---
 

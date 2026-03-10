@@ -58,17 +58,30 @@
 
 ## PHASE 3 — Legacy example compatibility (public repo, non-paper)
 
-Target examples:
+Public-facing keeper examples:
 - [ ] `examples/mm_model.jl`
+  - 2026-03-10 audit: runs successfully with current code, but emits soft-scope warnings (`nuisance_guesses`, `all_inside`).
+  - Add explicit invariance-test path (`find_invariant_subspace`) for the public-facing version, rather than relying only on SVD/rounding.
 - [ ] `examples/transport_model.jl`
-- [ ] `examples/pk_model.jl`
-- [ ] `examples/stat_sum_model.jl`
+  - 2026-03-10 audit: runs successfully with current code and current seeded randomness.
+  - Decide whether to replace `data = rand(...)` with a fixed saved realization for public-facing reproducibility.
+  - Likely candidate for Varimax-based interpretable basis in the public-facing version.
+  - Add explicit invariance-test path (`find_invariant_subspace`) for the public-facing version.
 
-Per-example checklist:
-- [ ] Runs with current APIs (or mark archival with explicit rationale)
-- [ ] Has clear status header: legacy / exploratory / non-paper
+Exploratory / non-public examples for now:
+- [ ] `examples/pk_model.jl` (keep on `revision1`, do not prioritize for `main` public example set)
+- [ ] `examples/stat_sum_model.jl` (keep on `revision1`, do not prioritize for `main` public example set)
+
+Working mode for public-facing keeper cleanup:
+- [ ] Follow guided/incremental cleanup: inspect, discuss, then edit one example at a time
+
+Per-example checklist for public-facing keepers:
+- [ ] Runs with current APIs
+- [ ] Has clear status header: legacy / supplementary / non-paper
 - [ ] Has minimal run instructions that are current
-- [ ] Does not over-claim reliability if exploratory
+- [ ] Includes explicit invariance-test path
+- [ ] Has explicit interpretable-basis decision where relevant (notably `transport_model.jl` / Varimax)
+- [ ] Does not over-claim reliability
 
 ---
 
