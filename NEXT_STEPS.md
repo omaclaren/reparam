@@ -1,6 +1,6 @@
 # NEXT STEPS — IIR Revision Backlog
 
-**Last Updated:** 2026-03-10  
+**Last Updated:** 2026-03-13  
 **Branch:** `revision1`  
 **Canonical plan:** `AGENTS.md`
 
@@ -37,6 +37,13 @@
 - [x] Verify postprocessor behavior is clear for old `.jls` files (fallback/warning path)
   - 2026-03-05 verification (legacy canonical artifact): `nesi/repressilator_16nuisance_50x50_results.jls` lacks stored data keys, so fallback seed-42 regeneration path is expected.
   - Full-grid check (2500/2500 points): recomputed likelihoods match saved `ll_vals` up to constant offset `-83.18443557844786`; max residual after offset `1.66e-10` (mean `6.47e-13`).
+- [ ] Decide whether to replace the historical repressilator interpretability/Varimax presentation with a simple fixed monomial scan
+  - 2026-03-13 read-only identified-space scan from `nesi/repressilator_16nuisance_50x50_results.jls` using `support ≤ 2`, coefficients in `{-1,0,1}`:
+    - dictionary size `324`, accepted candidates `147`, accepted span rank `15/15`;
+    - greedy selected scan basis recovers exactly the expected interpretable identified basis structure: 12 singleton directions + `β₁/K₁`, `β₂/K₂`, `β₃/K₃`;
+    - selected scan-basis span distance to the saved identified profile basis is ~`1e-15`.
+  - Earlier manual null-space check also showed `βᵢKᵢ` products span the saved null space to numerical precision.
+  - If the basis actually used for profiling is changed materially, plan one clean NeSI rerun for consistency.
 
 ---
 
@@ -60,13 +67,22 @@
 
 Public-facing keeper examples:
 - [ ] `examples/mm_model.jl`
-  - 2026-03-10 audit: runs successfully with current code, but emits soft-scope warnings (`nuisance_guesses`, `all_inside`).
-  - Add explicit invariance-test path (`find_invariant_subspace`) for the public-facing version, rather than relying only on SVD/rounding.
+  - [x] 2026-03-11 guided technical verification with current code.
+  - [x] Explicit invariance-test path added via `find_invariant_subspace`.
+  - [x] Limit case verified as the clean exact-IIR case: `K/ν` identifiable, `νK` invariant (in log coordinates, up to basis sign).
+  - [x] Non-limit case verified as full-rank / non-invariant, with `νK` remaining a practically weak one-sided direction near the MLE.
+  - [x] Script kept in top-level example style; prior soft-scope warnings removed by renaming reused top-level variables.
+  - [ ] Add/confirm minimal run instructions for the final public-facing keeper version.
 - [ ] `examples/transport_model.jl`
   - 2026-03-10 audit: runs successfully with current code and current seeded randomness.
+  - 2026-03-13 read-only transport diagnostics now show:
+    - exact null direction `(1,1,1)` and identified plane `a + b + c = 0`;
+    - direct rounding of the raw orthogonal identified/null basis gives a stable orthogonal rounded SVD basis (`round_within = 0.45, 0.4, 0.35`);
+    - a standalone minimal identified-space monomial scan (`sparse_monomial_scan_diagnostic.jl`, `support ≤ 2`, coefficients in `{-1,0,1}`) accepts `T₂/R`, `T₁/T₂`, and `T₁/R`, which span the identified plane.
+  - Decide how to present orthogonal SVD coordinates versus sparse interpretable oblique coordinates in the final example.
   - Decide whether to replace `data = rand(...)` with a fixed saved realization for public-facing reproducibility.
-  - Likely candidate for Varimax-based interpretable basis in the public-facing version.
   - Add explicit invariance-test path (`find_invariant_subspace`) for the public-facing version.
+  - Do not center Varimax unless later evidence gives a concrete reason.
 
 Exploratory / non-public examples for now:
 - [ ] `examples/pk_model.jl` (keep on `revision1`, do not prioritize for `main` public example set)
@@ -77,10 +93,10 @@ Working mode for public-facing keeper cleanup:
 
 Per-example checklist for public-facing keepers:
 - [ ] Runs with current APIs
-- [ ] Has clear status header: legacy / supplementary / non-paper
 - [ ] Has minimal run instructions that are current
+- [ ] Keeps keeper/legacy/non-paper metadata in docs rather than script headers
 - [ ] Includes explicit invariance-test path
-- [ ] Has explicit interpretable-basis decision where relevant (notably `transport_model.jl` / Varimax)
+- [ ] Has explicit interpretable-basis decision where relevant (notably `transport_model.jl`: orthogonal SVD basis vs sparse monomial scan)
 - [ ] Does not over-claim reliability
 
 ---
