@@ -1,6 +1,6 @@
 # NEXT STEPS — IIR Revision Backlog
 
-**Last Updated:** 2026-03-13  
+**Last Updated:** 2026-03-17  
 **Branch:** `revision1`  
 **Canonical plan:** `AGENTS.md`
 
@@ -43,6 +43,11 @@
     - greedy selected scan basis recovers exactly the expected interpretable identified basis structure: 12 singleton directions + `β₁/K₁`, `β₂/K₂`, `β₃/K₃`;
     - selected scan-basis span distance to the saved identified profile basis is ~`1e-15`.
   - Earlier manual null-space check also showed `βᵢKᵢ` products span the saved null space to numerical precision.
+  - 2026-03-17 read-only informedness follow-up (using the saved `θ_MLE` from the canonical artifact plus a reconstructed high-precision IIR map; no fresh NeSI rerun):
+    - the same sparse 15-direction identified family remains appropriate;
+    - informedness mainly **reorders** those directions rather than changing the sparse basis family;
+    - strongest relative directional-information candidates inside that family begin with `β₃/K₃`, `β₁/K₁`, then `α₃`, `k_degp₂`, ...
+    - greedy conditional-information ordering begins `β₃/K₃`, `β₁/K₁`, `k_degp₂`, `k_degp₁`, `k_degp₃`, ...
   - If the basis actually used for profiling is changed materially, plan one clean NeSI rerun for consistency.
 
 ---
@@ -79,10 +84,20 @@ Public-facing keeper examples:
     - exact null direction `(1,1,1)` and identified plane `a + b + c = 0`;
     - direct rounding of the raw orthogonal identified/null basis gives a stable orthogonal rounded SVD basis (`round_within = 0.45, 0.4, 0.35`);
     - a standalone minimal identified-space monomial scan (`sparse_monomial_scan_diagnostic.jl`, `support ≤ 2`, coefficients in `{-1,0,1}`) accepts `T₂/R`, `T₁/T₂`, and `T₁/R`, which span the identified plane.
+  - 2026-03-17 informedness follow-up for transport:
+    - information / conditional-information magnitudes should be interpreted relative to `σ₁²`, not by raw scale alone;
+    - after selecting `T₂/R`, the remaining candidates `T₁/T₂` and `T₁/R` have essentially equal conditional gain because `T₁/R = T₁/T₂ + T₂/R` in log-exponent coordinates;
+    - this reinforces that the accepted sparse ratio **family** is the main interpretable object, while orthogonal SVD coordinates still serve a distinct local-sensitivity role.
   - Decide how to present orthogonal SVD coordinates versus sparse interpretable oblique coordinates in the final example.
   - Decide whether to replace `data = rand(...)` with a fixed saved realization for public-facing reproducibility.
   - Add explicit invariance-test path (`find_invariant_subspace`) for the public-facing version.
   - Do not center Varimax unless later evidence gives a concrete reason.
+
+Method/draft basis-search follow-up now in scope:
+- [ ] Present identified-side basis results as three complementary views of the same subspace: SVD basis, singleton-first sparse basis, and stepwise most-informative simple basis; keep `N` simplicity-based.
+- [ ] Implement/test informed monomial basis selection on `N_perp` using directional information and conditional information gain, with simplicity/residual as tie-breaks.
+- [ ] Implement/test a two-pass full reparameterisation search: informed on `N_perp`, simplicity-based on `N`.
+- [ ] Report information scores comparatively using relative scales (e.g. `I/σ₁²`, `Δ/σ₁²`) rather than raw magnitudes when comparing across examples.
 
 Exploratory / non-public examples for now:
 - [ ] `examples/pk_model.jl` (keep on `revision1`, do not prioritize for `main` public example set)
