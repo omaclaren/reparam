@@ -12,6 +12,7 @@ using Plots
 using Distributions
 using LinearAlgebra
 using Random
+using Serialization
 
 # Set random seed for reproducibility
 Random.seed!(1)
@@ -68,6 +69,25 @@ function create_ϕ_mapping(x, L)
     - Function mapping θ to solution values
     """
     return θ -> solve_model(θ, x, L)
+end
+
+# --------------------------------------------------------
+# IIR basis-view reporting helper
+# --------------------------------------------------------
+
+function print_basis_view(title::String, basis::AbstractMatrix{<:Real}; labels=nothing)
+    println("\n", title)
+    println(repeat("-", length(title)))
+    if size(basis, 2) == 0
+        println("(empty)")
+        return
+    end
+    for j in 1:size(basis, 2)
+        label = labels === nothing ? "column $(j)" : labels[j]
+        println("  ", label, " => ", collect(basis[:, j]))
+    end
+    println("Matrix with columns as basis vectors:")
+    display(Matrix{Float64}(basis))
 end
 
 # --------------------------------------------------------
@@ -553,55 +573,92 @@ for (i,j) in param_pairs
 end
 
 # --------------------------------------------------------
-# Sloppihood-Informed Parameterization Analysis
+# IIR basis selection and reparameterization analysis
 # --------------------------------------------------------
-use_analytical_basis = false
-if use_analytical_basis
-    model_name = "transport_analytical"
-    evecs_scaled = [[0, 1, -1] [1, 0, -1] [1, 1, 1]]
-    # Update variable names for analytical coordinates
-    varnames["ψ1"] = "\\frac{T_2}{R}"
-    varnames["ψ2"] = "\\frac{T_1}{R}"
-    varnames["ψ3"] = "T_1 T_2 R"
-    varnames["ψ1_save"] = "T_2_over_R"
-    varnames["ψ2_save"] = "T_1_over_R"
-    varnames["ψ3_save"] = "T_1_T_2_R"
-else
-    model_name = "transport_iir"
-    # Scale and round eigenvectors for iir transformation
-    # Option 1. based on the eigenvalues and eigenvectors from the log parameterization
-    # Option 2. based on the right singular vectors from the log parameterization
-    use_singular_vectors = true
-    # Update variable names for iir coordinates
-    if use_singular_vectors
-        evecs_scaled = scale_and_round(Vt_XY_log; round_within=0.5, column_scales=[1,1,1])
-        varnames["ψ1"] = "\\frac{T_2}{R}"
-        varnames["ψ2"] = "\\frac{T_1}{\\sqrt{T_2R}}"
-        varnames["ψ3"] = "T_1 T_2 R"
-        varnames["ψ1_save"] = "T_2_over_R"
-        varnames["ψ2_save"] = "T_1_over_sqrt_T_2_R"
-        varnames["ψ3_save"] = "T_1_T_2_R"
-    else
-        evecs_scaled = scale_and_round(evecs_log; round_within=0.5, column_scales=[1,1,1])
-        varnames["ψ1"] = "\\frac{T_2}{R}"
-        varnames["ψ2"] = "\\frac{T_1}{\\sqrt{T_2R}}"
-        varnames["ψ3"] = "T_1 T_2 R"
-        varnames["ψ1_save"] = "T_2_over_R"*"_approx"
-        varnames["ψ2_save"] = "T_1_over_sqrt_T_2_R"*"_approx"
-        varnames["ψ3_save"] = "T_1_T_2_R"*"_approx"
-    end
-end
+model_name = "transport_iir"
 print(model_name*"\n")
 
-println("Transformations:")
-display(evecs_scaled)
-display(inv(evecs_scaled))
+# Invariant-subspace split in log coordinates
+_, N_inv, N_perp_inv, _ = find_invariant_subspace(ϕ_func_XY_log, XY_log_MLE; verbose=false)
+orthogonal_identified_basis = orthonormalize_columns(N_perp_inv)
+orthogonal_null_basis = orthonormalize_columns(N_inv)
 
-println("Original right singular vectors:")
-display(Vt_XY_log)
+# Monomial basis views
+param_names = ["T1", "T2", "R"]
+residual_cap = 1e-2
+identified_sparse = simple_search_with_support_retry(N_perp_inv, param_names; s_max=2, c_max=1, residual_cap=residual_cap)
+identified_informed = informed_monomial_basis_search(N_perp_inv, J_ϕ_XY_log' * J_ϕ_XY_log, S_XY_log[1]^2, param_names; s_max=2, c_max=1, residual_cap=residual_cap)
+null_sparse = simple_search_with_support_retry(N_inv, param_names; s_max=2, c_max=1, residual_cap=residual_cap)
 
-# Construct transformation
-xytoXY_iir, XYtoxy_iir = reparam(evecs_scaled)
+identified_sparse_basis = basis_candidate_matrix(identified_sparse.selected, length(param_names))
+identified_sparse_labels = basis_labels(identified_sparse.selected)
+identified_informed_basis = basis_candidate_matrix(identified_informed.selected, length(param_names))
+identified_informed_labels = basis_labels(identified_informed.selected)
+null_sparse_basis = basis_candidate_matrix(null_sparse.selected, length(param_names))
+null_sparse_labels = basis_labels(null_sparse.selected)
+
+if !identified_sparse.basis_ok
+    error("Singleton-first sparse basis search failed on the identified side N_perp")
+end
+if !identified_informed.basis_ok
+    error("Stepwise informed simple basis search failed on the identified side N_perp")
+end
+if !null_sparse.basis_ok
+    error("Singleton-first sparse basis search failed on the invariant null side N")
+end
+
+# Choose the final profiling basis explicitly:
+# - identified side: stepwise informed simple basis
+# - null side: singleton-first sparse basis
+basis_columns_iir = hcat(identified_informed_basis, null_sparse_basis)
+A_iir = basis_columns_iir'
+final_basis_labels = vcat(identified_informed_labels, null_sparse_labels)
+
+# Update variable names for the chosen IIR coordinates
+varnames["ψ1"] = "\\frac{T_2}{R}"
+varnames["ψ2"] = "\\frac{T_1}{T_2}"
+varnames["ψ3"] = "T_1 T_2 R"
+varnames["ψ1_save"] = "T_2_over_R"
+varnames["ψ2_save"] = "T_1_over_T_2"
+varnames["ψ3_save"] = "T_1_T_2_R"
+
+print_basis_view("Orthogonal SVD-style basis for identified side N_perp", orthogonal_identified_basis)
+print_basis_view("Orthogonal basis for invariant null side N", orthogonal_null_basis)
+print_basis_view("Singleton-first sparse basis for identified side N_perp", identified_sparse_basis; labels=identified_sparse_labels)
+print_basis_view("Stepwise informed simple basis for identified side N_perp", identified_informed_basis; labels=identified_informed_labels)
+print_basis_view("Singleton-first sparse basis for invariant null side N", null_sparse_basis; labels=null_sparse_labels)
+print_basis_view("Final basis columns used for reparam", basis_columns_iir; labels=final_basis_labels)
+println("\nFinal reparameterisation matrix A (rows are exponent vectors used in ψ = f^{-1} ∘ A ∘ f):")
+display(A_iir)
+
+basis_views_path = joinpath(@__DIR__, "transport_model_basis_views.jls")
+serialize(basis_views_path, Dict(
+    "model_name" => model_name,
+    "param_names" => param_names,
+    "XY_log_MLE" => XY_log_MLE,
+    "orthogonal_identified_basis" => orthogonal_identified_basis,
+    "orthogonal_null_basis" => orthogonal_null_basis,
+    "singleton_first_sparse_identified_basis" => identified_sparse_basis,
+    "singleton_first_sparse_identified_labels" => identified_sparse_labels,
+    "singleton_first_sparse_identified_accepted_basis" => basis_candidate_matrix(identified_sparse.accepted, length(param_names)),
+    "singleton_first_sparse_identified_accepted_labels" => basis_labels(identified_sparse.accepted),
+    "stepwise_informed_simple_identified_basis" => identified_informed_basis,
+    "stepwise_informed_simple_identified_labels" => identified_informed_labels,
+    "stepwise_informed_simple_identified_accepted_basis" => basis_candidate_matrix(identified_informed.accepted, length(param_names)),
+    "stepwise_informed_simple_identified_accepted_labels" => basis_labels(identified_informed.accepted),
+    "singleton_first_sparse_null_basis" => null_sparse_basis,
+    "singleton_first_sparse_null_labels" => null_sparse_labels,
+    "singleton_first_sparse_null_accepted_basis" => basis_candidate_matrix(null_sparse.accepted, length(param_names)),
+    "singleton_first_sparse_null_accepted_labels" => basis_labels(null_sparse.accepted),
+    "final_basis_columns_for_reparam" => basis_columns_iir,
+    "final_basis_labels" => final_basis_labels,
+    "final_reparameterisation_matrix_A" => A_iir,
+    "final_basis_choice" => "stepwise informed simple basis on N_perp plus singleton-first sparse basis on N",
+))
+println("Saved IIR basis views to ", basis_views_path)
+
+# Construct transformation from chosen basis columns
+xytoXY_iir, XYtoxy_iir = reparam(basis_columns_iir)
 
 # Transform likelihood, distributions (obs and fine) and ϕ mapping
 lnlike_XY_iir = construct_lnlike_XY(lnlike_xy, XYtoxy_iir)
@@ -609,13 +666,13 @@ distrib_XY_iir = construct_distrib_XY(distrib_xy, XYtoxy_iir)
 distrib_fine_XY_iir = construct_distrib_XY(distrib_fine_xy, XYtoxy_iir)
 ϕ_func_XY_iir = construct_ϕ_XY(ϕ_func_xy, XYtoxy_iir)
 
-# Set bounds for iir coordinates (manual due to non-monotonic transform)
+# Set bounds for IIR coordinates
 XY_iir_lower_bounds = [0.5, 0.0001, 0.00001]
 XY_iir_upper_bounds = [1.5, 10, 1000]
 XY_iir_initial = [1.0, 1.0, 10.0]
 XY_iir_true = xytoXY_iir(xy_true)
 
-# Point estimation in iir coordinates
+# Point estimation in IIR coordinates
 target_indices = []  # empty for MLE
 n_guesses = 3
 # Generate multiple initial guesses
@@ -634,7 +691,7 @@ println("  MLE time: $(round(t_mle3_elapsed, digits=1))s")
 # Quadratic approximation at MLE
 lnlike_XY_iir_ellipse, H_XY_iir_ellipse = construct_ellipse_lnlike_approx(lnlike_XY_iir, XY_iir_MLE)
 
-# Eigenanalysis in iir coordinates
+# Eigenanalysis in IIR coordinates
 evals_iir, evecs_iir = eigen(H_XY_iir_ellipse; sortby = x -> -real(x))
 println("Eigenvectors and eigenvalues for "*model_name)
 println("Eigenvalues: ", evals_iir)
@@ -655,7 +712,7 @@ println(Vt_XY_iir)
 pred_mean_MLE_iir = mean(distrib_fine_XY_iir(XY_iir_MLE))
 true_mean_iir = mean(distrib_fine_XY_iir(XY_iir_true))
 
-# 1D Profiles in iir coordinates
+# 1D Profiles in IIR coordinates
 profile_method = :LN_BOBYQA
 for i in 1:dim_all
     target_index = i
@@ -713,7 +770,7 @@ for i in 1:dim_all
         target_save=varnames["ψ"*string(i)*"_save"])
 end
 
-# 2D Profiles in iir coordinates
+# 2D Profiles in IIR coordinates
 profile_method = :LN_BOBYQA
 param_pairs = [(i,j) for i in 1:dim_all for j in (i+1):dim_all]
 

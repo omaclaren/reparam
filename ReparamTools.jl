@@ -44,6 +44,12 @@ export
     # Utility functions
     scale_and_round,
     varimax_rotation,
+    orthonormalize_columns,
+    basis_candidate_matrix,
+    basis_labels,
+    simple_monomial_basis_search,
+    simple_search_with_support_retry,
+    informed_monomial_basis_search,
     reparam,
     generate_initial_guesses,
     construct_observation_matrix

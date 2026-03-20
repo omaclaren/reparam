@@ -21,18 +21,23 @@
 #   julia --project=. simple_monomial_basis_selection_draft.jl transport --mode=stepwise_informed
 #   julia --project=. simple_monomial_basis_selection_draft.jl both --mode=stepwise_informed --smax=2 --cmax=1 --residual-cap=1e-2
 #
-# This draft script currently implements basis views B and C:
-# - B = singleton-first sparse basis
-# - C = stepwise most-informative simple basis
-# The orthogonal SVD basis (A) remains a separate numerical reference rather than
-# a search mode in this script.
+# This draft script currently implements two interpretable basis constructions:
+# - singleton-first sparse basis
+# - stepwise informed simple basis
+# The orthogonal SVD basis remains a separate numerical reference rather than a
+# search mode in this script.
+#
+# The final reparameterisation matrix A is a separate downstream choice and is
+# not identified with any one basis-construction label here.
 #
 # For each example, the script now reports searches on both:
 # - the identified side `N_perp`
 # - the invariant null side `N` (if non-empty)
 # If an informed search is requested on a space where the local `J'J` metric is
-# degenerate, the script reports that and falls back explicitly to B.
-# If B then fails at the requested support cap `s_max`, the script automatically
+# degenerate, the script reports that and falls back explicitly to the
+# singleton-first sparse basis.
+# If that basis search then fails at the requested support cap `s_max`, the
+# script automatically
 # retries once at support `s_max + 1` (up to the ambient dimension) and reports
 # that support expansion explicitly.
 
@@ -893,9 +898,9 @@ end
 function selection_mode_view_label(mode::Symbol)
     mode_c = canonical_selection_mode(mode)
     if mode_c == :simple
-        return "B. Singleton-first sparse basis"
+        return "singleton-first sparse basis"
     elseif mode_c == :informed
-        return "C. Stepwise most-informative simple basis"
+        return "stepwise informed simple basis"
     end
 end
 
