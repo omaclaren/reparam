@@ -229,8 +229,52 @@ if n_nonident == 0
 end
 
 # === BUILD TRANSFORMATION ===
-N_perp_varimax = ReparamTools.varimax_rotation(N_perp; n_restarts=200, threshold=1e-2)
-N_perp_clean = ReparamTools.scale_and_round(N_perp_varimax; round_within=0.15)
+J_iir_log = ReparamTools.compute_ϕ_Jacobian(ϕ_iir_log, θ_log_MLE)
+σ1_sq = svdvals(J_iir_log)[1]^2
+residual_cap = 1e-2
+
+identified_basis_result = ReparamTools.informed_monomial_basis_search(
+    N_perp,
+    J_iir_log' * J_iir_log,
+    σ1_sq,
+    param_names;
+    s_max=2,
+    c_max=1,
+    residual_cap=residual_cap,
+)
+
+null_basis_result = ReparamTools.simple_search_with_support_retry(
+    N,
+    param_names;
+    s_max=2,
+    c_max=1,
+    residual_cap=residual_cap,
+)
+
+identified_basis_result.basis_ok || error("Could not construct identifiable-side sparse basis for repressilator")
+null_basis_result.basis_ok || error("Could not construct invariant-null sparse basis for repressilator")
+
+N_perp_clean = ReparamTools.basis_candidate_matrix(identified_basis_result.selected, n_params)
+N_clean = ReparamTools.basis_candidate_matrix(null_basis_result.selected, n_params)
+N_perp_labels = ReparamTools.basis_labels(identified_basis_result.selected)
+N_clean_labels = ReparamTools.basis_labels(null_basis_result.selected)
+
+function monomial_label_from_column(v, param_names)
+    vr = round.(Int, v)
+    num = String[]
+    den = String[]
+    for (name, exp) in zip(param_names, vr)
+        if exp > 0
+            push!(num, exp == 1 ? name : string(name, "^", exp))
+        elseif exp < 0
+            nexp = -exp
+            push!(den, nexp == 1 ? name : string(name, "^", nexp))
+        end
+    end
+    num_str = isempty(num) ? "1" : join(num, "*")
+    den_str = isempty(den) ? "" : join(den, "*")
+    return isempty(den_str) ? num_str : string(num_str, "/(", den_str, ")")
+end
 
 # Fix K/β signs to get K/β (not β/K)
 for j in 1:n_ident
@@ -250,8 +294,17 @@ for j in 1:n_ident
     end
 end
 
-N_varimax = ReparamTools.varimax_rotation(N; n_restarts=200, threshold=1e-2)
-N_clean = ReparamTools.scale_and_round(N_varimax; round_within=0.15)
+N_perp_labels = [monomial_label_from_column(N_perp_clean[:, j], param_names) for j in 1:n_ident]
+
+println("\nSelected identifiable-side basis labels:")
+for (j, label) in enumerate(N_perp_labels)
+    println("  ψ_$j = ", label)
+end
+
+println("\nSelected invariant-null basis labels:")
+for (j, label) in enumerate(N_clean_labels)
+    println("  ψ_$(n_ident + j) = ", label)
+end
 
 A_T_final = hcat(N_perp_clean, N_clean)
 
@@ -527,6 +580,8 @@ results = Dict(
     "ψ_MLE" => ψ_MLE,
     "θ_MLE" => θ_MLE,
     "A_T_final" => A_T_final,
+    "identified_basis_labels" => N_perp_labels,
+    "null_basis_labels" => N_clean_labels,
     "target_2d" => target_2d,
     "nuisance_to_profile" => nuisance_to_profile,
     "fixed_at_mle" => fixed_at_mle,
