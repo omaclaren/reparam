@@ -1,9 +1,15 @@
 # NeSI Setup for IIR Profiling (Current Workflow)
 
-**Updated:** 2026-02-24  
+**Updated:** 2026-03-20  
 **Project Code:** `uoa04634`
 
 This document reflects the **current** repressilator profiling workflow.
+
+> **Project workflow note:** for this project, the maintained NeSI workflow is
+> **NeSI OnDemand only**:
+> - upload/update files via **OnDemand Files**
+> - submit and monitor jobs via **OnDemand Shell Access**
+> - treat these notes as the source of truth for that workflow
 
 ## Active scripts (use these)
 
@@ -31,7 +37,9 @@ This ensures `Project.toml` / `Manifest.toml` are ready.
 
 ## 2) Upload to NeSI
 
-Via OnDemand Files, upload/update:
+Via **NeSI OnDemand Files**, upload/update the changed files in your `~/reparam/` checkout before submitting any jobs.
+
+Upload/update:
 
 - `Project.toml`, `Manifest.toml`
 - `ReparamTools.jl`
@@ -44,8 +52,10 @@ Also upload any plotting/post-processing scripts you plan to run locally (e.g., 
 
 ## 3) Optional test job
 
+Open **OnDemand Shell Access** and run:
+
 ```bash
-cd /path/to/reparam
+cd ~/reparam
 sbatch submit_nesi.sl
 ```
 
@@ -57,8 +67,10 @@ squeue --me
 
 ## 4) Run profiling jobs
 
+After uploading any changed local files to the matching paths under `~/reparam/`, open **OnDemand Shell Access** and run:
+
 ```bash
-cd /path/to/reparam/nesi
+cd ~/reparam/nesi
 sbatch submit_test_20x20.sl   # quick smoke test
 sbatch submit_50x50.sl        # publication-quality baseline
 sbatch submit_100x100.sl      # higher resolution (longer runtime)
@@ -89,3 +101,4 @@ julia --project=. repressilator_prediction_intervals_from_2d_profile.jl nesi/rep
 - NeSI runs are for profiling compute; plotting is usually done locally.
 - Keep commits/file uploads targeted to changed files only.
 - Prefer the `nesi/submit_*.sl` scripts over older root-level submit/runner files.
+- These instructions assume the repo is maintained on NeSI via **OnDemand file uploads**, not via a separate SSH/sync workflow.
