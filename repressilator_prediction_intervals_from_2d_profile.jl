@@ -66,6 +66,34 @@ n_nonident = results["n_nonident"]
 nuisance_to_profile = get(results, "nuisance_to_profile", Int[])
 fixed_at_mle = get(results, "fixed_at_mle", Int[])
 mode = get(results, "mode", "unknown")
+profile_chart = get(results, "profile_chart", "full_sparse_psi")
+ψ_vals_layout = get(results, "ψ_vals_layout", "legacy")
+θ_vals_raw = get(results, "θ_vals", nothing)
+
+function standardize_row_container(rows_raw, n_points_expected::Int, name::String)
+    rows = if rows_raw isa AbstractVector
+        if isempty(rows_raw)
+            Vector{Vector{Float64}}()
+        elseif rows_raw[1] isa AbstractVector
+            [collect(Float64.(v)) for v in rows_raw]
+        else
+            n_points_expected == 1 || error("$name is flat but expected $n_points_expected points")
+            [collect(Float64.(rows_raw))]
+        end
+    elseif rows_raw isa AbstractMatrix
+        nr, nc = size(rows_raw)
+        if nr == n_points_expected
+            [vec(Float64.(rows_raw[i, :])) for i in 1:nr]
+        elseif nc == n_points_expected
+            [vec(Float64.(rows_raw[:, i])) for i in 1:nc]
+        else
+            error("Cannot align $name size ($nr, $nc) with expected length $n_points_expected")
+        end
+    else
+        error("Unsupported $name container type: $(typeof(rows_raw))")
+    end
+    return rows
+end
 
 """
 standardize_ψ_grid_layout(ψ_vals_raw, n_points_expected, ψ_log_MLE, target_2d, nuisance_to_profile)
@@ -94,27 +122,7 @@ function standardize_ψ_grid_layout(
     nuisance_to_profile::Vector{Int}
 )
     # 1) Standardize container to vector-of-rows in saved layout
-    ψ_saved_rows = if ψ_vals_raw isa AbstractVector
-        if isempty(ψ_vals_raw)
-            Vector{Vector{Float64}}()
-        elseif ψ_vals_raw[1] isa AbstractVector
-            [collect(Float64.(v)) for v in ψ_vals_raw]
-        else
-            n_points_expected == 1 || error("ψ_vals is flat but ll_vals has $n_points_expected points")
-            [collect(Float64.(ψ_vals_raw))]
-        end
-    elseif ψ_vals_raw isa AbstractMatrix
-        nr, nc = size(ψ_vals_raw)
-        if nr == n_points_expected
-            [vec(Float64.(ψ_vals_raw[i, :])) for i in 1:nr]
-        elseif nc == n_points_expected
-            [vec(Float64.(ψ_vals_raw[:, i])) for i in 1:nc]
-        else
-            error("Cannot align ψ_vals size ($nr, $nc) with ll_vals length $n_points_expected")
-        end
-    else
-        error("Unsupported ψ_vals container type: $(typeof(ψ_vals_raw))")
-    end
+    ψ_saved_rows = standardize_row_container(ψ_vals_raw, n_points_expected, "ψ_vals")
 
     # 2) Expand each row to full canonical log-ψ layout
     n_params = length(ψ_log_MLE)
@@ -125,11 +133,14 @@ function standardize_ψ_grid_layout(
         ψ_log_saved = ψ_saved_rows[k]
         n_saved = length(ψ_log_saved)
 
+        if ψ_vals_layout == "canonical_full_log"
+            n_saved == n_params || error("Expected canonical full ψ rows of length $n_params, got $n_saved at grid point $k")
+            ψ_log_grid[k] = copy(ψ_log_saved)
         # IMPORTANT: check opt_indices layout before generic n_params fallback.
-        # For full-profile repressilator files, n_saved == length(opt_indices) == n_params,
+        # For legacy full-profile repressilator files, n_saved == length(opt_indices) == n_params,
         # but rows are stored in optimization order [target_2d; nuisance_to_profile],
         # not canonical ψ index order.
-        if n_saved == length(opt_indices)
+        elseif n_saved == length(opt_indices)
             ψ_log_full = copy(ψ_log_MLE)
             ψ_log_full[opt_indices] = ψ_log_saved
             ψ_log_grid[k] = ψ_log_full
@@ -151,16 +162,21 @@ n_params = length(θ_MLE)
 ψ_log_MLE = log.(ψ_MLE)
 ψ_log_grid, ψ_saved_rows = standardize_ψ_grid_layout(
     ψ_vals_raw, length(ll_vals), ψ_log_MLE, target_2d, nuisance_to_profile)
+θ_grid = isnothing(θ_vals_raw) ? nothing : standardize_row_container(θ_vals_raw, length(ll_vals), "θ_vals")
 
 println("Grid: $GRID × $GRID")
 println("Stored points: ll=$(length(ll_vals)), ψ=$(length(ψ_log_grid))")
 GRID^2 == length(ll_vals) || println("  WARNING: GRID^2 = $(GRID^2), ll_vals has $(length(ll_vals)) entries")
 println("Mode: $mode")
+println("Profile chart: $profile_chart")
 println("Rank: $rank_J, Identifiable: $n_ident, Non-identifiable: $n_nonident")
 println("Target coordinates: ψ_$(target_2d[1]) (identifiable), ψ_$(target_2d[2]) (non-identifiable)")
 println("Nuisance profiled: $(length(nuisance_to_profile)), fixed at MLE: $(length(fixed_at_mle))")
 println("Saved ψ row lengths: $(sort(unique(length.(ψ_saved_rows))))")
 println("Standardized ψ row length: $n_params")
+if !isnothing(θ_grid)
+    println("Stored θ row lengths: $(sort(unique(length.(θ_grid))))")
+end
 
 # ψ in natural scale -> θ
 ψ_to_θ(ψ) = exp.(A_T_final' \ log.(ψ))
@@ -248,9 +264,13 @@ mle_col = argmin(abs.(target2_log_grid .- ψ_MLE_target2_log))
 k_gridded_mle = argmax(ll_vals)
 grid_mle_row = ((k_gridded_mle - 1) % GRID) + 1
 grid_mle_col = ((k_gridded_mle - 1) ÷ GRID) + 1
-ψ_log_full_grid_mle = ψ_log_grid[k_gridded_mle]
-ψ_full_grid_mle = exp.(ψ_log_full_grid_mle)
-θ_gridded_MLE = ψ_to_θ(ψ_full_grid_mle)
+θ_gridded_MLE = if isnothing(θ_grid)
+    ψ_log_full_grid_mle = ψ_log_grid[k_gridded_mle]
+    ψ_full_grid_mle = exp.(ψ_log_full_grid_mle)
+    ψ_to_θ(ψ_full_grid_mle)
+else
+    θ_grid[k_gridded_mle]
+end
 pred_gridded_MLE = predict_mRNA_fine(θ_gridded_MLE)
 pred_gridded_MLE_mat = reshape(pred_gridded_MLE, n_species, n_time)
 
@@ -306,9 +326,13 @@ pred_lookup = Dict{Int, Matrix{Float64}}()  # k -> (3 × n_time)
 
 for (n, k) in enumerate(prediction_eval_indices)
     try
-        ψ_log_full = ψ_log_grid[k]
-        ψ_full = exp.(ψ_log_full)
-        θ = ψ_to_θ(ψ_full)
+        θ = if isnothing(θ_grid)
+            ψ_log_full = ψ_log_grid[k]
+            ψ_full = exp.(ψ_log_full)
+            ψ_to_θ(ψ_full)
+        else
+            θ_grid[k]
+        end
 
         if any(θ .<= 0) || any(!isfinite, θ)
             global failure_bad_theta += 1

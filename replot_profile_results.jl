@@ -37,6 +37,11 @@ n_nonident = results["n_nonident"]
 # New fields (with defaults for old format)
 N_NUISANCE = get(results, "N_NUISANCE", 16)
 mode_str = get(results, "mode", "PROFILE (16 nuisance)")
+profile_chart = get(results, "profile_chart", "full_sparse_psi")
+chart_interest_matrix = get(results, "chart_interest_matrix", nothing)
+chart_drop_idx = get(results, "chart_drop_idx", nothing)
+chart_keep_idx = get(results, "chart_keep_idx", nothing)
+chart_eta_keep_ref = get(results, "chart_eta_keep_ref", nothing)
 
 n_params = length(θ_MLE)
 β1_idx, K1_idx = 7, 10
@@ -94,13 +99,36 @@ println("\n1D Profile analysis:")
 println("  K₁/β₁ (identifiable): $n_above_1/$GRID above 95% threshold")
 println("  β₁·K₁ (non-identifiable): $n_above_2/$GRID above 95% threshold")
 
-# === HELPER: Transform ψ targets to (β₁, K₁) in θ-space ===
-function ψ_targets_to_β1K1(ψ_t1, ψ_t2, ψ_ref, target_ψ_indices, ψ_to_θ_map)
-    ψ_full = copy(ψ_ref)
-    ψ_full[target_ψ_indices[1]] = ψ_t1
-    ψ_full[target_ψ_indices[2]] = ψ_t2
-    θ = ψ_to_θ_map(ψ_full)
-    return θ[7], θ[10]  # β₁, K₁
+# === HELPER: Transform profiled interest targets to (β₁, K₁) in θ-space ===
+if profile_chart == "interest_plus_original_complement" &&
+   !isnothing(chart_interest_matrix) && !isnothing(chart_drop_idx) &&
+   !isnothing(chart_keep_idx) && !isnothing(chart_eta_keep_ref)
+
+    C_interest = Matrix{Float64}(chart_interest_matrix)
+    drop_idx = Int.(chart_drop_idx)
+    keep_idx = Int.(chart_keep_idx)
+    η_keep_ref = Float64.(chart_eta_keep_ref)
+    Cj_inv = inv(Matrix(C_interest[:, drop_idx]))
+    Ck = Matrix(C_interest[:, keep_idx])
+    θ_log_ref = log.(θ_MLE)
+
+    function ψ_targets_to_β1K1(ψ_t1, ψ_t2, ψ_ref, target_ψ_indices, ψ_to_θ_map)
+        log_interest = log.([ψ_t1, ψ_t2])
+        η_drop = Cj_inv * (log_interest - Ck * η_keep_ref)
+        η = copy(θ_log_ref)
+        η[keep_idx] = η_keep_ref
+        η[drop_idx] = η_drop
+        θ = exp.(η)
+        return θ[β1_idx], θ[K1_idx]
+    end
+else
+    function ψ_targets_to_β1K1(ψ_t1, ψ_t2, ψ_ref, target_ψ_indices, ψ_to_θ_map)
+        ψ_full = copy(ψ_ref)
+        ψ_full[target_ψ_indices[1]] = ψ_t1
+        ψ_full[target_ψ_indices[2]] = ψ_t2
+        θ = ψ_to_θ_map(ψ_full)
+        return θ[β1_idx], θ[K1_idx]
+    end
 end
 
 # === PLOTTING ===

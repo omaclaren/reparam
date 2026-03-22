@@ -170,6 +170,8 @@ data = y_true + σ * randn(length(y_true))
                    3.0, 3.0, 3.0, 0.003, 0.003, 0.003, 0.0008, 0.0008, 0.0008]
 θ_upper_profile = [0.020, 0.020, 0.020, 3.0, 3.0, 3.0, 0.5, 0.5, 0.5,
                    100.0, 100.0, 100.0, 0.010, 0.010, 0.010, 0.002, 0.002, 0.002]
+θ_log_lower_profile = log.(θ_lower_profile)
+θ_log_upper_profile = log.(θ_upper_profile)
 
 # === LIKELIHOOD FUNCTION ===
 distrib_θ = θ -> MvNormal(RepressilatorModel.predict_mRNA(θ, t_obs, X0), σ^2 * I(3*NT))
@@ -356,7 +358,7 @@ end
 target_2d = Int[target_ident_idx, target_nonident_idx]
 println("\nTarget: ψ_$(target_2d[1]) (K₁/β₁), ψ_$(target_2d[2]) (β₁·K₁)")
 
-# === COMPUTE ψ-SPACE BOUNDS ===
+# === PROFILE CHART: exact interest + original-coordinate complement ===
 function compute_ψ_bounds(θ_lo, θ_hi, θ_to_ψ_func, n_samples=10000)
     n = length(θ_lo)
     ψ_samples = [θ_to_ψ_func(θ_lo .+ rand(n) .* (θ_hi - θ_lo)) for _ in 1:n_samples]
@@ -364,43 +366,108 @@ function compute_ψ_bounds(θ_lo, θ_hi, θ_to_ψ_func, n_samples=10000)
     return vec(minimum(ψ_mat, dims=2)), vec(maximum(ψ_mat, dims=2))
 end
 
+function linear_image_bounds(C::AbstractMatrix{<:Real}, lower::AbstractVector{<:Real}, upper::AbstractVector{<:Real})
+    m, p = size(C)
+    lo = zeros(Float64, m)
+    hi = zeros(Float64, m)
+    for i in 1:m
+        for j in 1:p
+            coef = C[i, j]
+            if coef >= 0
+                lo[i] += coef * lower[j]
+                hi[i] += coef * upper[j]
+            else
+                lo[i] += coef * upper[j]
+                hi[i] += coef * lower[j]
+            end
+        end
+    end
+    return lo, hi
+end
+
+function choose_drop_indices(C::AbstractMatrix{<:Real})
+    m, p = size(C)
+    F = qr(Matrix(C), ColumnNorm())
+    J = sort(Vector(F.p[1:m]))
+    rank(Matrix(C[:, J])) == m || error("Could not find an invertible original-coordinate complement for the chosen interests")
+    return J
+end
+
+C_interest = Matrix(transpose(A_T_final[:, target_2d]))
+drop_idx = choose_drop_indices(C_interest)
+keep_idx = setdiff(1:n_params, drop_idx)
+Cj = Matrix(C_interest[:, drop_idx])
+Ck = Matrix(C_interest[:, keep_idx])
+Cj_inv = inv(Cj)
+chart_decoupled = maximum(abs.(Ck)) < 1e-12
+chart_eta_keep_ref = θ_log_MLE[keep_idx]
+
+println("\nProfile chart: exact interest + original-coordinate complement")
+println("  Dropped original coordinates: $(join(param_names[drop_idx], ", "))")
+println("  Kept original coordinates: $(length(keep_idx))")
+println("  Decoupled interest block: $(chart_decoupled)")
+
+# Keep full ψ-space bounds for metadata / postprocessing, but reuse the legacy
+# varimax-era 2D target window that previously gave acceptable repressilator profiles.
+# Only the nuisance optimization chart is being changed here.
 ψ_lower, ψ_upper = compute_ψ_bounds(θ_lower_profile, θ_upper_profile, θ_to_ψ, 10000)
 ψ_log_lower = log.(ψ_lower)
 ψ_log_upper = log.(ψ_upper)
+legacy_target_lower = [6.5638417359811925, 0.019558192562089023]   # [K₁/β₁, β₁·K₁]
+legacy_target_upper = [37504.4697128395, 49.11316897036603]        # [K₁/β₁, β₁·K₁]
+interest_log_lower = log.(legacy_target_lower)
+interest_log_upper = log.(legacy_target_upper)
+ψ_log_lower[target_2d] = interest_log_lower
+ψ_log_upper[target_2d] = interest_log_upper
+ψ_lower[target_2d] = legacy_target_lower
+ψ_upper[target_2d] = legacy_target_upper
 
 # === SELECT NUISANCE PARAMETERS ===
-# Order by: other genes' K/β ratios first, then products, then remaining
-# This gives a natural ordering for partial profiling
-
-all_other_ψ = setdiff(1:n_params, target_2d)
-
-# For partial nuisance: prioritize gene 2 and 3 K/β ratios (most important)
-# then gene 2/3 products, then everything else
-# This is a heuristic - the identifiable combos are more "important" to profile
+# Profile in original log-parameters for the nuisance complement. The current gene-1
+# interest pair decouples from the chosen complement, so the nuisance feasible set stays box-constrained.
+all_other_params = keep_idx
 
 if N_NUISANCE == 0
     nuisance_to_profile = Int[]
-    fixed_at_mle = all_other_ψ
-elseif N_NUISANCE >= 16
-    nuisance_to_profile = all_other_ψ
+    fixed_at_mle = all_other_params
+elseif N_NUISANCE >= length(all_other_params)
+    nuisance_to_profile = all_other_params
     fixed_at_mle = Int[]
 else
-    # Partial: profile first N_NUISANCE of the others
-    nuisance_to_profile = all_other_ψ[1:N_NUISANCE]
-    fixed_at_mle = all_other_ψ[N_NUISANCE+1:end]
+    nuisance_to_profile = all_other_params[1:N_NUISANCE]
+    fixed_at_mle = all_other_params[N_NUISANCE+1:end]
+end
+
+if !chart_decoupled && N_NUISANCE > 0
+    error("The chosen interest + original-coordinate complement is coupled. A general constrained nuisance optimizer is still needed for this case.")
+end
+
+function reconstruct_η(log_interest::AbstractVector{<:Real}, η_profiled::AbstractVector{<:Real})
+    η = copy(θ_log_MLE)
+    for (k, idx) in enumerate(nuisance_to_profile)
+        η[idx] = η_profiled[k]
+    end
+    η_keep = η[keep_idx]
+    η_drop = Cj_inv * (Float64.(log_interest) - Ck * η_keep)
+    η[drop_idx] = η_drop
+    if any(!isfinite, η) || any(η .< θ_log_lower_profile) || any(η .> θ_log_upper_profile)
+        return nothing
+    end
+    return η
 end
 
 println("\n" * "=" ^ 70)
 println("PROFILING SETUP")
 println("=" ^ 70)
 println("Mode: $mode_str")
-println("Target (2D grid): ψ_$(target_2d[1]), ψ_$(target_2d[2])")
-println("Profiled nuisance ($(length(nuisance_to_profile))): $(isempty(nuisance_to_profile) ? "none" : "ψ_" * join(nuisance_to_profile, ", ψ_"))")
-println("Fixed at MLE ($(length(fixed_at_mle))): $(isempty(fixed_at_mle) ? "none" : "ψ_" * join(fixed_at_mle, ", ψ_"))")
+println("Target chart: exact [K₁/β₁, β₁·K₁] interests + original-coordinate complement")
+println("Target window: reused legacy varimax-era 2D range")
+println("Profiled nuisance θ ($(length(nuisance_to_profile))): $(isempty(nuisance_to_profile) ? "none" : join(param_names[nuisance_to_profile], ", "))")
+println("Fixed at MLE θ ($(length(fixed_at_mle))): $(isempty(fixed_at_mle) ? "none" : join(param_names[fixed_at_mle], ", "))")
 
 # === BUILD GRID ===
-target1_log_grid = range(ψ_log_lower[target_2d[1]], ψ_log_upper[target_2d[1]], length=GRID)
-target2_log_grid = range(ψ_log_lower[target_2d[2]], ψ_log_upper[target_2d[2]], length=GRID)
+target1_log_grid = range(interest_log_lower[1], interest_log_upper[1], length=GRID)
+target2_log_grid = range(interest_log_lower[2], interest_log_upper[2], length=GRID)
 ψ_target1_grid = exp.(collect(target1_log_grid))
 ψ_target2_grid = exp.(collect(target2_log_grid))
 
@@ -420,20 +487,14 @@ println("=" ^ 70)
 t_profile_start = time()
 
 if N_NUISANCE == 0
-    # SLICE: Use profile_target with empty nuisance
-    # This ensures correct grid ordering for reshape
     println("Evaluating $(GRID^2) grid points via profile_target...")
     flush(stdout)
 
-    # Slice mode: nuisance ψ coordinates are fixed at ψ_MLE.
-    # Only the two target coordinates are varied on the grid.
-    # Broad try/catch keeps long grid runs robust to occasional ODE/transform failures.
-    function lnlike_slice_ψ_log(ψ_log_targets)
+    function lnlike_slice_interest(log_interest)
         try
-            ψ_full = copy(ψ_MLE)
-            ψ_full[target_2d[1]] = exp(ψ_log_targets[1])
-            ψ_full[target_2d[2]] = exp(ψ_log_targets[2])
-            θ = ψ_to_θ(ψ_full)
+            η = reconstruct_η(log_interest, Float64[])
+            isnothing(η) && return -Inf
+            θ = exp.(η)
             if any(θ .<= 0) || any(!isfinite, θ)
                 return -Inf
             end
@@ -443,48 +504,46 @@ if N_NUISANCE == 0
         end
     end
 
-    # Bounds for just the two targets
-    ψ_log_lower_targets = [ψ_log_lower[target_2d[1]], ψ_log_lower[target_2d[2]]]
-    ψ_log_upper_targets = [ψ_log_upper[target_2d[1]], ψ_log_upper[target_2d[2]]]
-
-    # Use profile_target with empty nuisance array (Float64[])
-    ψ_vals, ll_vals = ReparamTools.profile_target(
-        lnlike_slice_ψ_log, [1, 2], ψ_log_lower_targets, ψ_log_upper_targets, Float64[];
+    chart_vals_raw, ll_vals = ReparamTools.profile_target(
+        lnlike_slice_interest, [1, 2], interest_log_lower, interest_log_upper, Float64[];
         grid_steps=GRID, use_distributed=false)
 else
-    # PROFILE: Optimize over nuisance parameters
-
-    # Broadcast to workers if distributed
     if USE_DISTRIBUTED
-        @everywhere A_T_global = $A_T_final
         @everywhere data_global = $data
         @everywhere t_obs_global = $(collect(t_obs))
         @everywhere X0_global = $X0
         @everywhere σ_global = $σ
         @everywhere NT_global = $NT
-        @everywhere ψ_MLE_global = $ψ_MLE
-        @everywhere fixed_at_mle_global = $fixed_at_mle
-        @everywhere target_2d_global = $target_2d
-        @everywhere nuisance_to_profile_global = $nuisance_to_profile
+        @everywhere θ_log_MLE_global = $θ_log_MLE
+        @everywhere θ_log_lower_global = $θ_log_lower_profile
+        @everywhere θ_log_upper_global = $θ_log_upper_profile
+        @everywhere drop_idx_global = $drop_idx
+        @everywhere keep_idx_global = $keep_idx
+        @everywhere nuisance_param_indices_global = $nuisance_to_profile
+        @everywhere Cj_inv_global = $(Matrix(Cj_inv))
+        @everywhere Ck_global = $(Matrix(Ck))
 
-        @everywhere function lnlike_ψ_log_worker(ψ_log_partial)
-            # ψ_log_partial contains: [target1, target2, nuisance_to_profile...]
-            # Need to build full ψ vector
+        @everywhere function reconstruct_η_global(log_interest, η_profiled)
+            η = copy(θ_log_MLE_global)
+            for (k, idx) in enumerate(nuisance_param_indices_global)
+                η[idx] = η_profiled[k]
+            end
+            η_keep = η[keep_idx_global]
+            η_drop = Cj_inv_global * (Float64.(log_interest) - Ck_global * η_keep)
+            η[drop_idx_global] = η_drop
+            if any(!isfinite, η) || any(η .< θ_log_lower_global) || any(η .> θ_log_upper_global)
+                return nothing
+            end
+            return η
+        end
+
+        @everywhere function lnlike_interest_keep_worker(chart_partial)
             try
-                ψ_full = copy(ψ_MLE_global)
-
-                # Set targets
-                ψ_full[target_2d_global[1]] = exp(ψ_log_partial[1])
-                ψ_full[target_2d_global[2]] = exp(ψ_log_partial[2])
-
-                # Set profiled nuisance
-                for (k, idx) in enumerate(nuisance_to_profile_global)
-                    ψ_full[idx] = exp(ψ_log_partial[2 + k])
-                end
-
-                # fixed_at_mle stays at ψ_MLE values
-
-                θ = exp.(A_T_global' \ log.(ψ_full))
+                log_interest = chart_partial[1:2]
+                η_profiled = chart_partial[3:end]
+                η = reconstruct_η_global(log_interest, η_profiled)
+                isnothing(η) && return -Inf
+                θ = exp.(η)
                 if any(θ .<= 0) || any(!isfinite, θ)
                     return -Inf
                 end
@@ -492,23 +551,20 @@ else
                 if any(!isfinite, pred)
                     return -Inf
                 end
-                dist = MvNormal(pred, σ_global^2 * I(3*NT_global))
+                dist = MvNormal(pred, σ_global^2 * I(3 * NT_global))
                 return logpdf(dist, data_global)
             catch
                 return -Inf
             end
         end
     else
-        # Non-distributed version
-        function lnlike_ψ_log_local(ψ_log_partial)
+        function lnlike_interest_keep_local(chart_partial)
             try
-                ψ_full = copy(ψ_MLE)
-                ψ_full[target_2d[1]] = exp(ψ_log_partial[1])
-                ψ_full[target_2d[2]] = exp(ψ_log_partial[2])
-                for (k, idx) in enumerate(nuisance_to_profile)
-                    ψ_full[idx] = exp(ψ_log_partial[2 + k])
-                end
-                θ = ψ_to_θ(ψ_full)
+                log_interest = chart_partial[1:2]
+                η_profiled = chart_partial[3:end]
+                η = reconstruct_η(log_interest, η_profiled)
+                isnothing(η) && return -Inf
+                θ = exp.(η)
                 if any(θ .<= 0) || any(!isfinite, θ)
                     return -Inf
                 end
@@ -519,28 +575,14 @@ else
         end
     end
 
-    # Build bounds for optimization
-    # 2D-by-design: optimization vector order is [target1, target2, nuisance...],
-    # so nuisance entries start at position 3.
-    opt_indices = vcat(target_2d, nuisance_to_profile)
-    ψ_log_lower_opt = ψ_log_lower[opt_indices]
-    ψ_log_upper_opt = ψ_log_upper[opt_indices]
-
-    # Nuisance indices within the optimization vector (positions 3 onwards)
-    nuisance_opt_indices = collect(3:(2 + length(nuisance_to_profile)))
-
-    # Initial guess for nuisance: MLE values
-    nuisance_log_lower = ψ_log_lower_opt[nuisance_opt_indices]
-    nuisance_log_upper = ψ_log_upper_opt[nuisance_opt_indices]
-    nuisance_log_guess = log.(ψ_MLE[nuisance_to_profile])
+    nuisance_log_lower = θ_log_lower_profile[nuisance_to_profile]
+    nuisance_log_upper = θ_log_upper_profile[nuisance_to_profile]
+    nuisance_log_guess = θ_log_MLE[nuisance_to_profile]
     nuisance_log_guess = clamp.(nuisance_log_guess, nuisance_log_lower .+ 1e-6, nuisance_log_upper .- 1e-6)
 
-    # Extra starting points (snake_direction=:row handles warm-starting effectively)
     n_extra_guesses = N_NUISANCE <= 4 ? 10 : 15
     nuisance_extras = ReparamTools.generate_initial_guesses(nuisance_log_lower, nuisance_log_upper, n_extra_guesses)
 
-    # Fewer chunks = better warm-starting continuity, but need enough for parallelism
-    # 36 chunks balances warm-starting vs utilizing available workers
     n_chunks_profile = 36
 
     println("Grid: $GRID × $GRID = $(GRID^2) points")
@@ -553,16 +595,36 @@ else
     println("\nStarting profiling...")
     flush(stdout)
 
-    lnlike_func = USE_DISTRIBUTED ? lnlike_ψ_log_worker : lnlike_ψ_log_local
+    lnlike_func = USE_DISTRIBUTED ? lnlike_interest_keep_worker : lnlike_interest_keep_local
+    chart_log_lower_opt = vcat(interest_log_lower, nuisance_log_lower)
+    chart_log_upper_opt = vcat(interest_log_upper, nuisance_log_upper)
 
-    ψ_vals, ll_vals = ReparamTools.profile_target(
-        lnlike_func, [1, 2], ψ_log_lower_opt, ψ_log_upper_opt, nuisance_log_guess;
+    chart_vals_raw, ll_vals = ReparamTools.profile_target(
+        lnlike_func, [1, 2], chart_log_lower_opt, chart_log_upper_opt, nuisance_log_guess;
         grid_steps=GRID, use_distributed=USE_DISTRIBUTED,
         ω_initial_extras=nuisance_extras,
-        method=:LN_BOBYQA, optmaxtime= N_NUISANCE <= 4 ? 60.0 : 150.0,
+        method=:LN_BOBYQA, optmaxtime=N_NUISANCE <= 4 ? 60.0 : 150.0,
         n_chunks=n_chunks_profile,
-        snake_direction=:row  # ψ₂ (non-identifiable) varies faster - smoother nuisance landscape
+        snake_direction=:row
     )
+end
+
+# Convert mixed chart values back to full θ and canonical full ψ (log-scale) for saving.
+θ_vals = Vector{Vector{Float64}}(undef, length(chart_vals_raw))
+ψ_vals = Vector{Vector{Float64}}(undef, length(chart_vals_raw))
+for i in eachindex(chart_vals_raw)
+    row = chart_vals_raw[i]
+    log_interest = row[1:2]
+    η_profiled = length(row) > 2 ? row[3:end] : Float64[]
+    η = reconstruct_η(log_interest, η_profiled)
+    if isnothing(η)
+        θ_vals[i] = fill(NaN, n_params)
+        ψ_vals[i] = fill(NaN, n_params)
+    else
+        θ = exp.(η)
+        θ_vals[i] = collect(θ)
+        ψ_vals[i] = collect(log.(θ_to_ψ(θ)))
+    end
 end
 
 t_profile_elapsed = time() - t_profile_start
@@ -576,6 +638,9 @@ output_base = "repressilator_$(N_NUISANCE)nuisance_$(GRID)x$(GRID)"
 
 results = Dict(
     "ψ_vals" => ψ_vals,
+    "ψ_vals_layout" => "canonical_full_log",
+    "θ_vals" => θ_vals,
+    "chart_vals" => chart_vals_raw,
     "ll_vals" => ll_vals,
     "ψ_MLE" => ψ_MLE,
     "θ_MLE" => θ_MLE,
@@ -589,11 +654,20 @@ results = Dict(
     "N_NUISANCE" => N_NUISANCE,
     "ψ_lower" => ψ_lower,
     "ψ_upper" => ψ_upper,
+    "target_log_lower" => interest_log_lower,
+    "target_log_upper" => interest_log_upper,
+    "target_bounds_source" => "legacy_varimax_window",
     "param_names" => param_names,
     "rank_J" => rank_J,
     "n_ident" => n_ident,
     "n_nonident" => n_nonident,
     "mode" => mode_str,
+    "profile_chart" => "interest_plus_original_complement",
+    "chart_interest_matrix" => C_interest,
+    "chart_drop_idx" => drop_idx,
+    "chart_keep_idx" => keep_idx,
+    "chart_eta_keep_ref" => chart_eta_keep_ref,
+    "chart_is_decoupled" => chart_decoupled,
     # Stored observation data + metadata for reproducible post-processing
     "data" => data,
     "y_true" => y_true,
