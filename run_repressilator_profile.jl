@@ -165,11 +165,13 @@ data = y_true + σ * randn(length(y_true))
 θ_log_lower = log.(θ_lower)
 θ_log_upper = log.(θ_upper)
 
-# Wider bounds for profiling (to capture full uncertainty region)
-θ_lower_profile = [0.003, 0.003, 0.003, 0.5, 0.5, 0.5, 0.002, 0.002, 0.002,
-                   3.0, 3.0, 3.0, 0.003, 0.003, 0.003, 0.0008, 0.0008, 0.0008]
-θ_upper_profile = [0.020, 0.020, 0.020, 3.0, 3.0, 3.0, 0.5, 0.5, 0.5,
-                   100.0, 100.0, 100.0, 0.010, 0.010, 0.010, 0.002, 0.002, 0.002]
+# Wider bounds for profiling (to capture the full intended ratio/product window)
+# Keep most classes unchanged, but broaden the whole βᵢ and Kᵢ classes
+# consistently so the displayed 2D interest rectangle has no missing corners.
+θ_lower_profile = [0.003, 0.003, 0.003, 0.5, 0.5, 0.5, 0.0005, 0.0005, 0.0005,
+                   0.4, 0.4, 0.4, 0.003, 0.003, 0.003, 0.0008, 0.0008, 0.0008]
+θ_upper_profile = [0.020, 0.020, 0.020, 3.0, 3.0, 3.0, 2.0, 2.0, 2.0,
+                   1000.0, 1000.0, 1000.0, 0.010, 0.010, 0.010, 0.002, 0.002, 0.002]
 θ_log_lower_profile = log.(θ_lower_profile)
 θ_log_upper_profile = log.(θ_upper_profile)
 
@@ -407,20 +409,20 @@ println("  Dropped original coordinates: $(join(param_names[drop_idx], ", "))")
 println("  Kept original coordinates: $(length(keep_idx))")
 println("  Decoupled interest block: $(chart_decoupled)")
 
-# Keep full ψ-space bounds for metadata / postprocessing, but reuse the legacy
-# varimax-era 2D target window that previously gave acceptable repressilator profiles.
-# Only the nuisance optimization chart is being changed here.
+# Keep full ψ-space bounds for metadata / postprocessing, but use a clean custom
+# 2D target window that shows a broad identifiable/non-identifiable rectangle
+# while remaining fully admissible under the broadened βᵢ/Kᵢ profiling box.
 ψ_lower, ψ_upper = compute_ψ_bounds(θ_lower_profile, θ_upper_profile, θ_to_ψ, 10000)
 ψ_log_lower = log.(ψ_lower)
 ψ_log_upper = log.(ψ_upper)
-legacy_target_lower = [6.5638417359811925, 0.019558192562089023]   # [K₁/β₁, β₁·K₁]
-legacy_target_upper = [37504.4697128395, 49.11316897036603]        # [K₁/β₁, β₁·K₁]
-interest_log_lower = log.(legacy_target_lower)
-interest_log_upper = log.(legacy_target_upper)
+custom_target_lower = [10.0, 0.02]      # [K₁/β₁, β₁·K₁]
+custom_target_upper = [40000.0, 20.0]   # [K₁/β₁, β₁·K₁]
+interest_log_lower = log.(custom_target_lower)
+interest_log_upper = log.(custom_target_upper)
 ψ_log_lower[target_2d] = interest_log_lower
 ψ_log_upper[target_2d] = interest_log_upper
-ψ_lower[target_2d] = legacy_target_lower
-ψ_upper[target_2d] = legacy_target_upper
+ψ_lower[target_2d] = custom_target_lower
+ψ_upper[target_2d] = custom_target_upper
 
 # === SELECT NUISANCE PARAMETERS ===
 # Profile in original log-parameters for the nuisance complement. The current gene-1
@@ -461,7 +463,7 @@ println("PROFILING SETUP")
 println("=" ^ 70)
 println("Mode: $mode_str")
 println("Target chart: exact [K₁/β₁, β₁·K₁] interests + original-coordinate complement")
-println("Target window: reused legacy varimax-era 2D range")
+println("Target window: clean full-rectangle range [K₁/β₁ ∈ (10, 40000), β₁·K₁ ∈ (0.02, 20)]")
 println("Profiled nuisance θ ($(length(nuisance_to_profile))): $(isempty(nuisance_to_profile) ? "none" : join(param_names[nuisance_to_profile], ", "))")
 println("Fixed at MLE θ ($(length(fixed_at_mle))): $(isempty(fixed_at_mle) ? "none" : join(param_names[fixed_at_mle], ", "))")
 
@@ -656,7 +658,7 @@ results = Dict(
     "ψ_upper" => ψ_upper,
     "target_log_lower" => interest_log_lower,
     "target_log_upper" => interest_log_upper,
-    "target_bounds_source" => "legacy_varimax_window",
+    "target_bounds_source" => "custom_interest_window_ratio10to40000_product0p02to20_beta0p0005to2_K0p4to1000",
     "param_names" => param_names,
     "rank_J" => rank_J,
     "n_ident" => n_ident,

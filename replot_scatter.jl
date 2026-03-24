@@ -33,6 +33,11 @@ n_ident = results["n_ident"]
 n_nonident = results["n_nonident"]
 N_NUISANCE = get(results, "N_NUISANCE", 16)
 mode_str = get(results, "mode", "PROFILE (16 nuisance)")
+profile_chart = get(results, "profile_chart", "full_sparse_psi")
+chart_interest_matrix = get(results, "chart_interest_matrix", nothing)
+chart_drop_idx = get(results, "chart_drop_idx", nothing)
+chart_keep_idx = get(results, "chart_keep_idx", nothing)
+chart_eta_keep_ref = get(results, "chart_eta_keep_ref", nothing)
 
 n_params = length(θ_MLE)
 β1_idx, K1_idx = 7, 10
@@ -75,12 +80,35 @@ println("  K₁/β₁ (identifiable): $n_above_1/$GRID above 95% threshold")
 println("  β₁·K₁ (non-identifiable): $n_above_2/$GRID above 95% threshold")
 
 # === TRANSFORM TO THETA-SPACE ===
-function ψ_targets_to_θ1(ψ_t1, ψ_t2, ψ_ref, target_idx)
-    ψ_full = copy(ψ_ref)
-    ψ_full[target_idx[1]] = ψ_t1
-    ψ_full[target_idx[2]] = ψ_t2
-    θ = ψ_to_θ(ψ_full)
-    return θ[7], θ[10]  # β₁, K₁
+if profile_chart == "interest_plus_original_complement" &&
+   !isnothing(chart_interest_matrix) && !isnothing(chart_drop_idx) &&
+   !isnothing(chart_keep_idx) && !isnothing(chart_eta_keep_ref)
+
+    C_interest = Matrix{Float64}(chart_interest_matrix)
+    drop_idx = Int.(chart_drop_idx)
+    keep_idx = Int.(chart_keep_idx)
+    η_keep_ref = Float64.(chart_eta_keep_ref)
+    Cj_inv = inv(Matrix(C_interest[:, drop_idx]))
+    Ck = Matrix(C_interest[:, keep_idx])
+    θ_log_ref = log.(θ_MLE)
+
+    function ψ_targets_to_θ1(ψ_t1, ψ_t2, ψ_ref, target_idx)
+        log_interest = log.([ψ_t1, ψ_t2])
+        η_drop = Cj_inv * (log_interest - Ck * η_keep_ref)
+        η = copy(θ_log_ref)
+        η[keep_idx] = η_keep_ref
+        η[drop_idx] = η_drop
+        θ = exp.(η)
+        return θ[β1_idx], θ[K1_idx]
+    end
+else
+    function ψ_targets_to_θ1(ψ_t1, ψ_t2, ψ_ref, target_idx)
+        ψ_full = copy(ψ_ref)
+        ψ_full[target_idx[1]] = ψ_t1
+        ψ_full[target_idx[2]] = ψ_t2
+        θ = ψ_to_θ(ψ_full)
+        return θ[β1_idx], θ[K1_idx]
+    end
 end
 
 # Build scatter arrays for both spaces
@@ -134,10 +162,9 @@ p1 = scatter(ψ1_all, ψ2_all, zcolor=like_all, c=:dense, ms=ms, msw=0,
 scatter!([ψ_target1_true], [ψ_target2_true], mc=:darkgoldenrod, msc=:match, ms=10,
          markershape=:star, label="MLE")
 
-# Plot 2: Scatter in θ-space (clipped to profile bounds)
-# Profile bounds: β ≤ 0.5, K ≤ 100
-β_plot_max = 0.5
-K_plot_max = 100.0
+# Plot 2: Scatter in θ-space (same display crop as replot_profile_results.jl)
+β_plot_max = 0.6
+K_plot_max = 400.0
 in_bounds = (β_all .<= β_plot_max) .& (K_all .<= K_plot_max)
 
 p2 = scatter(β_all[in_bounds], K_all[in_bounds], zcolor=like_all[in_bounds],

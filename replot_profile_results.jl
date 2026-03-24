@@ -51,11 +51,11 @@ n_params = length(θ_MLE)
 ψ1_plot_min, ψ1_plot_max = ψ_lower[target_2d[1]], ψ_upper[target_2d[1]]
 ψ2_plot_min, ψ2_plot_max = 0.0, ψ_upper[target_2d[2]]  # start at 0 for linear axis
 
-# θ-space bounds - match profile bounds
+# θ-space bounds - restricted display crop showing the well-resolved evaluated region
 β_plot_min = 0.0
-β_plot_max = 0.5
+β_plot_max = 0.6
 K_plot_min = 0.0
-K_plot_max = 100.0
+K_plot_max = 400.0
 
 println("Grid: $GRID × $GRID")
 println("Mode: $mode_str")

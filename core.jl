@@ -507,6 +507,374 @@ function profile_grid_distributed(lnlike_θ, ψ_grid::Vector{Vector{Float64}}, �
 end
 
 
+function _profile_strict_clamp(ω::Vector{Float64}, ω_bounds_lower::Vector{Float64}, ω_bounds_upper::Vector{Float64}; eps_bound=1e-6)
+    isempty(ω) && return Float64[]
+    return clamp.(ω, ω_bounds_lower .+ eps_bound, ω_bounds_upper .- eps_bound)
+end
+
+function _profile_dedup_start_points(start_candidates)
+    starts = Vector{Vector{Float64}}()
+    seen = Set{String}()
+    for candidate in start_candidates
+        candidate === nothing && continue
+        start = Vector{Float64}(candidate)
+        key = join(string.(round.(start, digits=8)), ",")
+        if !(key in seen)
+            push!(starts, start)
+            push!(seen, key)
+        end
+    end
+    return starts
+end
+
+function _profile_partition_ranges(n::Int, n_parts::Int)
+    n_parts = max(1, min(n_parts, n))
+    base = div(n, n_parts)
+    remainder = n % n_parts
+
+    ranges = Vector{UnitRange{Int}}(undef, n_parts)
+    start_idx = 1
+    for i in 1:n_parts
+        this_size = base + (i <= remainder ? 1 : 0)
+        ranges[i] = start_idx:start_idx + this_size - 1
+        start_idx += this_size
+    end
+    return ranges
+end
+
+function _profile_row_minor_indices(i::Int, n2::Int, sweep_direction::Symbol)
+    if sweep_direction == :forward
+        return isodd(i) ? (1:n2) : (n2:-1:1)
+    else
+        return isodd(i) ? (n2:-1:1) : (1:n2)
+    end
+end
+
+function _profile_col_minor_indices(j::Int, n1::Int, sweep_direction::Symbol)
+    if sweep_direction == :forward
+        return isodd(j) ? (1:n1) : (n1:-1:1)
+    else
+        return isodd(j) ? (n1:-1:1) : (1:n1)
+    end
+end
+
+function _profile_grid_2d_structured_block(
+    lnlike_θ, ψ_grids::Vector{Vector{Float64}}, ψ_indices::Vector{Int},
+    θ_bounds_lower, θ_bounds_upper, ω_initial::Vector{Float64},
+    ω_global_backstops::Vector{Vector{Float64}}, ω_bootstrap_extras::Vector{Vector{Float64}},
+    θ_prev::Matrix{Vector{Float64}}, ω_prev::Matrix{Vector{Float64}}, ll_prev::Matrix{Float64}, conv_prev,
+    major_block::UnitRange{Int};
+    snake_direction=:column, sweep_direction=:forward,
+    method=:LN_BOBYQA, local_method=:LD_TNEWTON_PRECOND,
+    xtol_rel=1e-9, ftol_rel=1e-9, optmaxtime=60.0, popsize=50,
+    track_convergence=false)
+
+    n1, n2 = length(ψ_grids[1]), length(ψ_grids[2])
+
+    dim_all = length(θ_bounds_lower)
+    ω_indices = setdiff(1:dim_all, ψ_indices)
+    ω_bounds_lower = θ_bounds_lower[ω_indices]
+    ω_bounds_upper = θ_bounds_upper[ω_indices]
+
+    if snake_direction == :row
+        block_len = length(major_block)
+        θ_block = Matrix{Vector{Float64}}(undef, block_len, n2)
+        ω_block = Matrix{Vector{Float64}}(undef, block_len, n2)
+        ll_block = Matrix{Float64}(undef, block_len, n2)
+        conv_block = track_convergence ? Matrix{Symbol}(undef, block_len, n2) : nothing
+
+        for (li, i) in enumerate(major_block), j in 1:n2
+            θ_block[li, j] = θ_prev[i, j]
+            ω_block[li, j] = ω_prev[i, j]
+            ll_block[li, j] = ll_prev[i, j]
+            if track_convergence
+                conv_block[li, j] = conv_prev[i, j]
+            end
+        end
+
+        row_iter = sweep_direction == :forward ? major_block : reverse(major_block)
+        prev_point = nothing
+
+        for i in row_iter
+            li = i - first(major_block) + 1
+            for j in _profile_row_minor_indices(i, n2, sweep_direction)
+                start_candidates = Any[]
+                has_local_info = false
+
+                if isfinite(ll_prev[i, j])
+                    push!(start_candidates, ω_prev[i, j])
+                    has_local_info = true
+                end
+
+                if !(prev_point === nothing)
+                    pi, pj = prev_point
+                    lpi = pi - first(major_block) + 1
+                    if 1 <= lpi <= block_len && isfinite(ll_block[lpi, pj])
+                        push!(start_candidates, ω_block[lpi, pj])
+                        has_local_info = true
+                    end
+                end
+
+                ortho_i = sweep_direction == :forward ? i - 1 : i + 1
+                if 1 <= ortho_i <= n1
+                    if ortho_i in major_block
+                        lortho = ortho_i - first(major_block) + 1
+                        if isfinite(ll_block[lortho, j])
+                            push!(start_candidates, ω_block[lortho, j])
+                            has_local_info = true
+                        end
+                    elseif isfinite(ll_prev[ortho_i, j])
+                        push!(start_candidates, ω_prev[ortho_i, j])
+                        has_local_info = true
+                    end
+                end
+
+                push!(start_candidates, ω_initial)
+                append!(start_candidates, has_local_info ? ω_global_backstops : ω_bootstrap_extras)
+
+                starts = _profile_dedup_start_points(start_candidates)
+                isempty(starts) && push!(starts, ω_initial)
+
+                θ_opt, ω_opt, ll_opt, conv = profile_point(
+                    lnlike_θ, [ψ_grids[1][i], ψ_grids[2][j]], ψ_indices,
+                    θ_bounds_lower, θ_bounds_upper, starts[1];
+                    ω_initial_extras=length(starts) > 1 ? starts[2:end] : nothing,
+                    method=method, local_method=local_method,
+                    xtol_rel=xtol_rel, ftol_rel=ftol_rel,
+                    optmaxtime=optmaxtime, popsize=popsize,
+                    track_convergence=track_convergence
+                )
+
+                ω_opt_clamped = _profile_strict_clamp(ω_opt, ω_bounds_lower, ω_bounds_upper)
+                existing_ll = ll_block[li, j]
+                if ll_opt > existing_ll || (!isfinite(existing_ll) && !isfinite(ll_opt))
+                    θ_block[li, j] = θ_opt
+                    ω_block[li, j] = ω_opt_clamped
+                    ll_block[li, j] = ll_opt
+                    if track_convergence
+                        conv_block[li, j] = conv
+                    end
+                end
+
+                prev_point = (i, j)
+            end
+        end
+
+        return major_block, θ_block, ω_block, ll_block, conv_block
+    elseif snake_direction == :column
+        block_len = length(major_block)
+        θ_block = Matrix{Vector{Float64}}(undef, n1, block_len)
+        ω_block = Matrix{Vector{Float64}}(undef, n1, block_len)
+        ll_block = Matrix{Float64}(undef, n1, block_len)
+        conv_block = track_convergence ? Matrix{Symbol}(undef, n1, block_len) : nothing
+
+        for i in 1:n1, (lj, j) in enumerate(major_block)
+            θ_block[i, lj] = θ_prev[i, j]
+            ω_block[i, lj] = ω_prev[i, j]
+            ll_block[i, lj] = ll_prev[i, j]
+            if track_convergence
+                conv_block[i, lj] = conv_prev[i, j]
+            end
+        end
+
+        col_iter = sweep_direction == :forward ? major_block : reverse(major_block)
+        prev_point = nothing
+
+        for j in col_iter
+            lj = j - first(major_block) + 1
+            for i in _profile_col_minor_indices(j, n1, sweep_direction)
+                start_candidates = Any[]
+                has_local_info = false
+
+                if isfinite(ll_prev[i, j])
+                    push!(start_candidates, ω_prev[i, j])
+                    has_local_info = true
+                end
+
+                if !(prev_point === nothing)
+                    pi, pj = prev_point
+                    lpj = pj - first(major_block) + 1
+                    if 1 <= lpj <= block_len && isfinite(ll_block[pi, lpj])
+                        push!(start_candidates, ω_block[pi, lpj])
+                        has_local_info = true
+                    end
+                end
+
+                ortho_j = sweep_direction == :forward ? j - 1 : j + 1
+                if 1 <= ortho_j <= n2
+                    if ortho_j in major_block
+                        lortho = ortho_j - first(major_block) + 1
+                        if isfinite(ll_block[i, lortho])
+                            push!(start_candidates, ω_block[i, lortho])
+                            has_local_info = true
+                        end
+                    elseif isfinite(ll_prev[i, ortho_j])
+                        push!(start_candidates, ω_prev[i, ortho_j])
+                        has_local_info = true
+                    end
+                end
+
+                push!(start_candidates, ω_initial)
+                append!(start_candidates, has_local_info ? ω_global_backstops : ω_bootstrap_extras)
+
+                starts = _profile_dedup_start_points(start_candidates)
+                isempty(starts) && push!(starts, ω_initial)
+
+                θ_opt, ω_opt, ll_opt, conv = profile_point(
+                    lnlike_θ, [ψ_grids[1][i], ψ_grids[2][j]], ψ_indices,
+                    θ_bounds_lower, θ_bounds_upper, starts[1];
+                    ω_initial_extras=length(starts) > 1 ? starts[2:end] : nothing,
+                    method=method, local_method=local_method,
+                    xtol_rel=xtol_rel, ftol_rel=ftol_rel,
+                    optmaxtime=optmaxtime, popsize=popsize,
+                    track_convergence=track_convergence
+                )
+
+                ω_opt_clamped = _profile_strict_clamp(ω_opt, ω_bounds_lower, ω_bounds_upper)
+                existing_ll = ll_block[i, lj]
+                if ll_opt > existing_ll || (!isfinite(existing_ll) && !isfinite(ll_opt))
+                    θ_block[i, lj] = θ_opt
+                    ω_block[i, lj] = ω_opt_clamped
+                    ll_block[i, lj] = ll_opt
+                    if track_convergence
+                        conv_block[i, lj] = conv
+                    end
+                end
+
+                prev_point = (i, j)
+            end
+        end
+
+        return major_block, θ_block, ω_block, ll_block, conv_block
+    else
+        error("snake_direction must be :column or :row, got $snake_direction")
+    end
+end
+
+function _profile_grid_2d_structured(
+    lnlike_θ, ψ_grids::Vector{Vector{Float64}}, ψ_indices::Vector{Int},
+    θ_bounds_lower, θ_bounds_upper, ω_initial::Vector{Float64};
+    ω_initial_extras::Union{Nothing, Vector{Vector{Float64}}}=nothing,
+    method=:LN_BOBYQA, local_method=:LD_TNEWTON_PRECOND,
+    xtol_rel=1e-9, ftol_rel=1e-9, optmaxtime=60.0, popsize=50,
+    use_distributed=false, n_chunks=nothing, worker_pool=nothing,
+    track_convergence=false, snake_direction=:column)
+
+    n1, n2 = length(ψ_grids[1]), length(ψ_grids[2])
+    dim_all = length(θ_bounds_lower)
+    ω_indices = setdiff(1:dim_all, ψ_indices)
+    ω_bounds_lower = θ_bounds_lower[ω_indices]
+    ω_bounds_upper = θ_bounds_upper[ω_indices]
+
+    ω_initial_clamped = _profile_strict_clamp(Vector{Float64}(ω_initial), ω_bounds_lower, ω_bounds_upper)
+    ω_bootstrap_extras = isnothing(ω_initial_extras) ? Vector{Vector{Float64}}() :
+        [_profile_strict_clamp(Vector{Float64}(ω), ω_bounds_lower, ω_bounds_upper) for ω in ω_initial_extras]
+    n_backstops = min(3, length(ω_bootstrap_extras))
+    ω_global_backstops = n_backstops == 0 ? Vector{Vector{Float64}}() : ω_bootstrap_extras[1:n_backstops]
+
+    θ_best = [fill(NaN, dim_all) for _ in 1:n1, _ in 1:n2]
+    ω_best = [copy(ω_initial_clamped) for _ in 1:n1, _ in 1:n2]
+    ll_best = fill(-Inf, n1, n2)
+    conv_best = track_convergence ? fill(:NOT_TRACKED, n1, n2) : nothing
+
+    pool = worker_pool
+    n_pool_workers = 0
+    if use_distributed
+        pool = isnothing(worker_pool) ? WorkerPool(workers()) : worker_pool
+        n_pool_workers = length(pool.workers)
+        if n_pool_workers == 0
+            @warn "Worker pool is empty; using sequential structured 2D execution instead."
+            use_distributed = false
+        end
+    end
+
+    primary_n = snake_direction == :row ? n1 : n2
+    n_blocks_actual = if use_distributed
+        requested = isnothing(n_chunks) ? n_pool_workers : n_chunks
+        max(1, min(requested, n_pool_workers, primary_n))
+    else
+        1
+    end
+    blocks = _profile_partition_ranges(primary_n, n_blocks_actual)
+    block_axis_label = snake_direction == :row ? "row" : "column"
+    sweep_directions = isempty(ω_indices) ? (:forward,) : (:forward, :reverse)
+    println("Structured 2D profiling: $(n1)×$(n2) grid → $(length(blocks)) $(block_axis_label) blocks × $(length(sweep_directions)) sweep(s)")
+    if use_distributed
+        println("Workers: $n_pool_workers")
+    end
+
+    for (sweep_idx, sweep_direction) in enumerate(sweep_directions)
+        println("  Sweep $(sweep_idx)/$(length(sweep_directions)): $(sweep_direction)")
+        θ_prev = copy(θ_best)
+        ω_prev = copy(ω_best)
+        ll_prev = copy(ll_best)
+        conv_prev = track_convergence ? copy(conv_best) : nothing
+
+        if use_distributed
+            block_results = pmap(pool, blocks) do major_block
+                _profile_grid_2d_structured_block(
+                    lnlike_θ, ψ_grids, ψ_indices,
+                    θ_bounds_lower, θ_bounds_upper, ω_initial_clamped,
+                    ω_global_backstops, ω_bootstrap_extras,
+                    θ_prev, ω_prev, ll_prev, conv_prev,
+                    major_block;
+                    snake_direction=snake_direction, sweep_direction=sweep_direction,
+                    method=method, local_method=local_method,
+                    xtol_rel=xtol_rel, ftol_rel=ftol_rel,
+                    optmaxtime=optmaxtime, popsize=popsize,
+                    track_convergence=track_convergence
+                )
+            end
+        else
+            block_results = map(blocks) do major_block
+                _profile_grid_2d_structured_block(
+                    lnlike_θ, ψ_grids, ψ_indices,
+                    θ_bounds_lower, θ_bounds_upper, ω_initial_clamped,
+                    ω_global_backstops, ω_bootstrap_extras,
+                    θ_prev, ω_prev, ll_prev, conv_prev,
+                    major_block;
+                    snake_direction=snake_direction, sweep_direction=sweep_direction,
+                    method=method, local_method=local_method,
+                    xtol_rel=xtol_rel, ftol_rel=ftol_rel,
+                    optmaxtime=optmaxtime, popsize=popsize,
+                    track_convergence=track_convergence
+                )
+            end
+        end
+
+        for (major_block, θ_block, ω_block, ll_block, conv_block) in block_results
+            if snake_direction == :row
+                for (li, i) in enumerate(major_block), j in 1:n2
+                    θ_best[i, j] = θ_block[li, j]
+                    ω_best[i, j] = ω_block[li, j]
+                    ll_best[i, j] = ll_block[li, j]
+                    if track_convergence
+                        conv_best[i, j] = conv_block[li, j]
+                    end
+                end
+            else
+                for i in 1:n1, (lj, j) in enumerate(major_block)
+                    θ_best[i, j] = θ_block[i, lj]
+                    ω_best[i, j] = ω_block[i, lj]
+                    ll_best[i, j] = ll_block[i, lj]
+                    if track_convergence
+                        conv_best[i, j] = conv_block[i, lj]
+                    end
+                end
+            end
+        end
+    end
+
+    θ_values = vec(θ_best)
+    lnlike_values = vec(ll_best)
+    if track_convergence
+        return θ_values, lnlike_values, vec(conv_best)
+    else
+        return θ_values, lnlike_values
+    end
+end
+
+
 function profile_target(lnlike_θ, ψ_indices, θ_bounds_lower, θ_bounds_upper, ω_initial;
     grid_steps=100, ω_initial_extras::Union{Nothing, Vector{Vector{Float64}}}=nothing,
     method=:LD_TNEWTON_PRECOND, local_method=:LD_TNEWTON_PRECOND, xtol_rel=1e-9, ftol_rel=1e-9,
@@ -593,44 +961,47 @@ function profile_target(lnlike_θ, ψ_indices, θ_bounds_lower, θ_bounds_upper,
         end
     end
 
-    # Convert Cartesian product to vector of vectors with snake ordering
-    # Snake ordering alternates direction to maintain spatial continuity for warm-starting
-    # :column (default) - traverse along ψ₁ (column-wise), snake across ψ₂
-    # :row - traverse along ψ₂ (row-wise), snake across ψ₁
+    if dim_ψ == 2
+        if track_convergence
+            θ_values, lnlike_values, convergence_outcomes = _profile_grid_2d_structured(
+                lnlike_θ, ψ_grids, ψ_indices_int,
+                θ_bounds_lower, θ_bounds_upper, ω_initial;
+                ω_initial_extras=ω_initial_extras,
+                method=method, local_method=local_method,
+                xtol_rel=xtol_rel, ftol_rel=ftol_rel,
+                optmaxtime=optmaxtime, popsize=popsize,
+                use_distributed=use_distributed,
+                n_chunks=n_chunks, worker_pool=worker_pool,
+                track_convergence=true,
+                snake_direction=snake_direction
+            )
+        else
+            θ_values, lnlike_values = _profile_grid_2d_structured(
+                lnlike_θ, ψ_grids, ψ_indices_int,
+                θ_bounds_lower, θ_bounds_upper, ω_initial;
+                ω_initial_extras=ω_initial_extras,
+                method=method, local_method=local_method,
+                xtol_rel=xtol_rel, ftol_rel=ftol_rel,
+                optmaxtime=optmaxtime, popsize=popsize,
+                use_distributed=use_distributed,
+                n_chunks=n_chunks, worker_pool=worker_pool,
+                track_convergence=false,
+                snake_direction=snake_direction
+            )
+        end
+
+        lnlike_values = lnlike_values .- maximum(lnlike_values)
+        if track_convergence
+            return θ_values, lnlike_values, convergence_outcomes
+        else
+            return θ_values, lnlike_values
+        end
+    end
+
+    # Convert Cartesian product to vector of vectors for 1D / higher-dimensional grids
     ψ_combinations = Base.product(ψ_grids...)
     ψ_grid_raw = [collect(ψᵢ) for ψᵢ in ψ_combinations]
-
-    if dim_ψ == 2
-        n1, n2 = length(ψ_grids[1]), length(ψ_grids[2])
-        ψ_grid_matrix = reshape(ψ_grid_raw, n1, n2)
-
-        if snake_direction == :column
-            # Column-wise snake: traverse ψ₁ within each ψ₂ column
-            # Continuation is along ψ₁ (same ψ₂, adjacent ψ₁)
-            for j in 2:2:n2
-                ψ_grid_matrix[:, j] = reverse(ψ_grid_matrix[:, j])
-            end
-            ψ_grid = vec(ψ_grid_matrix)
-        elseif snake_direction == :row
-            # Row-wise snake: traverse ψ₂ within each ψ₁ row
-            # Continuation is along ψ₂ (same ψ₁, adjacent ψ₂)
-            for i in 2:2:n1
-                ψ_grid_matrix[i, :] = reverse(ψ_grid_matrix[i, :])
-            end
-            # Flatten row-major: collect row by row
-            ψ_grid = Vector{Vector{Float64}}(undef, n1 * n2)
-            for i in 1:n1
-                for j in 1:n2
-                    ψ_grid[(i-1)*n2 + j] = ψ_grid_matrix[i, j]
-                end
-            end
-        else
-            error("snake_direction must be :column or :row, got $snake_direction")
-        end
-    else
-        # For 1D or higher dimensions, use standard ordering
-        ψ_grid = vec(ψ_grid_raw)
-    end
+    ψ_grid = vec(ψ_grid_raw)
 
     # Choose sequential or distributed execution
     if use_distributed
