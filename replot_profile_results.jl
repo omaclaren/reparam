@@ -47,15 +47,16 @@ n_params = length(θ_MLE)
 β1_idx, K1_idx = 7, 10
 
 # Plotting bounds - use computation bounds for full coverage
-# IIR coordinates (ψ-space) - use actual grid range
+# IIR coordinates (ψ-space) - both interest coordinates are positive monomials,
+# so use their actual positive ranges and display them on log axes.
 ψ1_plot_min, ψ1_plot_max = ψ_lower[target_2d[1]], ψ_upper[target_2d[1]]
-ψ2_plot_min, ψ2_plot_max = 0.0, ψ_upper[target_2d[2]]  # start at 0 for linear axis
+ψ2_plot_min, ψ2_plot_max = ψ_lower[target_2d[2]], ψ_upper[target_2d[2]]
 
-# θ-space bounds - restricted display crop showing the well-resolved evaluated region
+# θ-space bounds - display zoom into the dense mapped region used for the main figure
 β_plot_min = 0.0
-β_plot_max = 0.6
+β_plot_max = 0.2
 K_plot_min = 0.0
-K_plot_max = 400.0
+K_plot_max = 100.0
 
 println("Grid: $GRID × $GRID")
 println("Mode: $mode_str")
@@ -152,12 +153,13 @@ p1 = contourf(ψ_target1_grid, ψ_target2_grid, like_matrix', color=:dense, leve
               xlabel="ψ_$(target_2d[1]) = K₁/β₁ (identifiable)",
               ylabel="ψ_$(target_2d[2]) = β₁·K₁ (non-identifiable)",
               title="Profile in IIR coordinates\n$subtitle",
-              xscale=:log10, xlims=(ψ1_plot_min, ψ1_plot_max), ylims=(ψ2_plot_min, ψ2_plot_max),
+              xscale=:log10, yscale=:log10,
+              xlims=(ψ1_plot_min, ψ1_plot_max), ylims=(ψ2_plot_min, ψ2_plot_max),
               clims=(0,1))
 scatter!([ψ_target1_true], [ψ_target2_true], mc=:darkgoldenrod, msc=:match, ms=10,
          markershape=:star, label="MLE")
 contour!(ψ_target1_grid, ψ_target2_grid, like_matrix', levels=[lstar_2d], color=:black, lw=2,
-         xscale=:log10, label="95% CI")
+         xscale=:log10, yscale=:log10, label="95% CI")
 
 # Plot 2: Transform to θ-space
 β1_points_θ = Float64[]
@@ -245,7 +247,7 @@ vline!([ψ_target1_true], color=:green, linestyle=:dot, linewidth=2)
 p4 = plot(ψ_target2_grid, like_ψ_target2,
           xlabel="ψ_$(target_2d[2]) = β₁·K₁ (non-identifiable)", ylabel="Profile Likelihood",
           title="Profile: β₁·K₁ (NON-IDENTIFIABLE)", linewidth=2, legend=false,
-          xlims=(ψ2_plot_min, ψ2_plot_max), ylims=(0, 1.05))
+          xscale=:log10, xlims=(ψ2_plot_min, ψ2_plot_max), ylims=(0, 1.05))
 hline!([lstar_1d], color=:red, linestyle=:dash, linewidth=2)
 vline!([ψ_target2_true], color=:green, linestyle=:dot, linewidth=2)
 

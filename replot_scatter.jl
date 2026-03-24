@@ -162,19 +162,25 @@ p1 = scatter(ψ1_all, ψ2_all, zcolor=like_all, c=:dense, ms=ms, msw=0,
 scatter!([ψ_target1_true], [ψ_target2_true], mc=:darkgoldenrod, msc=:match, ms=10,
          markershape=:star, label="MLE")
 
-# Plot 2: Scatter in θ-space (same display crop as replot_profile_results.jl)
-β_plot_max = 0.6
-K_plot_max = 400.0
-in_bounds = (β_all .<= β_plot_max) .& (K_all .<= K_plot_max)
+# Plot 2: Scatter in θ-space (full mapped view with the main-text zoom region indicated)
+zoom_β_max = 0.2
+zoom_K_max = 100.0
+β_full_max = 1.5
+K_full_max = 900.0
+in_full_view = (β_all .<= β_full_max) .& (K_all .<= K_full_max)
 
-p2 = scatter(β_all[in_bounds], K_all[in_bounds], zcolor=like_all[in_bounds],
+p2 = scatter(β_all[in_full_view], K_all[in_full_view], zcolor=like_all[in_full_view],
              c=:dense, ms=ms, msw=0,
              xlabel="β₁", ylabel="K₁",
-             title="Profile in θ-space\n$subtitle",
-             xlims=(0, β_plot_max), ylims=(0, K_plot_max),
+             title="Mapped-point θ-space (full view)\n$subtitle",
+             xlims=(0, β_full_max), ylims=(0, K_full_max),
              clims=(0,1), label="", colorbar=true)
 scatter!([θ_MLE[β1_idx]], [θ_MLE[K1_idx]], mc=:darkgoldenrod, msc=:match, ms=10,
          markershape=:star, label="MLE")
+plot!(p2, [zoom_β_max, zoom_β_max], [0.0, zoom_K_max], color=:black, linestyle=:dash,
+      linewidth=2, label="main-text zoom")
+plot!(p2, [0.0, zoom_β_max], [zoom_K_max, zoom_K_max], color=:black, linestyle=:dash,
+      linewidth=2, label="")
 
 # Plot 3: 1D profile for identifiable
 p3 = plot(ψ_target1_grid, like_ψ_target1,
@@ -188,7 +194,7 @@ vline!([ψ_target1_true], color=:green, linestyle=:dot, linewidth=2)
 p4 = plot(ψ_target2_grid, like_ψ_target2,
           xlabel="ψ_$(target_2d[2]) = β₁·K₁ (non-identifiable)", ylabel="Profile Likelihood",
           title="Profile: β₁·K₁ (NON-IDENTIFIABLE)", linewidth=2, legend=false,
-          ylims=(0, 1.05))
+          xscale=:log10, ylims=(0, 1.05))
 hline!([lstar_1d], color=:red, linestyle=:dash, linewidth=2)
 vline!([ψ_target2_true], color=:green, linestyle=:dot, linewidth=2)
 
