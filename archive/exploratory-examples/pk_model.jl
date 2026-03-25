@@ -10,7 +10,7 @@
 
 # Include ReparamTools.jl code if not already loaded
 if !@isdefined(ReparamTools)
-    include("../ReparamTools.jl")
+    include("../../ReparamTools.jl")
     println("✓ ReparamTools module included")
 else
     println("✓ ReparamTools module already included")

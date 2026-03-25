@@ -4,7 +4,7 @@ Stage 2 runs on SVD coordinates y, then rotate to Varimax for interpretation
 """
 
 using LinearAlgebra
-include("../ReparamTools.jl")
+include("../../../ReparamTools.jl")
 using .ReparamTools
 
 # True parameters

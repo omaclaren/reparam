@@ -5,7 +5,7 @@ Check which N_perp_s2 direction gives the sum
 using LinearAlgebra
 using Distributions
 using Random
-include("../ReparamTools.jl")
+include("../../../ReparamTools.jl")
 using .ReparamTools
 
 Random.seed!(123)

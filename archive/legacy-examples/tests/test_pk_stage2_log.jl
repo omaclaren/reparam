@@ -5,7 +5,7 @@ This might give cleaner rank determination
 
 using LinearAlgebra
 using DifferentialEquations
-include("../ReparamTools.jl")
+include("../../../ReparamTools.jl")
 using .ReparamTools
 
 # Parameters: [b₁, c₁, k₀₁, k₀₂, k₁₂, k₂₁, V_M, K_M]

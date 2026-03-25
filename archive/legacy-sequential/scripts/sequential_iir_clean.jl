@@ -6,7 +6,7 @@ Demonstrates the correct workflow with dictionary as post-processing only
 using LinearAlgebra
 using Distributions
 using Random
-include("../ReparamTools.jl")
+include("../../../ReparamTools.jl")
 using .ReparamTools
 
 Random.seed!(123)

@@ -28,7 +28,7 @@ println("=" ^ 70)
 # Now include the main script (which will use these constants if we modify it)
 # For now, let's just copy the essential parts...
 
-include("../ReparamTools.jl")
+include("../../../ReparamTools.jl")
 using .ReparamTools
 using DifferentialEquations
 using Distributions

@@ -5,7 +5,7 @@ Debug: trace through the sequential mapping carefully
 using LinearAlgebra
 using Distributions
 using Random
-include("../ReparamTools.jl")
+include("../../../ReparamTools.jl")
 using .ReparamTools
 
 Random.seed!(123)

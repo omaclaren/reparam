@@ -1,7 +1,7 @@
 using LinearAlgebra
 using DifferentialEquations
 
-include("../ReparamTools.jl")
+include("../../../ReparamTools.jl")
 using .ReparamTools
 
 # True parameters

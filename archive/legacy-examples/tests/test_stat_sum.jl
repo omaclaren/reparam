@@ -1,5 +1,5 @@
 # Quick test of stat_sum_model sequential IIR without profiling
-include("../ReparamTools.jl")
+include("../../../ReparamTools.jl")
 using .ReparamTools
 using Distributions
 using LinearAlgebra

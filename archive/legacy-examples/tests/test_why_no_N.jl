@@ -5,7 +5,7 @@ Why is Dim(N) = 0 at Stage 2?
 using LinearAlgebra
 using Distributions
 using Random
-include("../ReparamTools.jl")
+include("../../../ReparamTools.jl")
 using .ReparamTools
 
 Random.seed!(123)

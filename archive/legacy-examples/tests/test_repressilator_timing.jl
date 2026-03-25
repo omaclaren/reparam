@@ -6,7 +6,7 @@ Tests a single profile point to estimate full runtime
 using NLopt
 
 # Load the repressilator setup
-include("repressilator.jl")
+include("../repressilator/repressilator.jl")
 
 println("\n" * repeat("=", 70))
 println("PROFILING TIMING TEST")

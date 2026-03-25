@@ -7,7 +7,7 @@ using DifferentialEquations
 using ForwardDiff
 
 # Include necessary functions
-include("../ReparamTools.jl")
+include("../../ReparamTools.jl")
 using .ReparamTools
 
 # True parameters

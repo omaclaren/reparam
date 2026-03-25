@@ -6,7 +6,7 @@ Question: Can augmenting with original parameters help Stage 2 find k₀₂ + k�
 using LinearAlgebra
 using DifferentialEquations
 
-include("../ReparamTools.jl")
+include("../../../ReparamTools.jl")
 using .ReparamTools
 
 # True parameters

@@ -12,7 +12,7 @@ using LinearAlgebra
 using Distributions
 using Random
 using Plots
-include("../ReparamTools.jl")
+include("../../../ReparamTools.jl")
 using .ReparamTools
 
 println("="^60)

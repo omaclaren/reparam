@@ -8,7 +8,7 @@ using LinearAlgebra
 using Distributions
 using Random
 using Printf
-include("../ReparamTools.jl")
+include("../../../ReparamTools.jl")
 using .ReparamTools
 
 println("="^60)

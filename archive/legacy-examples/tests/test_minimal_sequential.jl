@@ -6,7 +6,7 @@ Just SVD bases at each stage, Varimax only for final display
 using LinearAlgebra
 using Distributions
 using Random
-include("../ReparamTools.jl")
+include("../../../ReparamTools.jl")
 using .ReparamTools
 
 Random.seed!(123)

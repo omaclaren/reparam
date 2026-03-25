@@ -153,7 +153,7 @@ println("VARIMAX ROTATION ANALYSIS")
 println("=" ^ 70)
 
 # Option 1: Varimax on full matrix (may mix identifiable/non-identifiable)
-A_T_varimax_full = varimax_rotation(A_T; n_restarts=200, threshold=1e-2)
+A_T_varimax_full = ReparamTools.varimax_rotation(A_T; n_restarts=200, threshold=1e-2)
 
 println("\n1. FULL VARIMAX (rotates all 6 directions together):")
 println("   WARNING: This may mix identifiable and non-identifiable directions!")
@@ -174,7 +174,7 @@ end
 println("\n2. SEPARATE VARIMAX (preserves identifiable/non-identifiable structure):")
 
 # Rotate identifiable subspace
-N_perp_varimax = varimax_rotation(N_perp; n_restarts=200, threshold=1e-2)
+N_perp_varimax = ReparamTools.varimax_rotation(N_perp; n_restarts=200, threshold=1e-2)
 println("\n  Identifiable directions (varimax-rotated N_perp):")
 for j in 1:size(N_perp_varimax, 2)
     v = N_perp_varimax[:, j]
@@ -191,7 +191,7 @@ end
 
 # Rotate non-identifiable subspace
 if n_nonident > 0
-    N_varimax = varimax_rotation(N; n_restarts=200, threshold=1e-2)
+    N_varimax = ReparamTools.varimax_rotation(N; n_restarts=200, threshold=1e-2)
     println("\n  Non-identifiable directions (varimax-rotated N):")
     for j in 1:size(N_varimax, 2)
         v = N_varimax[:, j]
@@ -223,7 +223,7 @@ println("=" ^ 70)
 # Apply scale_and_round to get ±1 instead of ±0.707
 # Use column_scales to ensure we get K/β (not β/K) for all identifiable directions
 # After varimax, columns may have different sign conventions - we flip as needed
-N_perp_clean = scale_and_round(N_perp_varimax; round_within=0.1, column_scales=[-1, -1, 1])
+N_perp_clean = ReparamTools.scale_and_round(N_perp_varimax; round_within=0.1, column_scales=[-1, -1, 1])
 
 println("\n  Identifiable directions (after scale_and_round):")
 for j in 1:size(N_perp_clean, 2)
@@ -240,7 +240,7 @@ for j in 1:size(N_perp_clean, 2)
 end
 
 if n_nonident > 0
-    N_clean = scale_and_round(N_varimax; round_within=0.1)
+    N_clean = ReparamTools.scale_and_round(N_varimax; round_within=0.1)
     println("\n  Non-identifiable directions (after scale_and_round):")
     for j in 1:size(N_clean, 2)
         v = N_clean[:, j]

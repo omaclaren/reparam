@@ -1,6 +1,6 @@
 # Include ReparamTools.jl code if not already loaded
 if !@isdefined(ReparamTools)
-    include("../ReparamTools.jl")
+    include("../../../ReparamTools.jl")
     println("✓ ReparamTools module included")
 else
     println("✓ ReparamTools module already included")
@@ -8,7 +8,7 @@ end
 
 # Include RepressilatorModel.jl for ODE system and helpers
 if !@isdefined(RepressilatorModel)
-    include("RepressilatorModel.jl")
+    include("repressilator_model.jl")
     println("✓ RepressilatorModel module included")
 else
     println("✓ RepressilatorModel module already included")

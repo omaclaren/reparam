@@ -94,7 +94,7 @@ function try_integer_rounding(name, A; round_within)
     println(name, " with round_within = ", round_within)
     println(repeat("-", 80))
     try
-        A_round = scale_and_round(A; round_within=round_within,
+        A_round = ReparamTools.scale_and_round(A; round_within=round_within,
             column_scales=ones(Int, size(A, 2)))
         display(A_round)
         return A_round
@@ -470,7 +470,7 @@ print_separation_bundle(
 )
 
 println("\nCurrent transport_model.jl path uses integer rounding only:")
-println("  evecs_scaled = scale_and_round(Vt_XY_log; round_within=0.5, column_scales=[1,1,1])")
+println("  rounded_columns = ReparamTools.scale_and_round(Vt_XY_log; round_within=0.5, column_scales=[1,1,1])")
 println("The helper rounds to nearest integers, not half-integers.")
 
 A_current_050 = try_integer_rounding(
@@ -519,7 +519,7 @@ end
 
 println("\nAttempting package Varimax on the identified subspace (inspection only)...")
 try
-    N_perp_varimax = varimax_rotation(N_perp_inv; n_restarts=200, threshold=1e-2)
+    N_perp_varimax = ReparamTools.varimax_rotation(N_perp_inv; n_restarts=200, threshold=1e-2)
     A_varimax = hcat(N_perp_varimax, N_inv)
     print_basis_summary(
         "Package Varimax-rotated identified basis + null",

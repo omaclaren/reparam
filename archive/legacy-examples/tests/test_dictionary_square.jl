@@ -4,7 +4,7 @@ Key: Keep Stage 1 transformation square by including both N_perp and N
 """
 
 using LinearAlgebra
-include("../ReparamTools.jl")
+include("../../../ReparamTools.jl")
 using .ReparamTools
 
 # True parameters

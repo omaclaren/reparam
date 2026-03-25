@@ -2,7 +2,7 @@ using LinearAlgebra
 using DifferentialEquations
 using ForwardDiff
 
-include("../ReparamTools.jl")
+include("../../../ReparamTools.jl")
 using .ReparamTools
 
 # True parameters

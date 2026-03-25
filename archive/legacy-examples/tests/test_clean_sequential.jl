@@ -6,7 +6,7 @@ Clean sequential IIR with post-processing dictionary
 using LinearAlgebra
 using Distributions
 using Random
-include("../ReparamTools.jl")
+include("../../../ReparamTools.jl")
 using .ReparamTools
 
 Random.seed!(123)

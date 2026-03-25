@@ -120,7 +120,7 @@ function scale_and_round(evecs; round_within=0.5, column_scales=nothing)
     end
 
     # Scale first
-    evecs_scaled = similar(evecs)
+    scaled_columns = similar(evecs)
 
     # Rescale each column so smallest nonzero entry (above threshold) is one
     for (i, col) in enumerate(eachcol(evecs))
@@ -128,25 +128,25 @@ function scale_and_round(evecs; round_within=0.5, column_scales=nothing)
         if any(above_threshold)
             col_above = col[above_threshold]
             min_nonzero = col_above[argmin(abs.(col_above))]
-            evecs_scaled[:, i] = col / min_nonzero
+            scaled_columns[:, i] = col / min_nonzero
         else
             max_val = maximum(abs.(col))
             if max_val > eps()
-                evecs_scaled[:, i] = col / col[argmax(abs.(col))]
+                scaled_columns[:, i] = col / col[argmax(abs.(col))]
             else
-                evecs_scaled[:, i] = col
+                scaled_columns[:, i] = col
             end
         end
     end
 
     # Round to nearest integer exponents
-    evecs_scaled_rounded = round.(evecs_scaled)
+    rounded_columns = round.(scaled_columns)
 
     # Hard check: significant entries must be close to integers
-    for i in 1:size(evecs_scaled, 2)
-        sig = abs.(evecs_scaled[:, i]) .> round_within
+    for i in 1:size(scaled_columns, 2)
+        sig = abs.(scaled_columns[:, i]) .> round_within
         if any(sig)
-            max_dev = maximum(abs.(evecs_scaled[sig, i] .- evecs_scaled_rounded[sig, i]))
+            max_dev = maximum(abs.(scaled_columns[sig, i] .- rounded_columns[sig, i]))
             if max_dev > round_within
                 error("scale_and_round: column $i is not close enough to integer exponents (max deviation = $max_dev, tolerance = $round_within)")
             end
@@ -155,10 +155,10 @@ function scale_and_round(evecs; round_within=0.5, column_scales=nothing)
 
     # Apply optional column scales
     for i in 1:length(column_scales)
-        evecs_scaled_rounded[:, i] *= column_scales[i]
+        rounded_columns[:, i] *= column_scales[i]
     end
 
-    return evecs_scaled_rounded
+    return rounded_columns
 end
 
 # --------------------------------------------------------
@@ -529,19 +529,20 @@ end
 # --------------------------------------------------------
 # Coordinate Transformation Methods
 # --------------------------------------------------------
-function reparam(evecs_scaled; a_func=x->log.(x), a_func_inv=x->exp.(x))
+function reparam(basis_columns; a_func=x->log.(x), a_func_inv=x->exp.(x))
     """
     Construct log-linear forward and inverse transformations from a matrix of
     parameter combinations.
 
-    This helper assumes **columns** of `evecs_scaled` correspond to the desired
+    This helper assumes **columns** of `basis_columns` correspond to the desired
     combinations in the transformed coordinates. Internally it forms
-    ``A = evecs_scaled'`` so that the forward map is
+    ``A = basis_columns'`` so that the forward map is
     ``ψ = f^{-1}(A f(θ))`` with `f = a_func` (log by default).
 
     Parameters:
-    - evecs_scaled: Matrix whose **columns** are the parameter combinations
-      (typically scaled and rounded output from `find_invariant_subspace`)
+    - basis_columns: Matrix whose **columns** are the parameter combinations
+      (for example the output of `basis_candidate_matrix(...)`, or any other
+      column-stacked log-linear basis)
     - a_func: Component-wise transform to enforce positivity (default: `log`)
     - a_func_inv: Inverse of `a_func` (default: `exp`)
 
@@ -555,7 +556,7 @@ function reparam(evecs_scaled; a_func=x->log.(x), a_func_inv=x->exp.(x))
       `ψ_to_θ(ψ) = a_func_inv(A \\ a_func(ψ))`.
     """
     # Forward and inverse transformations
-    A = evecs_scaled'
+    A = basis_columns'
     xytoXY(xy) = a_func_inv(A * a_func(xy))
     XYtoxy(XY) = a_func_inv(A \ a_func(XY))
 

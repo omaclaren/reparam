@@ -5,7 +5,7 @@ Stage 2: Use augmented dictionary [y; z_varimax]
 """
 
 using LinearAlgebra
-include("../ReparamTools.jl")
+include("../../../ReparamTools.jl")
 using .ReparamTools
 
 # True parameters

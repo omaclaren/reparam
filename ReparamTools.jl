@@ -42,8 +42,6 @@ export
     plot_profile_wise_CI_comparison,
 
     # Utility functions
-    scale_and_round,
-    varimax_rotation,
     orthonormalize_columns,
     basis_candidate_matrix,
     basis_labels,

@@ -1,4 +1,4 @@
-include("../ReparamTools.jl")
+include("../../../ReparamTools.jl")
 using .ReparamTools, DifferentialEquations
 
 function repressilator_eisenberg!(dX, X, θ, t)

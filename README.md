@@ -38,7 +38,7 @@ Pkg.add([
     "NLopt",
     "Plots",
     "DifferentialEquations",  # For ODE examples
-    "FactorLoadingMatrices"   # For Varimax rotation
+    "FactorLoadingMatrices"   # Legacy Varimax helper
 ])
 ```
 
@@ -50,91 +50,81 @@ using .ReparamTools
 
 # Define auxiliary mapping (parameters → data distribution parameters)
 ϕ(θ) = [θ[1]*θ[2], θ[1]*θ[2]]  # Example: Poisson limit
+θ0 = [100.0, 0.2]
 
 # Find invariant subspace at reference parameters
-θ0 = [100.0, 0.2]
 S, N, N_perp, rank_J = find_invariant_subspace(ϕ, θ0)
+J = compute_ϕ_Jacobian(ϕ, θ0)
 
-# N = invariant null space (non-identifiable directions)
-# N_perp = complement (potentially identifiable directions)
+# Build a shared monomial basis:
+# - informed search on the identified side
+# - simplicity-only search on the invariant/null side
+identified = informed_monomial_basis_search(
+    N_perp, J' * J, S[1]^2, ["n", "p"]; s_max=2, c_max=1, residual_cap=1e-2)
+null = simple_search_with_support_retry(
+    N, ["n", "p"]; s_max=2, c_max=1, residual_cap=1e-2)
 
-# Build transformation matrix (monomial reparameterization)
-A_full = vcat(N_perp', N')
-ψ(θ) = exp.(A_full * log.(θ))  # New coordinates
+A_cols = hcat(
+    basis_candidate_matrix(identified.selected, 2),
+    basis_candidate_matrix(null.selected, 2),
+)
+θ_to_ψ, ψ_to_θ = reparam(A_cols)
 ```
 
-See [examples/stat_model.jl](examples/stat_model.jl) for complete workflow.
+See [examples/stat_model.jl](examples/stat_model.jl), [examples/mm_model.jl](examples/mm_model.jl), and [examples/transport_model.jl](examples/transport_model.jl) for complete maintained example workflows.
 
 ## Examples
 
-Paper-facing examples (current revision):
-- `examples/stat_model.jl`
-- repressilator workflow (`examples/repressilator.jl` + profiling/postprocessing scripts)
+### Maintained simple examples
+- `examples/stat_model.jl` - Pedagogical two-parameter example with `np` / `n/p`
+- `examples/mm_model.jl` - Michaelis-Menten/Monod example with exact-limit and practical non-limit views
+- `examples/transport_model.jl` - Transport example showing orthogonal subspaces and sparse ratio coordinates
 
-### 1. stat_model.jl (Pedagogical)
-**Model**: Poisson limit distribution
-**Parameters**: n (sample size), p (probability)
-**Identifiable**: np (mean)
-**Non-identifiable**: n/p
-
-**Purpose**: Clear introduction to IIR workflow
-
-### 2. repressilator.jl (Ambitious)
-**Model**: 3-gene repressilator (Eisenberg & Hayashi 2010)
-**Parameters**: 18 (nonlinear ODE system)
-**Identifiable**: K₁/β₁, K₂/β₂, K₃/β₃ ratios
-**Demonstrates**:
-- IIR on realistic mechanistic model
-- Finite-difference invariance test for stiff ODEs
-- Profile-wise prediction uncertainty
-- Validation against profile likelihood (Eisenberg 2010)
-
-### Repressilator Post-processing Utilities
+### Maintained workflow / HPC example
+- `run_repressilator_profile.jl` - Canonical repressilator profiling runner
+- `examples/RepressilatorModel.jl` - Repressilator model definition used by the runner
 - `replot_profile_results.jl` - Replot saved 2D profile likelihood surfaces from `.jls` results
-- `repressilator_prediction_intervals_from_2d_profile.jl` - Specialized utility for repressilator runs that compares prediction envelopes from:
+- `repressilator_prediction_intervals_from_2d_profile.jl` - Compare prediction envelopes from:
   1. full accepted 2D pushforward,
   2. 1D profile over identifiable target (`K₁/β₁`),
   3. 1D profile over non-identifiable target (`β₁K₁`).
 
 Notes:
-- `run_repressilator_profile.jl` now supports **slice/profile** modes (hybrid removed).
-- Repressilator result files now store observation data/metadata (`data`, `t_obs`, `X0`, `σ`, etc.) so post-processing does not need to regenerate data from RNG state.
+- `run_repressilator_profile.jl` supports **slice/profile** modes (hybrid removed).
+- Repressilator result files store observation data/metadata (`data`, `t_obs`, `X0`, `σ`, etc.) so post-processing does not need to regenerate data from RNG state.
 - Historical hybrid artifacts are archived under `archive/hybrid/`.
-- Legacy/sequential writeups are archived under `archive/legacy-sequential/` (as available).
 
 Example:
 ```bash
 julia --project=. repressilator_prediction_intervals_from_2d_profile.jl nesi/repressilator_16nuisance_50x50_results.jls
 ```
 
-### Legacy Examples (public repo, non-paper)
-- `transport_model.jl` - Diffusive transport in composite medium
-- `mm_model.jl` - Michaelis-Menten/Monod kinetics
-- `stat_sum_model.jl` - Multi-stage IIR exploration (not in paper)
-- `pk_model.jl` - Pharmacokinetic model revealing multi-stage limitations
-
-These examples are retained for public-repo breadth and are being kept compatible with the current codebase, but they are not part of the core manuscript evidence package.
+### Archived exploratory / legacy material
+- `archive/exploratory-examples/` - exploratory non-paper examples kept on the revision branch
+- `archive/legacy-examples/` - historical repressilator scripts and old test/example entrypoints
+- `archive/legacy-sequential/` - sequential-IIR legacy scripts and notes
 
 ## Repository Structure
 
 ```
 reparam/
 ├── ReparamTools.jl          # Main module
-├── invariance.jl             # Algorithm 1: find_invariant_subspace()
-├── core.jl                   # Profile likelihood, optimization
-├── utils.jl                  # Helper functions
-├── parameterizations.jl      # Transformations, Varimax rotation
-├── visualization.jl          # Plotting utilities
+├── invariance.jl            # Algorithm 1: find_invariant_subspace()
+├── core.jl                  # Profile likelihood, optimization
+├── utils.jl                 # Helper functions
+├── parameterizations.jl     # Transformations, monomial basis search, legacy helpers
+├── visualization.jl         # Plotting utilities
 ├── run_repressilator_profile.jl                      # Canonical repressilator profiling runner
 ├── repressilator_prediction_intervals_from_2d_profile.jl  # Repressilator prediction-band post-processing
 ├── examples/
-│   ├── stat_model.jl         # Pedagogical example
-│   ├── repressilator.jl      # Ambitious ODE example
-│   └── [other examples]
-├── AGENTS.md                 # Canonical internal project context/strategy
-├── CLAUDE.md                 # Compatibility shim pointing to AGENTS.md
-├── NEXT_STEPS.md             # Actionable backlog
-└── archive/                  # Archived legacy artifacts and notes
+│   ├── stat_model.jl        # Pedagogical maintained example
+│   ├── mm_model.jl          # Maintained small nonlinear example
+│   ├── transport_model.jl   # Maintained transport example
+│   └── RepressilatorModel.jl # Maintained repressilator model definition
+├── AGENTS.md                # Canonical internal project context/strategy
+├── CLAUDE.md                # Compatibility shim pointing to AGENTS.md
+├── NEXT_STEPS.md            # Actionable backlog
+└── archive/                 # Archived exploratory and legacy artifacts
 ```
 
 ## Documentation
@@ -166,16 +156,24 @@ reparam/
 - Finite-difference option for stiff ODE systems
 - Separates structural from practical non-identifiability
 
-### Varimax Rotation (Optional)
+### Monomial Basis Search (Current Default)
 
-Improve interpretability of identifiable combinations:
+For maintained examples, the public/default path is:
 
 ```julia
-N_perp_rotated = varimax_rotation(N_perp; n_restarts=200)
+identified = informed_monomial_basis_search(
+    N_perp, J' * J, S[1]^2, param_names; s_max=2, c_max=1, residual_cap=1e-2)
+null = simple_search_with_support_retry(
+    N, param_names; s_max=2, c_max=1, residual_cap=1e-2)
 ```
 
-Maximizes sparsity within span(N_perp) while preserving invariant subspace structure.
-For the current single-stage paper focus, treat this as an interpretability/presentation aid rather than a required algorithmic step.
+This separates two goals cleanly:
+- **identified side**: choose a simple basis, but order it using local information
+- **null side**: choose a simple sparse invariant basis
+
+### Legacy Varimax Helpers
+
+`scale_and_round` and `varimax_rotation` remain in the codebase for archived diagnostics and historical scripts, but they are no longer the public default path for maintained examples.
 
 ## Paper Strategy
 
@@ -186,12 +184,12 @@ Focus on robust, reliable monomial transformations (ψ = exp(A log(θ)))
 - ✅ Works reliably across model types
 - ✅ Clear theoretical foundation
 - ✅ No basis-dependence issues
-- ✅ Produces interpretable results (Varimax available as optional enhancement)
+- ✅ Produces interpretable sparse monomial results with a shared basis-selection path
 
 ### Multi-Stage Extensions (Future Work)
 Sequential application (e.g., products → sums) mentioned briefly as open research direction. Investigation revealed:
 - Success depends on basis alignment (open problem)
-- Varimax optimizes sparsity, not compositional reducibility
+- Simplicity and informedness should be separated explicitly rather than forced through a single rotation heuristic
 
 ## Citation
 

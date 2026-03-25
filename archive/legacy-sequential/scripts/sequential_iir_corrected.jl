@@ -6,7 +6,7 @@ Honest example with proper data generation and active direction filtering
 using LinearAlgebra
 using Distributions
 using Random
-include("../ReparamTools.jl")
+include("../../../ReparamTools.jl")
 using .ReparamTools
 
 Random.seed!(123)
