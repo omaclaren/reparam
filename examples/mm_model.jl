@@ -1,3 +1,12 @@
+# Run with:
+#   julia --project=. "examples/mm_model.jl"
+#
+# This example fits the Michaelis-Menten/Monod model, computes the invariant
+# split in log coordinates, and builds an interpretable reparameterisation.
+#
+# Set `limit = true` below for the exact-limit IIR case, or `limit = false`
+# for the non-limit practical-identifiability case.
+
 # Include ReparamTools.jl code if not already loaded
 if !@isdefined(ReparamTools)
     include("../ReparamTools.jl")

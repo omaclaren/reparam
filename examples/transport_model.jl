@@ -1,3 +1,13 @@
+# Run with:
+#   julia --project=. "examples/transport_model.jl"
+#
+# This example fits the transport model, computes the invariant split in log
+# coordinates, and constructs an interpretable IIR reparameterisation using
+# the shared monomial-basis search routines.
+#
+# Basis diagnostics are saved to:
+#   examples/transport_model_basis_views.jls
+
 # Include ReparamTools.jl code if not already loaded
 if !@isdefined(ReparamTools)
     include("../ReparamTools.jl")
@@ -573,7 +583,7 @@ for (i,j) in param_pairs
 end
 
 # --------------------------------------------------------
-# IIR basis selection and reparameterization analysis
+# Construct an interpretable IIR reparameterisation from the invariant split
 # --------------------------------------------------------
 model_name = "transport_iir"
 print(model_name*"\n")
@@ -621,6 +631,11 @@ varnames["ψ3"] = "T_1 T_2 R"
 varnames["ψ1_save"] = "T_2_over_R"
 varnames["ψ2_save"] = "T_1_over_T_2"
 varnames["ψ3_save"] = "T_1_T_2_R"
+
+println("\nChosen IIR coordinates for this example:")
+for (j, label) in enumerate(final_basis_labels)
+    println("  ψ_$(j) = $(label)")
+end
 
 print_basis_view("Orthogonal SVD-style basis for identified side N_perp", orthogonal_identified_basis)
 print_basis_view("Orthogonal basis for invariant null side N", orthogonal_null_basis)
