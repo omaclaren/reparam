@@ -574,9 +574,34 @@ else
     println("  Suggestion at cutoff ", default_practical_cutoff, ": keep full dimension.")
 end
 
+# Shared monomial basis view for the final interpretable coordinates.
+# Use informed selection on the identified side and simplicity-only selection on the null side.
+param_names_iir = ["n", "p"]
+residual_cap_iir = 1e-2
+identified_basis_result = informed_monomial_basis_search(
+    N_perp_inv, J_ϕ_XY_log' * J_ϕ_XY_log, S_inv[1]^2, param_names_iir;
+    s_max=2, c_max=1, residual_cap=residual_cap_iir)
+null_basis_result = simple_search_with_support_retry(
+    N_inv, param_names_iir; s_max=2, c_max=1, residual_cap=residual_cap_iir)
+
+if !identified_basis_result.basis_ok
+    error("Stepwise informed simple basis search failed on the identified side N_perp")
+end
+if !null_basis_result.basis_ok
+    error("Singleton-first sparse basis search failed on the invariant null side N")
+end
+
+identified_basis_columns = basis_candidate_matrix(identified_basis_result.selected, length(param_names_iir))
+identified_basis_labels = basis_labels(identified_basis_result.selected)
+null_basis_columns = basis_candidate_matrix(null_basis_result.selected, length(param_names_iir))
+null_basis_labels = basis_labels(null_basis_result.selected)
+final_basis_columns = hcat(identified_basis_columns, null_basis_columns)
+final_basis_labels = vcat(identified_basis_labels, null_basis_labels)
+final_log_A = final_basis_columns'
+
 # Directional probe for one-sided practical weakness in full-rank settings.
 # Compare two weak-coordinate choices in x = log(θ):
-# (i) the exact local SVD basis, and (ii) the rounded interpretable basis.
+# (i) the exact local SVD basis, and (ii) the simple monomial interpretable basis.
 if !poisson_limit && rank_inv == length(XY_log_MLE) && length(S_inv) > 1
     println("\nDirectional Practical Check under two weak-coordinate choices:")
 
@@ -587,15 +612,11 @@ if !poisson_limit && rank_inv == length(XY_log_MLE) && length(S_inv) > 1
         ϕ_XY_log, XY_log_MLE, v_weak_raw,
         XY_log_lower_bounds, XY_log_upper_bounds)
 
-    A_full_T_probe = hcat(N_perp_inv, N_inv)
-    A_full_T_scaled_probe = scale_and_round(A_full_T_probe;
-        column_scales=ones(size(A_full_T_probe, 2)))
-    rounded_log_A_probe = A_full_T_scaled_probe'
     weak_coord_index = size(N_perp_inv, 2)
-    rounded_weak_coord_row = rounded_log_A_probe[weak_coord_index, :]
-    rounded_weak_direction = inv(rounded_log_A_probe)[:, weak_coord_index]
-    rounded_probe = directional_practical_probe(
-        ϕ_XY_log, XY_log_MLE, rounded_weak_direction,
+    monomial_weak_coord_row = final_log_A[weak_coord_index, :]
+    monomial_weak_direction = inv(final_log_A)[:, weak_coord_index]
+    monomial_probe = directional_practical_probe(
+        ϕ_XY_log, XY_log_MLE, monomial_weak_direction,
         XY_log_lower_bounds, XY_log_upper_bounds)
 
     print_directional_practical_probe(
@@ -603,8 +624,8 @@ if !poisson_limit && rank_inv == length(XY_log_MLE) && length(S_inv) > 1
         coord_row=raw_weak_coord_row)
 
     print_directional_practical_probe(
-        "Rounded weak coordinate (interpretable basis)", rounded_probe, XYtoxy_log, XY_log_MLE;
-        coord_row=rounded_weak_coord_row)
+        "Simple monomial weak coordinate (interpretable basis)", monomial_probe, XYtoxy_log, XY_log_MLE;
+        coord_row=monomial_weak_coord_row)
 end
 
 println("\n" * "="^60)
@@ -643,51 +664,39 @@ println("\n" * "="^60)
 println("IIR Parameterization: ", model_name)
 println("="^60)
 
-# Scale and round eigenvectors for iir transformation
-# Use the invariant subspace analysis results
-use_invariant_subspace = true
+println("\nUsing invariant subspace analysis (Algorithm 1 from paper)")
+println("Selecting final interpretable coordinates with the shared monomial basis search")
 
-if use_invariant_subspace
-    println("\nUsing invariant subspace analysis (Algorithm 1 from paper)")
-    # Construct column-stacked matrix (columns are vectors to be scaled)
-    # Scale BEFORE transposing so row combinations stay intact
-    A_full_T = hcat(N_perp_inv, N_inv)
-    A_full_T_scaled = scale_and_round(A_full_T; column_scales=[1,1])
-    evecs_scaled = A_full_T_scaled'  # Transpose to get rows as parameter combinations
+println("\nSelected simple monomial basis labels:")
+for (i, label) in enumerate(final_basis_labels)
+    println("  ψ_", i, " = ", label)
+end
+println("\nSelected simple monomial reparameterization matrix:")
+display(final_log_A)
 
-    println("\nScaled and rounded reparameterization matrix:")
-    display(evecs_scaled)
-
-    if size(N_inv, 2) > 0
-        if reparam_type == "minimal_image"
-            println("\nNote: Minimal image reparameterization")
-            println("First ", size(N_perp_inv, 2), " parameter(s) are identifiable")
-            println("Last ", size(N_inv, 2), " parameter(s) are non-identifiable (invariant null space)")
-        else
-            println("\nNote: Image (not minimal) reparameterization")
-            println("First ", size(N_perp_inv, 2), " parameter(s) include identifiable + non-invariant combinations")
-            println("Last ", size(N_inv, 2), " parameter(s) are non-identifiable (invariant null space)")
-        end
-        println("The non-identifiable parameters don't affect model predictions")
-    end
+if poisson_limit
+    println("\nPoisson-limit interpretation:")
+    println("  First coordinate is the identifiable combination np.")
+    println("  Second coordinate is the invariant combination n/p.")
+elseif reparam_type == "identifiable"
+    println("\nNon-limit interpretation:")
+    println("  No exact invariant null space is present.")
+    println("  The informed simple monomial basis is used as a local interpretable basis.")
+    println("  np is the stronger local combination; n/p is weaker but non-invariant.")
 else
-    println("\nUsing simple SVD (for comparison/legacy)")
-    # This would be the old approach without invariance testing
-    J_ϕ_XY_log_temp, U_XY_log_temp, S_XY_log_temp, Vt_XY_log_temp = compute_ϕ_Jacobian(ϕ_XY_log, XY_log_MLE, compute_svd=true)
-    evecs_scaled = scale_and_round(Vt_XY_log_temp; column_scales=[1,1])
-    display(evecs_scaled)
+    println("\nNon-limit interpretation:")
+    println("  A mixed image reparameterization was detected; keep both coordinates.")
 end
 
 println("\nTransformation matrices:")
 println("Forward (original → IIR):")
-display(evecs_scaled)
+display(final_log_A)
 println("\nInverse (IIR → original):")
-display(inv(evecs_scaled))
+display(inv(final_log_A))
 
-# Define coordinate transformation using the IIR matrix
-# ψ(θ) = f^{-1}(A f(θ)) where f = log, f^{-1} = exp, A = evecs_scaled
-xytoXY_iir(xy) = exp.(evecs_scaled * log.(xy))
-XYtoxy_iir(XY) = exp.(inv(evecs_scaled) * log.(XY))
+# Define coordinate transformation using the selected monomial basis.
+# reparam expects columns = parameter combinations, so pass final_basis_columns.
+xytoXY_iir, XYtoxy_iir = reparam(final_basis_columns)
 
 # Transform likelihood, distribution, and phi mapping
 lnlike_XY_iir = construct_lnlike_XY(lnlike_xy, XYtoxy_iir)

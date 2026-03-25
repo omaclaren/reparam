@@ -95,6 +95,144 @@ function create_ϕ_mapping(t, S0; limit=false)
 end
 
 # --------------------------------------------------------
+# Practical directional probe for weak/one-sided identifiability
+# --------------------------------------------------------
+function directional_practical_probe(ϕ_func, θ0, probe_direction,
+    lower_bounds, upper_bounds; deltas=[0.05, 0.1, 0.2, 0.4, 0.8])
+
+    v_probe = probe_direction / norm(probe_direction)
+    J0 = compute_ϕ_Jacobian(ϕ_func, θ0)
+    σ1_0 = svdvals(J0)[1]
+    Jv0 = J0 * v_probe
+    ε0 = norm(Jv0) / σ1_0
+
+    rows = NamedTuple[]
+    for δ in deltas
+        θ_plus = θ0 .+ δ .* v_probe
+        θ_minus = θ0 .- δ .* v_probe
+
+        plus_in_bounds = all(θ_plus .>= lower_bounds) && all(θ_plus .<= upper_bounds)
+        minus_in_bounds = all(θ_minus .>= lower_bounds) && all(θ_minus .<= upper_bounds)
+
+        if !(plus_in_bounds && minus_in_bounds)
+            push!(rows, (δ=δ, valid=false, plus_in_bounds=plus_in_bounds,
+                minus_in_bounds=minus_in_bounds))
+            continue
+        end
+
+        J_plus = compute_ϕ_Jacobian(ϕ_func, θ_plus)
+        J_minus = compute_ϕ_Jacobian(ϕ_func, θ_minus)
+        σ1_plus = svdvals(J_plus)[1]
+        σ1_minus = svdvals(J_minus)[1]
+        Jv_plus = J_plus * v_probe
+        Jv_minus = J_minus * v_probe
+
+        ε_plus = norm(Jv_plus) / σ1_plus
+        ε_minus = norm(Jv_minus) / σ1_minus
+        d_plus = norm(Jv_plus - Jv0) / max(norm(Jv0), eps())
+        d_minus = norm(Jv_minus - Jv0) / max(norm(Jv0), eps())
+
+        push!(rows, (
+            δ=δ,
+            valid=true,
+            θ_plus=θ_plus,
+            θ_minus=θ_minus,
+            ε_plus=ε_plus,
+            ε_minus=ε_minus,
+            asymmetry=ε_minus / max(ε_plus, eps()),
+            d_plus=d_plus,
+            d_minus=d_minus,
+        ))
+    end
+
+    return (direction=v_probe, baseline_ε=ε0, rows=rows)
+end
+
+function print_mm_directional_practical_probe(label, directional_probe, XYtoxy_func, θ0;
+    coord_row=nothing)
+
+    xy0 = XYtoxy_func(θ0)
+    ν0, K0 = xy0
+    K_over_ν0 = K0 / ν0
+    νK0 = ν0 * K0
+    νK_plus_small = prod(XYtoxy_func(θ0 .+ 0.1 .* directional_probe.direction))
+
+    println("\n  ", label, ":")
+    if coord_row !== nothing
+        println("    Weak coordinate row in x = log(θ): ", round.(coord_row, digits=4))
+    end
+    println("    Corresponding perturbation in x = log(θ): ", round.(directional_probe.direction, digits=4))
+    println("    (holding the other transformed coordinates fixed)")
+    println("    Reference point: ν = ", round(ν0, digits=4),
+        ", K = ", round(K0, digits=4),
+        ", K/ν = ", round(K_over_ν0, digits=4),
+        ", νK = ", round(νK0, digits=4))
+    println("    Baseline relative first-order effect ε(0) = ||J(θ₀)v|| / σ₁(θ₀): ", round(directional_probe.baseline_ε, digits=4))
+    if νK_plus_small > νK0
+        println("    +δ increases νK")
+    else
+        println("    +δ decreases νK")
+    end
+    println("    ε±(δ) = ||J(θ₀ ± δv)v|| / σ₁(θ₀ ± δv)")
+    println("      → smaller ε means weaker local sensitivity in this direction")
+    println("      → larger ε means the direction is less weak / more identifiable")
+    if νK_plus_small > νK0
+        println("      → ε(-)/ε(+) > 1 means the +δ side (larger νK) is weaker than the -δ side")
+    else
+        println("      → ε(-)/ε(+) > 1 means the +δ side (smaller νK) is weaker than the -δ side")
+    end
+    println("    d±(δ) = ||J(θ₀ ± δv)v - J(θ₀)v|| / ||J(θ₀)v||")
+    println("      → d tracks how much the local weak-direction picture changes away from θ₀")
+
+    println("\n    Parameter movement:")
+    println("    δ      ν(+)      ν(-)      K(+)      K(-)")
+    println("    " * "-"^48)
+    for row in directional_probe.rows
+        if row.valid
+            xy_plus = XYtoxy_func(row.θ_plus)
+            xy_minus = XYtoxy_func(row.θ_minus)
+            ν_plus, K_plus = xy_plus
+            ν_minus, K_minus = xy_minus
+            println("    ",
+                lpad(string(round(row.δ, digits=2)), 4), "  ",
+                lpad(string(round(ν_plus, digits=4)), 9), "  ",
+                lpad(string(round(ν_minus, digits=4)), 9), "  ",
+                lpad(string(round(K_plus, digits=4)), 8), "  ",
+                lpad(string(round(K_minus, digits=4)), 8))
+        else
+            println("    δ = ", row.δ, ": step leaves bounds; skipped")
+        end
+    end
+
+    println("\n    Derived quantities and weakness:")
+    println("    δ     K/ν(+)   K/ν(-)    νK(+)    νK(-)     ε(+)     ε(-)   ε(-)/ε(+)    d(+)     d(-)")
+    println("    " * "-"^104)
+    for row in directional_probe.rows
+        if row.valid
+            xy_plus = XYtoxy_func(row.θ_plus)
+            xy_minus = XYtoxy_func(row.θ_minus)
+            K_over_ν_plus = xy_plus[2] / xy_plus[1]
+            K_over_ν_minus = xy_minus[2] / xy_minus[1]
+            νK_plus = xy_plus[1] * xy_plus[2]
+            νK_minus = xy_minus[1] * xy_minus[2]
+            println("    ",
+                lpad(string(round(row.δ, digits=2)), 4), "  ",
+                lpad(string(round(K_over_ν_plus, digits=4)), 8), "  ",
+                lpad(string(round(K_over_ν_minus, digits=4)), 8), "  ",
+                lpad(string(round(νK_plus, digits=4)), 8), "  ",
+                lpad(string(round(νK_minus, digits=4)), 8), "  ",
+                lpad(string(round(row.ε_plus, digits=4)), 8), "  ",
+                lpad(string(round(row.ε_minus, digits=4)), 8), "  ",
+                lpad(string(round(row.asymmetry, digits=3)), 11), "  ",
+                lpad(string(round(row.d_plus, digits=4)), 8), "  ",
+                lpad(string(round(row.d_minus, digits=4)), 8))
+        else
+            println("    δ = ", row.δ, ": step leaves bounds; skipped")
+        end
+    end
+end
+
+# --------------------------------------------------------
 # Setup and Data Generation
 # --------------------------------------------------------
 
@@ -117,8 +255,9 @@ S0 = 1.0
 # --------------------------------------------------------
 # --- Analysis in original parameterisation and data generation ---
 # --------------------------------------------------------
-# Choose whether to use the limit form of the model
-limit = true
+# Choose whether to use the limit form of the model.
+# Set to false here to inspect the non-limit practical-identifiability case.
+limit = false
 
 if limit
     model_name = "mm_model_xy_limit"
@@ -179,11 +318,11 @@ target_indices = [] # Empty target indices for MLE
 n_guesses = 3
 
 # Generate multiple initial guesses
-nuisance_guesses = generate_initial_guesses(xy_lower_bounds, xy_upper_bounds, n_guesses)
+xy_mle_initial_guesses = generate_initial_guesses(xy_lower_bounds, xy_upper_bounds, n_guesses)
 
 xy_MLE, lnlike_xy_MLE = profile_target(lnlike_xy, target_indices,
     xy_lower_bounds, xy_upper_bounds, 
-    xy_initial; grid_steps=grid_steps, ω_initial_extras=nuisance_guesses,
+    xy_initial; grid_steps=grid_steps, ω_initial_extras=xy_mle_initial_guesses,
     method=point_estimation_method)
 
 # Quadratic approximation at MLE
@@ -217,7 +356,7 @@ for i in 1:dim_all
 
     # Generate multiple initial guesses for nuisance parameters
     n_guesses_profiling = 3
-    nuisance_guesses = generate_initial_guesses(xy_lower_bounds[nuisance_indices],
+    xy_profile_initial_guesses = generate_initial_guesses(xy_lower_bounds[nuisance_indices],
         xy_upper_bounds[nuisance_indices], n_guesses_profiling)
 
     # Profile full likelihood
@@ -227,7 +366,7 @@ for i in 1:dim_all
         xy_upper_bounds,
         nuisance_guess; 
         grid_steps=grid_steps,
-        ω_initial_extras=nuisance_guesses,
+        ω_initial_extras=xy_profile_initial_guesses,
         method=profile_method)
 
     # Profile quadratic approximation
@@ -237,7 +376,7 @@ for i in 1:dim_all
         xy_upper_bounds,
         nuisance_guess; 
         grid_steps=grid_steps,
-        ω_initial_extras=nuisance_guesses,
+        ω_initial_extras=xy_profile_initial_guesses,
         method=profile_method)
 
     # Extract profiled parameter values
@@ -285,10 +424,10 @@ for (i, j) in param_pairs
     # Generate multiple initial guesses for nuisance parameters if needed
     if length(nuisance_indices) > 0
         n_guesses_profiling = 3
-        nuisance_guesses = generate_initial_guesses(xy_lower_bounds[nuisance_indices],
+        xy_pair_initial_guesses = generate_initial_guesses(xy_lower_bounds[nuisance_indices],
             xy_upper_bounds[nuisance_indices], n_guesses_profiling)
     else
-        nuisance_guesses = nothing
+        xy_pair_initial_guesses = nothing
     end
 
     print("Variables: ", varnames["ψ"*string(i)], ", ", varnames["ψ"*string(j)], "\n")
@@ -304,7 +443,7 @@ for (i, j) in param_pairs
     ψω_values, lnlike_ψ_values = profile_target(lnlike_xy, target_indices_ij,
         xy_lower_bounds, xy_upper_bounds,
         nuisance_guess; grid_steps=grid_steps,
-        ω_initial_extras=nuisance_guesses,
+        ω_initial_extras=xy_pair_initial_guesses,
         method=profile_method)
 
     # Profile quadratic approximation
@@ -312,7 +451,7 @@ for (i, j) in param_pairs
         target_indices_ij,
         xy_lower_bounds, xy_upper_bounds,
         nuisance_guess; grid_steps=grid_steps,
-        ω_initial_extras=nuisance_guesses,
+        ω_initial_extras=xy_pair_initial_guesses,
         method=profile_method)
 
     # Extract profiled parameter values
@@ -391,11 +530,11 @@ varnames["ψ2_save"] = "ln_K"
 # Point estimation in log coordinates
 target_indices = []  # empty for MLE
 n_guesses = 3
-nuisance_guesses = generate_initial_guesses(XY_log_lower_bounds, XY_log_upper_bounds, n_guesses)
+XY_log_mle_initial_guesses = generate_initial_guesses(XY_log_lower_bounds, XY_log_upper_bounds, n_guesses)
 
 XY_log_MLE, lnlike_XY_log_MLE = profile_target(lnlike_XY_log, target_indices,
     XY_log_lower_bounds, XY_log_upper_bounds, 
-    XY_log_initial; grid_steps=grid_steps, ω_initial_extras=nuisance_guesses,
+    XY_log_initial; grid_steps=grid_steps, ω_initial_extras=XY_log_mle_initial_guesses,
     method=point_estimation_method)
 
 # Quadratic approximation at MLE
@@ -429,14 +568,14 @@ for i in 1:dim_all
 
     # Generate multiple initial guesses for nuisance parameters
     n_guesses_profiling = 3
-    nuisance_guesses = generate_initial_guesses(XY_log_lower_bounds[nuisance_indices],
+    XY_log_profile_initial_guesses = generate_initial_guesses(XY_log_lower_bounds[nuisance_indices],
         XY_log_upper_bounds[nuisance_indices], n_guesses_profiling)
 
     # Profile full likelihood
     ψω_values, lnlike_ψ_values = profile_target(lnlike_XY_log, target_index,
         XY_log_lower_bounds, XY_log_upper_bounds,
         nuisance_guess; grid_steps=grid_steps,
-        ω_initial_extras=nuisance_guesses,
+        ω_initial_extras=XY_log_profile_initial_guesses,
         method=profile_method)
 
     # Profile quadratic approximation
@@ -444,7 +583,7 @@ for i in 1:dim_all
         target_index,
         XY_log_lower_bounds, XY_log_upper_bounds,
         nuisance_guess; grid_steps=grid_steps,
-        ω_initial_extras=nuisance_guesses,
+        ω_initial_extras=XY_log_profile_initial_guesses,
         method=profile_method)
 
     # Extract profiled parameter values
@@ -487,10 +626,10 @@ for (i,j) in param_pairs
     # Generate multiple initial guesses if needed
     if length(nuisance_indices) > 0
         n_guesses_profiling = 3
-        nuisance_guesses = generate_initial_guesses(XY_log_lower_bounds[nuisance_indices],
+        XY_log_pair_initial_guesses = generate_initial_guesses(XY_log_lower_bounds[nuisance_indices],
             XY_log_upper_bounds[nuisance_indices], n_guesses_profiling)
     else
-        nuisance_guesses = nothing
+        XY_log_pair_initial_guesses = nothing
     end
 
     # Create a copy of varnames for this iteration
@@ -504,7 +643,7 @@ for (i,j) in param_pairs
     ψω_values, lnlike_ψ_values = profile_target(lnlike_XY_log, target_indices_ij,
         XY_log_lower_bounds, XY_log_upper_bounds,
         nuisance_guess; grid_steps=grid_steps,
-        ω_initial_extras=nuisance_guesses,
+        ω_initial_extras=XY_log_pair_initial_guesses,
         method=profile_method)
 
     # Profile quadratic approximation
@@ -512,7 +651,7 @@ for (i,j) in param_pairs
         target_indices_ij,
         XY_log_lower_bounds, XY_log_upper_bounds,
         nuisance_guess; grid_steps=grid_steps,
-        ω_initial_extras=nuisance_guesses,
+        ω_initial_extras=XY_log_pair_initial_guesses,
         method=profile_method)
 
     # Extract profiled parameter values
@@ -557,66 +696,188 @@ for (i,j) in param_pairs
 end
 
 # --------------------------------------------------------
-# Sloppihood-Informed Parameterization Analysis
+# Invariant Subspace Analysis in Log Coordinates
+# --------------------------------------------------------
+println("\n" * "="^60)
+println("Invariant Subspace Analysis in Log Coordinates")
+println("="^60)
+
+S_inv, N_inv, N_perp_inv, rank_inv = find_invariant_subspace(
+    ϕ_func_XY_log, XY_log_MLE; verbose=true)
+
+println("\nJacobian Analysis:")
+println("  Singular values: ", S_inv)
+println("  Numerical rank: ", rank_inv)
+println("  Dimension of invariant null space (N): ", size(N_inv, 2))
+println("  Dimension of identifiable space (N_perp): ", size(N_perp_inv, 2))
+
+null_space_dim = length(XY_log_MLE) - rank_inv
+if size(N_inv, 2) == null_space_dim && null_space_dim > 0
+    println("\nFull null space is invariant")
+    println("  Type: Minimal image reparameterization")
+    reparam_type = "minimal_image"
+elseif size(N_inv, 2) > 0 && size(N_inv, 2) < null_space_dim
+    println("\nPartial null space is invariant (dimension ", size(N_inv, 2), " of ", null_space_dim, ")")
+    println("  Type: Image (not minimal) reparameterization")
+    reparam_type = "image"
+elseif size(N_inv, 2) == 0 && null_space_dim > 0
+    println("\nNo null space is invariant")
+    println("  Type: Image (not minimal) reparameterization")
+    reparam_type = "image"
+else
+    println("\nNo null space detected")
+    println("  Type: Appears structurally identifiable")
+    reparam_type = "identifiable"
+end
+
+println("\nIdentifiable space basis N_perp (columns):")
+display(N_perp_inv)
+if size(N_inv, 2) > 0
+    println("\nInvariant null space basis N (columns):")
+    display(N_inv)
+end
+
+σ_rel = S_inv[1] > 0 ? S_inv ./ S_inv[1] : zeros(length(S_inv))
+println("\nRelative singular values (σᵢ/σ₁): ", round.(σ_rel, digits=4))
+
+# Shared monomial basis view for the final interpretable coordinates.
+# Use informed selection on the identified side and simplicity-only selection on the null side.
+param_names_iir = ["ν", "K"]
+residual_cap_iir = 1e-2
+identified_basis_result = informed_monomial_basis_search(
+    N_perp_inv, J_ϕ_XY_log' * J_ϕ_XY_log, S_inv[1]^2, param_names_iir;
+    s_max=2, c_max=1, residual_cap=residual_cap_iir)
+null_basis_result = simple_search_with_support_retry(
+    N_inv, param_names_iir; s_max=2, c_max=1, residual_cap=residual_cap_iir)
+
+if !identified_basis_result.basis_ok
+    error("Stepwise informed simple basis search failed on the identified side N_perp")
+end
+if !null_basis_result.basis_ok
+    error("Singleton-first sparse basis search failed on the invariant null side N")
+end
+
+identified_basis_columns = basis_candidate_matrix(identified_basis_result.selected, length(param_names_iir))
+identified_basis_labels = basis_labels(identified_basis_result.selected)
+
+# For this example, use the reciprocal sign convention K/ν rather than ν/K.
+# This is the same 1D identified subspace, but it produces the natural plotting orientation.
+if size(identified_basis_columns, 2) >= 1
+    identified_basis_columns[:, 1] .*= -1
+    identified_basis_labels[1] = "K/(ν)"
+end
+
+null_basis_columns = basis_candidate_matrix(null_basis_result.selected, length(param_names_iir))
+null_basis_labels = basis_labels(null_basis_result.selected)
+final_basis_columns = hcat(identified_basis_columns, null_basis_columns)
+final_basis_labels = vcat(identified_basis_labels, null_basis_labels)
+final_log_A = final_basis_columns'
+
+if limit
+    println("\nLimit case: expect one exact invariant log direction corresponding to νK.")
+else
+    println("\nNon-limit case: no exact invariant null space is expected; use practical diagnostics.")
+end
+
+if !limit && rank_inv == length(XY_log_MLE) && length(S_inv) > 1
+    println("\nDirectional Practical Check under two weak-coordinate choices:")
+
+    svd_log_probe = svd(J_ϕ_XY_log)
+    v_weak_raw = svd_log_probe.V[:, end]
+    raw_weak_coord_row = svd_log_probe.V[:, end]
+    raw_probe = directional_practical_probe(
+        ϕ_func_XY_log, XY_log_MLE, v_weak_raw,
+        XY_log_lower_bounds, XY_log_upper_bounds)
+
+    weak_coord_index = size(N_perp_inv, 2)
+    monomial_weak_coord_row = final_log_A[weak_coord_index, :]
+    monomial_weak_direction = inv(final_log_A)[:, weak_coord_index]
+    monomial_probe = directional_practical_probe(
+        ϕ_func_XY_log, XY_log_MLE, monomial_weak_direction,
+        XY_log_lower_bounds, XY_log_upper_bounds)
+
+    print_mm_directional_practical_probe(
+        "Exact local weak coordinate (SVD basis)", raw_probe, XYtoxy_log, XY_log_MLE;
+        coord_row=raw_weak_coord_row)
+
+    print_mm_directional_practical_probe(
+        "Simple monomial weak coordinate (interpretable basis)", monomial_probe, XYtoxy_log, XY_log_MLE;
+        coord_row=monomial_weak_coord_row)
+
+    println("\n  Summary for the non-limit case:")
+    println("    The model is full rank here, so νK is not an invariant combination.")
+    println("    But νK remains a practically weak direction near the MLE.")
+    println("    The asymmetry in ε(-)/ε(+) shows this weakness is one-sided rather than exactly invariant.")
+end
+
+# --------------------------------------------------------
+# Limit-case IIR / Non-limit Interpretable Reparameterization
 # --------------------------------------------------------
 if limit
     model_name = "mm_model_iir_limit"
+    println("\n" * "="^60)
+    println("Limit-case IIR Parameterization: ", model_name)
+    println("="^60)
 else
     model_name = "mm_model_iir"
+    println("\n" * "="^60)
+    println("Non-limit Interpretable Reparameterization: ", model_name)
+    println("="^60)
 end
-println(model_name)
 
-# Scale and round eigenvectors for iir transformation
-# Option 1: based on eigenvectors from Fisher Information
-# Option 2: based on the right singular vectors from the phi mapping
-use_singular_vectors = true
-if use_singular_vectors
-    evecs_scaled = scale_and_round(Vt_XY_log; column_scales=[1,1])
+println("\nSelected simple monomial basis labels:")
+for (i, label) in enumerate(final_basis_labels)
+    println("  ψ_", i, " = ", label)
+end
+println("\nSelected simple monomial transformation matrix (rows are log-parameter combinations):")
+display(final_log_A)
+println("\nInverse transformation matrix:")
+display(inv(final_log_A))
+
+if limit
+    println("\nLimit case interpretation:")
+    println("  First coordinate is the identifiable combination K/ν.")
+    println("  Second coordinate is the invariant combination νK.")
+elseif reparam_type == "identifiable"
+    println("\nNon-limit interpretation:")
+    println("  No exact invariant null space is present.")
+    println("  The informed simple monomial basis is used as a local interpretable basis.")
+    println("  K/ν is the stronger local combination; νK is weaker but non-invariant.")
 else
-    evecs_scaled = scale_and_round(evecs_log; column_scales=[1,1])
+    println("\nNon-limit interpretation:")
+    println("  A mixed image reparameterization was detected; keep both coordinates.")
 end
 
-println("Transformations:")
-display(evecs_scaled)
-display(inv(evecs_scaled))
-
-println("Original right singular vectors:")
-display(Vt_XY_log)
-
-# Construct transformation
-xytoXY_iir, XYtoxy_iir = reparam(evecs_scaled)
+# Define coordinate transformation using the selected monomial basis.
+# reparam expects columns = parameter combinations, so pass final_basis_columns.
+xytoXY_iir, XYtoxy_iir = reparam(final_basis_columns)
 
 # Transform likelihood, distribution, and phi mapping
 lnlike_XY_iir = construct_lnlike_XY(lnlike_xy, XYtoxy_iir)
 distrib_fine_XY_iir = construct_distrib_XY(distrib_fine_xy, XYtoxy_iir)
 ϕ_func_XY_iir = construct_ϕ_XY(ϕ_func_xy, XYtoxy_iir)
 
-# Set bounds for iir coordinates based on transformation of original bounds
-# Note: These bounds might need manual adjustment
+# Set bounds for interpretable coordinates
 XY_iir_lower_bounds = [0.05, 0.05]  # K/ν, ν*K
-XY_iir_upper_bounds = [10.0, 100]  # K/ν, ν*K
+XY_iir_upper_bounds = [10.0, 100]   # K/ν, ν*K
 
-# Initial guess for iir coordinates (manual coz non-monotonic/complex transform)
-# XY_iir_initial = xytoXY_iir(xy_initial)
+# Initial guess for interpretable coordinates
 XY_iir_initial = [1.0, 10.0]
-
-# Check if initial guess is inside bounds
-all_inside = true
-for i in 1:length(XY_iir_initial)
-    if XY_iir_initial[i] < XY_iir_lower_bounds[i] || XY_iir_initial[i] > XY_iir_upper_bounds[i]
-        all_inside = false
-        println("Warning: Initial guess component $i is outside bounds")
+inside_mask = (XY_iir_lower_bounds .<= XY_iir_initial) .& (XY_iir_initial .<= XY_iir_upper_bounds)
+if !all(inside_mask)
+    for i in eachindex(XY_iir_initial)
+        if !inside_mask[i]
+            println("Warning: Initial guess component $i is outside bounds")
+        end
     end
-end
-if !all_inside
     println(XY_iir_initial)
     error("Initial guess must be inside bounds")
 end
 
-# Transform true value to iir coordinates
+# Transform true value to interpretable coordinates
 XY_iir_true = xytoXY_iir(xy_true)
 
-# Update variable names for iir coordinates
+# Update variable names for interpretable coordinates
 varnames["ψ1"] = "\\frac{K}{\\nu}"
 varnames["ψ2"] = "\\nu K"
 varnames["ψ1_save"] = "K_over_nu"
@@ -625,11 +886,11 @@ varnames["ψ2_save"] = "nu_K"
 # Point estimation in iir coordinates
 target_indices = []  # empty for MLE
 n_guesses = 3
-nuisance_guesses = generate_initial_guesses(XY_iir_lower_bounds, XY_iir_upper_bounds, n_guesses)
+XY_iir_mle_initial_guesses = generate_initial_guesses(XY_iir_lower_bounds, XY_iir_upper_bounds, n_guesses)
 
 XY_iir_MLE, lnlike_XY_iir_MLE = profile_target(lnlike_XY_iir, target_indices,
     XY_iir_lower_bounds, XY_iir_upper_bounds, 
-    XY_iir_initial; grid_steps=grid_steps, ω_initial_extras=nuisance_guesses,
+    XY_iir_initial; grid_steps=grid_steps, ω_initial_extras=XY_iir_mle_initial_guesses,
     method=point_estimation_method)
 
 # Quadratic approximation at MLE
@@ -663,14 +924,14 @@ for i in 1:dim_all
 
     # Generate multiple initial guesses for nuisance parameters
     n_guesses_profiling = 3
-    nuisance_guesses = generate_initial_guesses(XY_iir_lower_bounds[nuisance_indices],
+    XY_iir_profile_initial_guesses = generate_initial_guesses(XY_iir_lower_bounds[nuisance_indices],
         XY_iir_upper_bounds[nuisance_indices], n_guesses_profiling)
 
     # Profile full likelihood
     ψω_values, lnlike_ψ_values = profile_target(lnlike_XY_iir, target_index,
         XY_iir_lower_bounds, XY_iir_upper_bounds,
         nuisance_guess; grid_steps=grid_steps,
-        ω_initial_extras=nuisance_guesses,
+        ω_initial_extras=XY_iir_profile_initial_guesses,
         method=profile_method)
 
     # Profile quadratic approximation
@@ -678,7 +939,7 @@ for i in 1:dim_all
         target_index,
         XY_iir_lower_bounds, XY_iir_upper_bounds,
         nuisance_guess; grid_steps=grid_steps,
-        ω_initial_extras=nuisance_guesses,
+        ω_initial_extras=XY_iir_profile_initial_guesses,
         method=profile_method)
 
     # Extract profiled parameter values
@@ -721,10 +982,10 @@ for (i,j) in param_pairs
     # Generate multiple initial guesses if needed
     if length(nuisance_indices) > 0
         n_guesses_profiling = 3
-        nuisance_guesses = generate_initial_guesses(XY_iir_lower_bounds[nuisance_indices],
+        XY_iir_pair_initial_guesses = generate_initial_guesses(XY_iir_lower_bounds[nuisance_indices],
             XY_iir_upper_bounds[nuisance_indices], n_guesses_profiling)
     else
-        nuisance_guesses = nothing
+        XY_iir_pair_initial_guesses = nothing
     end
 
     # Create a copy of varnames for this iteration
@@ -738,7 +999,7 @@ for (i,j) in param_pairs
     ψω_values, lnlike_ψ_values = profile_target(lnlike_XY_iir, target_indices_ij,
         XY_iir_lower_bounds, XY_iir_upper_bounds,
         nuisance_guess; grid_steps=grid_steps,
-        ω_initial_extras=nuisance_guesses,
+        ω_initial_extras=XY_iir_pair_initial_guesses,
         method=profile_method)
 
     # Profile quadratic approximation
@@ -746,7 +1007,7 @@ for (i,j) in param_pairs
         target_indices_ij,
         XY_iir_lower_bounds, XY_iir_upper_bounds,
         nuisance_guess; grid_steps=grid_steps,
-        ω_initial_extras=nuisance_guesses,
+        ω_initial_extras=XY_iir_pair_initial_guesses,
         method=profile_method)
 
     # Extract profiled parameter values
