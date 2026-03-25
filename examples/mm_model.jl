@@ -747,8 +747,8 @@ residual_cap_iir = 1e-2
 identified_basis_result = informed_monomial_basis_search(
     N_perp_inv, J_ϕ_XY_log' * J_ϕ_XY_log, S_inv[1]^2, param_names_iir;
     s_max=2, c_max=1, residual_cap=residual_cap_iir)
-null_basis_result = simple_search_with_support_retry(
-    N_inv, param_names_iir; s_max=2, c_max=1, residual_cap=residual_cap_iir)
+null_basis_result = simple_monomial_basis_search(
+    N_inv, param_names_iir; s_max=2, c_max=1, residual_cap=residual_cap_iir, retry_support=true)
 
 if !identified_basis_result.basis_ok
     error("Stepwise informed simple basis search failed on the identified side N_perp")
@@ -757,7 +757,7 @@ if !null_basis_result.basis_ok
     error("Singleton-first sparse basis search failed on the invariant null side N")
 end
 
-identified_basis_columns = basis_candidate_matrix(identified_basis_result.selected, length(param_names_iir))
+identified_basis_columns = monomial_basis_matrix(identified_basis_result.selected, length(param_names_iir))
 identified_basis_labels = basis_labels(identified_basis_result.selected)
 
 # For this example, use the reciprocal sign convention K/ν rather than ν/K.
@@ -767,7 +767,7 @@ if size(identified_basis_columns, 2) >= 1
     identified_basis_labels[1] = "K/(ν)"
 end
 
-null_basis_columns = basis_candidate_matrix(null_basis_result.selected, length(param_names_iir))
+null_basis_columns = monomial_basis_matrix(null_basis_result.selected, length(param_names_iir))
 null_basis_labels = basis_labels(null_basis_result.selected)
 final_basis_columns = hcat(identified_basis_columns, null_basis_columns)
 final_basis_labels = vcat(identified_basis_labels, null_basis_labels)

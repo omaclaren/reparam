@@ -61,12 +61,12 @@ J = compute_ϕ_Jacobian(ϕ, θ0)
 # - simplicity-only search on the invariant/null side
 identified = informed_monomial_basis_search(
     N_perp, J' * J, S[1]^2, ["n", "p"]; s_max=2, c_max=1, residual_cap=1e-2)
-null = simple_search_with_support_retry(
-    N, ["n", "p"]; s_max=2, c_max=1, residual_cap=1e-2)
+null = simple_monomial_basis_search(
+    N, ["n", "p"]; s_max=2, c_max=1, residual_cap=1e-2, retry_support=true)
 
 A_cols = hcat(
-    basis_candidate_matrix(identified.selected, 2),
-    basis_candidate_matrix(null.selected, 2),
+    monomial_basis_matrix(identified.selected, 2),
+    monomial_basis_matrix(null.selected, 2),
 )
 θ_to_ψ, ψ_to_θ = reparam(A_cols)
 ```
@@ -163,8 +163,8 @@ For maintained examples, the public/default path is:
 ```julia
 identified = informed_monomial_basis_search(
     N_perp, J' * J, S[1]^2, param_names; s_max=2, c_max=1, residual_cap=1e-2)
-null = simple_search_with_support_retry(
-    N, param_names; s_max=2, c_max=1, residual_cap=1e-2)
+null = simple_monomial_basis_search(
+    N, param_names; s_max=2, c_max=1, residual_cap=1e-2, retry_support=true)
 ```
 
 This separates two goals cleanly:

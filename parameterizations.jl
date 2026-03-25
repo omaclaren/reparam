@@ -305,14 +305,6 @@ function projected_coordinate_matrix(Q::AbstractMatrix{<:Real}, candidates::Vect
     return hcat([projected_coordinates(Q, cand.v) for cand in candidates]...)
 end
 
-function projected_rank_gain(coords::AbstractMatrix{<:Real}, a::AbstractVector{<:Real})
-    if size(coords, 2) == 0
-        return norm(a)
-    end
-    QS = orthonormalize_columns(coords)
-    return norm(a - QS * (QS' * a))
-end
-
 function normalized_direction(v::AbstractVector{<:Real})
     u = Float64.(v)
     u ./= norm(u)
@@ -337,8 +329,8 @@ function conditional_information(M::AbstractMatrix{<:Real}, v::AbstractVector{<:
     return max(info - correction, 0.0)
 end
 
-function build_all_candidates(Q::AbstractMatrix{<:Real}, param_names::Vector{String};
-                              s_max::Int=2, c_max::Int=1)
+function build_monomial_candidates(Q::AbstractMatrix{<:Real}, param_names::Vector{String};
+                                    s_max::Int=2, c_max::Int=1)
     dict = generate_candidate_dictionary(length(param_names); s_max=s_max, c_max=c_max)
     candidates = MonomialBasisCandidate[]
 
@@ -430,7 +422,7 @@ function greedy_informed_basis(Q::AbstractMatrix{<:Real}, accepted::Vector{Monom
     return selected, current_rank
 end
 
-function basis_candidate_matrix(candidates::Vector{MonomialBasisCandidate}, p::Int)
+function monomial_basis_matrix(candidates::Vector{MonomialBasisCandidate}, p::Int)
     isempty(candidates) && return zeros(Float64, p, 0)
     return hcat([Float64.(cand.v) for cand in candidates]...)
 end
@@ -439,12 +431,13 @@ function basis_labels(candidates::Vector{MonomialBasisCandidate})
     return [cand.label for cand in candidates]
 end
 
-function simple_monomial_basis_search(U_basis::AbstractMatrix{<:Real}, param_names::Vector{String};
-                                      s_max::Int=2, c_max::Int=1,
-                                      residual_cap::Float64=1e-2, gain_rtol::Float64=1e-8)
+function _simple_monomial_basis_search_fixed_support(U_basis::AbstractMatrix{<:Real}, param_names::Vector{String};
+                                                      s_max::Int=2, c_max::Int=1,
+                                                      residual_cap::Float64=1e-2,
+                                                      gain_rtol::Float64=1e-8)
     Q = orthonormalize_columns(U_basis)
     target_dim = size(Q, 2)
-    dict, all_candidates = build_all_candidates(Q, param_names; s_max=s_max, c_max=c_max)
+    dict, all_candidates = build_monomial_candidates(Q, param_names; s_max=s_max, c_max=c_max)
     candidate_thresholds = sort(unique(cand.residual for cand in all_candidates if cand.residual <= residual_cap))
 
     accepted = MonomialBasisCandidate[]
@@ -477,28 +470,35 @@ function simple_monomial_basis_search(U_basis::AbstractMatrix{<:Real}, param_nam
     )
 end
 
-function simple_search_with_support_retry(U_basis::AbstractMatrix{<:Real}, param_names::Vector{String};
-                                          s_max::Int=2, c_max::Int=1,
-                                          residual_cap::Float64=1e-2, gain_rtol::Float64=1e-8)
+function simple_monomial_basis_search(U_basis::AbstractMatrix{<:Real}, param_names::Vector{String};
+                                      s_max::Int=2, c_max::Int=1,
+                                      residual_cap::Float64=1e-2,
+                                      gain_rtol::Float64=1e-8,
+                                      retry_support::Bool=false)
     p = length(param_names)
     initial_s_max = min(s_max, p)
-    result = simple_monomial_basis_search(U_basis, param_names;
+    result = _simple_monomial_basis_search_fixed_support(U_basis, param_names;
         s_max=initial_s_max,
         c_max=c_max,
         residual_cap=residual_cap,
         gain_rtol=gain_rtol)
 
     effective_s_max = initial_s_max
-    if !result.basis_ok && effective_s_max < p
+    if retry_support && !result.basis_ok && effective_s_max < p
         effective_s_max = min(p, effective_s_max + 1)
-        result = simple_monomial_basis_search(U_basis, param_names;
+        result = _simple_monomial_basis_search_fixed_support(U_basis, param_names;
             s_max=effective_s_max,
             c_max=c_max,
             residual_cap=residual_cap,
             gain_rtol=gain_rtol)
     end
 
-    return (result..., initial_s_max=initial_s_max, effective_s_max=effective_s_max)
+    return (
+        result...,
+        initial_s_max=initial_s_max,
+        effective_s_max=effective_s_max,
+        retry_support=retry_support,
+    )
 end
 
 function informed_monomial_basis_search(U_basis::AbstractMatrix{<:Real}, M::AbstractMatrix{<:Real},
@@ -507,7 +507,7 @@ function informed_monomial_basis_search(U_basis::AbstractMatrix{<:Real}, M::Abst
                                         residual_cap::Float64=1e-2,
                                         gain_rtol::Float64=1e-8)
     Q = orthonormalize_columns(U_basis)
-    dict, all_candidates = build_all_candidates(Q, param_names; s_max=s_max, c_max=c_max)
+    dict, all_candidates = build_monomial_candidates(Q, param_names; s_max=s_max, c_max=c_max)
     accepted = [cand for cand in all_candidates if cand.residual <= residual_cap]
     accepted_rank = numerical_rank(projected_coordinate_matrix(Q, accepted); rtol=gain_rtol)
     selected, selected_rank = greedy_informed_basis(Q, accepted, Matrix{Float64}(M), σ1_sq; gain_rtol=gain_rtol)
@@ -541,7 +541,7 @@ function reparam(basis_columns; a_func=x->log.(x), a_func_inv=x->exp.(x))
 
     Parameters:
     - basis_columns: Matrix whose **columns** are the parameter combinations
-      (for example the output of `basis_candidate_matrix(...)`, or any other
+      (for example the output of `monomial_basis_matrix(...)`, or any other
       column-stacked log-linear basis)
     - a_func: Component-wise transform to enforce positivity (default: `log`)
     - a_func_inv: Inverse of `a_func` (default: `exp`)

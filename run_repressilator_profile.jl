@@ -247,19 +247,20 @@ identified_basis_result = ReparamTools.informed_monomial_basis_search(
     residual_cap=residual_cap,
 )
 
-null_basis_result = ReparamTools.simple_search_with_support_retry(
+null_basis_result = ReparamTools.simple_monomial_basis_search(
     N,
     param_names;
     s_max=2,
     c_max=1,
     residual_cap=residual_cap,
+    retry_support=true,
 )
 
 identified_basis_result.basis_ok || error("Could not construct identifiable-side sparse basis for repressilator")
 null_basis_result.basis_ok || error("Could not construct invariant-null sparse basis for repressilator")
 
-N_perp_clean = ReparamTools.basis_candidate_matrix(identified_basis_result.selected, n_params)
-N_clean = ReparamTools.basis_candidate_matrix(null_basis_result.selected, n_params)
+N_perp_clean = ReparamTools.monomial_basis_matrix(identified_basis_result.selected, n_params)
+N_clean = ReparamTools.monomial_basis_matrix(null_basis_result.selected, n_params)
 N_perp_labels = ReparamTools.basis_labels(identified_basis_result.selected)
 N_clean_labels = ReparamTools.basis_labels(null_basis_result.selected)
 

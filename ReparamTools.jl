@@ -43,10 +43,9 @@ export
 
     # Utility functions
     orthonormalize_columns,
-    basis_candidate_matrix,
+    monomial_basis_matrix,
     basis_labels,
     simple_monomial_basis_search,
-    simple_search_with_support_retry,
     informed_monomial_basis_search,
     reparam,
     generate_initial_guesses,

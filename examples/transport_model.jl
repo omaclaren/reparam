@@ -586,15 +586,15 @@ orthogonal_null_basis = orthonormalize_columns(N_inv)
 # Monomial basis views
 param_names = ["T1", "T2", "R"]
 residual_cap = 1e-2
-identified_sparse = simple_search_with_support_retry(N_perp_inv, param_names; s_max=2, c_max=1, residual_cap=residual_cap)
+identified_sparse = simple_monomial_basis_search(N_perp_inv, param_names; s_max=2, c_max=1, residual_cap=residual_cap, retry_support=true)
 identified_informed = informed_monomial_basis_search(N_perp_inv, J_ϕ_XY_log' * J_ϕ_XY_log, S_XY_log[1]^2, param_names; s_max=2, c_max=1, residual_cap=residual_cap)
-null_sparse = simple_search_with_support_retry(N_inv, param_names; s_max=2, c_max=1, residual_cap=residual_cap)
+null_sparse = simple_monomial_basis_search(N_inv, param_names; s_max=2, c_max=1, residual_cap=residual_cap, retry_support=true)
 
-identified_sparse_basis = basis_candidate_matrix(identified_sparse.selected, length(param_names))
+identified_sparse_basis = monomial_basis_matrix(identified_sparse.selected, length(param_names))
 identified_sparse_labels = basis_labels(identified_sparse.selected)
-identified_informed_basis = basis_candidate_matrix(identified_informed.selected, length(param_names))
+identified_informed_basis = monomial_basis_matrix(identified_informed.selected, length(param_names))
 identified_informed_labels = basis_labels(identified_informed.selected)
-null_sparse_basis = basis_candidate_matrix(null_sparse.selected, length(param_names))
+null_sparse_basis = monomial_basis_matrix(null_sparse.selected, length(param_names))
 null_sparse_labels = basis_labels(null_sparse.selected)
 
 if !identified_sparse.basis_ok
@@ -640,15 +640,15 @@ serialize(basis_views_path, Dict(
     "orthogonal_null_basis" => orthogonal_null_basis,
     "singleton_first_sparse_identified_basis" => identified_sparse_basis,
     "singleton_first_sparse_identified_labels" => identified_sparse_labels,
-    "singleton_first_sparse_identified_accepted_basis" => basis_candidate_matrix(identified_sparse.accepted, length(param_names)),
+    "singleton_first_sparse_identified_accepted_basis" => monomial_basis_matrix(identified_sparse.accepted, length(param_names)),
     "singleton_first_sparse_identified_accepted_labels" => basis_labels(identified_sparse.accepted),
     "stepwise_informed_simple_identified_basis" => identified_informed_basis,
     "stepwise_informed_simple_identified_labels" => identified_informed_labels,
-    "stepwise_informed_simple_identified_accepted_basis" => basis_candidate_matrix(identified_informed.accepted, length(param_names)),
+    "stepwise_informed_simple_identified_accepted_basis" => monomial_basis_matrix(identified_informed.accepted, length(param_names)),
     "stepwise_informed_simple_identified_accepted_labels" => basis_labels(identified_informed.accepted),
     "singleton_first_sparse_null_basis" => null_sparse_basis,
     "singleton_first_sparse_null_labels" => null_sparse_labels,
-    "singleton_first_sparse_null_accepted_basis" => basis_candidate_matrix(null_sparse.accepted, length(param_names)),
+    "singleton_first_sparse_null_accepted_basis" => monomial_basis_matrix(null_sparse.accepted, length(param_names)),
     "singleton_first_sparse_null_accepted_labels" => basis_labels(null_sparse.accepted),
     "final_basis_columns_for_reparam" => basis_columns_iir,
     "final_basis_labels" => final_basis_labels,
