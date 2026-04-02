@@ -68,6 +68,9 @@ A_cols = hcat(
     monomial_basis_matrix(identified.selected, 2),
     monomial_basis_matrix(null.selected, 2),
 )
+
+# Columns of A_cols are the selected exponent vectors.
+# The reparameterisation matrix used in ψ = f⁻¹(A f(θ)) is A = A_cols'.
 θ_to_ψ, ψ_to_θ = reparam(A_cols)
 ```
 
@@ -141,20 +144,20 @@ reparam/
 **Inputs**:
 - `ϕ_func`: Auxiliary mapping θ → ϕ(θ)
 - `θ0`: Reference parameter values
-- `rtolJ`: Relative tolerance for Jacobian rank (default: √eps ≈ 1.5e-8)
-- `atolM`: Absolute tolerance for invariance test (default: 1e-10)
-- `invariance_method`: `:hessian_based` (default) or `:finite_difference` (stiff ODEs)
+- `compute_J`: Jacobian routine (defaults to `compute_ϕ_Jacobian`; a custom routine can be supplied)
+- `rtol_rank`: Relative tolerance for Jacobian rank (default: `1e-8`)
+- `rtol_invariance`: Relative tolerance for the invariance test (default: `1e-6`)
 
 **Outputs**:
-- `S`: Singular values of Jacobian
-- `N`: Invariant null space (non-identifiable directions)
-- `N_perp`: Complement (potentially identifiable directions)
+- `S`: Singular values of the Jacobian
+- `N`: Invariant null space
+- `N_perp`: Orthogonal complement of the invariant null space, used for the image coordinates
 - `rank_J`: Numerical rank
 
 **Key features**:
-- Uses nested AD for Hessian-based invariance test
-- Finite-difference option for stiff ODE systems
-- Separates structural from practical non-identifiability
+- Uses a Hessian-based invariance test in the current implementation
+- Allows a custom Jacobian routine through `compute_J`
+- Separates invariant null directions from the complement used for identified/image coordinates
 
 ### Monomial Basis Search (Current Default)
 
@@ -217,4 +220,4 @@ For questions about the method or implementation, please open an issue on GitHub
 ## Version History
 
 - **v1.0** (2025-01): Initial submission to SIAM/ASA JUQ
-- **v2.0-dev** (2025-10): Revision with repressilator example, finite-difference invariance test, strategic focus on single-stage IIR
+- **v2.0-dev** (2025-10): Revision with repressilator example, shared monomial basis-selection path, and strategic focus on single-stage IIR

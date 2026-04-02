@@ -22,8 +22,10 @@ function find_invariant_subspace(ϕ_func, θ0;
     perturbations using the condition: H_i(θ*)α = 0 for all i, where H_i are Hessian slices.
 
     This determines whether we have:
-    - Minimal image reparameterization: if full null space is invariant (N is empty)
-    - Image reparameterization: if only part of null space is invariant (N is non-empty)
+    - Minimal image reparameterization: if the full local null space is invariant
+      (N spans that null space and N_perp contains only identifiable directions)
+    - Image reparameterization: if only part of the local null space is invariant
+      (N spans the invariant part and N_perp contains identifiable + non-invariant directions)
 
     # Arguments
     - `ϕ_func`: Auxiliary mapping function (mechanistic → distribution parameters)
@@ -38,9 +40,10 @@ function find_invariant_subspace(ϕ_func, θ0;
     # Returns
     - `S`: Singular values from the initial Jacobian SVD
     - `N`: Matrix (p×k₀) whose columns form an orthonormal basis for the invariant null space.
-           Empty if full null space is invariant (minimal image case).
-    - `N_perp`: Matrix (p×k⊥) whose columns form an orthonormal basis for the identifiable space.
-                Orthogonal complement of the invariant null space.
+           Empty only if no invariant null directions are present.
+    - `N_perp`: Matrix (p×k⊥) whose columns form an orthonormal basis for the orthogonal complement
+                of the invariant null space. This is the space used for the image coordinates:
+                it contains the identifiable directions and, when needed, any non-invariant null directions.
     - `rankJ`: Numerical rank of the Jacobian
 
     # Reparameterization Construction
@@ -57,10 +60,13 @@ function find_invariant_subspace(ϕ_func, θ0;
     A = N_perp'
 
     # Check type of reparameterization
-    if size(N, 2) == 0
-        println("Minimal image reparameterization - maximum reduction")
+    null_dim = length(θ_mle) - rankJ
+    if size(N, 2) == null_dim && null_dim > 0
+        println("Minimal image reparameterization - full null space is invariant")
+    elseif size(N, 2) > 0
+        println("Image reparameterization - only part of the null space is invariant")
     else
-        println("Image reparameterization - dimension \$(size(N, 2)) invariant null space remains")
+        println("No invariant null directions detected")
     end
 
     # With custom Jacobian computation
@@ -90,9 +96,9 @@ function find_invariant_subspace(ϕ_func, θ0;
     V_r = V[:, 1:rankJ]        # Right singular vectors for non-zero singular values
     V_0 = V[:, rankJ+1:end]    # Right singular vectors for zero singular values (null space basis)
 
-    # If the local null space is empty, no reparameterization needed
+    # If the local null space is empty, there are no invariant null directions to separate
     if size(V_0, 2) == 0
-        N = zeros(T, p, 0)  # Empty invariant null space
+        N = zeros(T, p, 0)
         N_perp = V_r        # Full space is identifiable
         return S, N, N_perp, rankJ
     end
@@ -147,7 +153,7 @@ function find_invariant_subspace(ϕ_func, θ0;
     N_perp = hcat(V_r, V_0 * V_Mr)
 
     # N spans the invariant null space
-    # Empty for minimal image, non-empty for image reparameterization
+    # It is empty only when no invariant null directions are present
     N = V_0 * V_M0
 
     return S, N, N_perp, rankJ
