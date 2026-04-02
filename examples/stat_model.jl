@@ -235,11 +235,11 @@ true_mean = mean(distrib_xy(xy_true))
 
 # Determine svd of phi mapping in xy coordinates
 J_ϕ_xy = compute_ϕ_Jacobian(ϕ_xy, xy_MLE)
-U_xy, S_xy, Vt_xy = svd(J_ϕ_xy)
+U_xy, S_xy, V_xy = svd(J_ϕ_xy)
 println("\nSVD analysis in original coordinates:")
 println("Singular values: ", S_xy)
 println("Right singular vectors (V): ")
-display(Vt_xy)
+display(V_xy)
 
 # 1D Profiles
 for i in 1:dim_all
@@ -383,16 +383,16 @@ for (i, eveci) in enumerate(eachcol(evecs_log))
 end
 
 # Determine svd of phi mapping in log coordinates
-J_ϕ_XY_log, U_XY_log, S_XY_log, Vt_XY_log = compute_ϕ_Jacobian(ϕ_XY_log, XY_log_MLE, compute_svd=true)
+J_ϕ_XY_log, U_XY_log, S_XY_log, V_XY_log = compute_ϕ_Jacobian(ϕ_XY_log, XY_log_MLE, compute_svd=true)
 println("\nSVD analysis in log coordinates:")
 println("Singular values: ", S_XY_log)
 println("Right singular vectors (V): ")
-display(Vt_XY_log)
+display(V_XY_log)
 
 # Compare eigenvectors from Fisher Information with singular vectors
 println("\nComparison of eigenvectors (1) and singular vectors (2):")
 display(evecs_log)
-display(Vt_XY_log)
+display(V_XY_log)
 
 
 for i in 1:dim_all
@@ -656,10 +656,6 @@ else
     end
 end
 
-# For compatibility with downstream code, create aliases
-S_XY_log = S_inv
-Vt_XY_log = A_inv  # Already in correct orientation (rows are transformations)
-
 # --------------------------------------------------------
 # IIR Parameterization Analysis
 # (Invariant Image Reparameterization - replaces "Sloppy-Informed")
@@ -744,12 +740,12 @@ println("Eigenvalues: ", evals_iir)
 println("Eigenvectors: ", evecs_iir)
 
 # Determine svd of phi mapping in iir coordinates
-J_ϕ_XY_iir, U_XY_iir, S_XY_iir, Vt_XY_iir = compute_ϕ_Jacobian(ϕ_XY_iir, XY_iir_MLE, compute_svd=true)
+J_ϕ_XY_iir, U_XY_iir, S_XY_iir, V_XY_iir = compute_ϕ_Jacobian(ϕ_XY_iir, XY_iir_MLE, compute_svd=true)
 
 # Compare eigenvectors from Fisher Information with singular vectors
 println("\nComparison of eigenvectors (1) and singular vectors (2):")
 display(evecs_iir)
-display(Vt_XY_iir');
+display(V_XY_iir)
 
 # 1D Profiles
 for i in 1:dim_all

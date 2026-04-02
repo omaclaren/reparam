@@ -80,7 +80,8 @@ function compute_ϕ_Jacobian(ϕ_func, θ; method_type=:auto, compute_svd=false)
 
     Returns:
     - If compute_svd=false: Just the Jacobian matrix
-    - If compute_svd=true: Tuple of (Jacobian, SVD factorization)
+    - If compute_svd=true: Tuple of `(Jacobian, U, S, V)`, where the right singular
+      vectors are the columns of `V` and `J = U * Diagonal(S) * V'`
     """
     if method_type === :auto
         J = ForwardDiff.jacobian(ϕ_func, θ)
@@ -90,8 +91,8 @@ function compute_ϕ_Jacobian(ϕ_func, θ; method_type=:auto, compute_svd=false)
 
     if compute_svd
         println("Computing and returning SVD of Jacobian of φ mapping")
-        U, S, Vt = svd(J)
-        return (J, U, S, Vt)
+        F = svd(J)
+        return (J, F.U, F.S, F.V)
     else
         return J
     end

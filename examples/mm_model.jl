@@ -344,11 +344,11 @@ println("Eigenvalues: ", evals)
 println("Eigenvectors: ", evecs)
 
 # Determine svd of phi mapping in xy coordinates
-J_ϕ_xy, U_xy, S_xy, Vt_xy = compute_ϕ_Jacobian(ϕ_func_xy, xy_MLE; method_type=:auto, compute_svd=true)
+J_ϕ_xy, U_xy, S_xy, V_xy = compute_ϕ_Jacobian(ϕ_func_xy, xy_MLE; method_type=:auto, compute_svd=true)
 println("\nSVD analysis in original coordinates:")
 println("Singular values: ", S_xy)
 println("Right singular vectors (V): ")
-display(Vt_xy)
+display(V_xy)
 
 # Calculate prediction at MLE for reference
 pred_mean_MLE = mean(distrib_fine_xy(xy_MLE))
@@ -556,11 +556,11 @@ println("Eigenvalues: ", evals_log)
 println("Eigenvectors: ", evecs_log)
 
 # Determine svd of phi mapping in log coordinates
-J_ϕ_XY_log, U_XY_log, S_XY_log, Vt_XY_log = compute_ϕ_Jacobian(ϕ_func_XY_log, XY_log_MLE; method_type=:auto, compute_svd=true)
+J_ϕ_XY_log, U_XY_log, S_XY_log, V_XY_log = compute_ϕ_Jacobian(ϕ_func_XY_log, XY_log_MLE; method_type=:auto, compute_svd=true)
 println("\nSVD analysis in log coordinates:")
 println("Singular values: ", S_XY_log)
 println("Right singular vectors (V): ")
-display(Vt_XY_log)
+display(V_XY_log)
 
 # Calculate prediction at MLE for reference
 pred_mean_MLE_log = mean(distrib_fine_XY_log(XY_log_MLE))
@@ -912,11 +912,11 @@ println("Eigenvalues: ", evals_iir)
 println("Eigenvectors: ", evecs_iir)
 
 # Determine svd of phi mapping in iir coordinates
-J_ϕ_XY_iir, U_XY_iir, S_XY_iir, Vt_XY_iir = compute_ϕ_Jacobian(ϕ_func_XY_iir, XY_iir_MLE; method_type=:auto, compute_svd=true)
+J_ϕ_XY_iir, U_XY_iir, S_XY_iir, V_XY_iir = compute_ϕ_Jacobian(ϕ_func_XY_iir, XY_iir_MLE; method_type=:auto, compute_svd=true)
 println("\nSVD analysis in iir coordinates:")
 println("Singular values: ", S_XY_iir)
 println("Right singular vectors (V): ")
-display(Vt_XY_iir)
+display(V_XY_iir)
 
 # Calculate prediction at MLE for reference
 pred_mean_MLE_iir = mean(distrib_fine_XY_iir(XY_iir_MLE))

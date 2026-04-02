@@ -200,14 +200,14 @@ println("Eigenvectors: ", evecs)
 
 # Jacobian and svd analysis of φ mapping at MLE
 # J_ϕ_xy = ForwardDiff.jacobian(ϕ_func_xy, xy_MLE)
-J_ϕ_xy, U_xy, S_xy, Vt_xy = compute_ϕ_Jacobian(ϕ_func_xy, xy_MLE; method_type=:auto, compute_svd=true)
+J_ϕ_xy, U_xy, S_xy, V_xy = compute_ϕ_Jacobian(ϕ_func_xy, xy_MLE; method_type=:auto, compute_svd=true)
 # print singular values and left/right singular vectors
 println("Singular values for "*model_name)
 println(S_xy)
 # println("Left singular vectors for "*model_name)
 # println(U_xy)
 println("Right singular vectors for "*model_name)
-println(Vt_xy)
+println(V_xy)
 
 # Calculate prediction at MLE for reference distribution on fine grid
 pred_mean_MLE = mean(distrib_fine_xy(xy_MLE))
@@ -425,14 +425,14 @@ println("Eigenvectors: ", evecs_log)
 
 # Jacobian and svd analysis of φ mapping at MLE
 # J_ϕ_XY_log = ForwardDiff.jacobian(ϕ_func_XY_log, XY_log_MLE)
-J_ϕ_XY_log, U_XY_log, S_XY_log, Vt_XY_log = compute_ϕ_Jacobian(ϕ_func_XY_log, XY_log_MLE; method_type=:auto, compute_svd=true)
+J_ϕ_XY_log, U_XY_log, S_XY_log, V_XY_log = compute_ϕ_Jacobian(ϕ_func_XY_log, XY_log_MLE; method_type=:auto, compute_svd=true)
 # print singular values and left/right singular vectors
 println("Singular values for "*model_name)
 println(S_XY_log)
 # println("Left singular vectors for "*model_name)
 # println(U_XY_log)
 println("Right singular vectors for "*model_name)
-println(Vt_XY_log)
+println(V_XY_log)
 
 # Calculate prediction at MLE for reference using distribution on fine grid
 pred_mean_MLE_log = mean(distrib_fine_XY_log(XY_log_MLE))
@@ -714,14 +714,14 @@ println("Eigenvectors: ", evecs_iir)
 
 # Jacobian and svd analysis of φ mapping at MLE
 # J_ϕ_XY_iir = ForwardDiff.jacobian(ϕ_func_XY_iir, XY_iir_MLE)
-J_ϕ_XY_iir, U_XY_iir, S_XY_iir, Vt_XY_iir = compute_ϕ_Jacobian(ϕ_func_XY_iir, XY_iir_MLE; method_type=:auto, compute_svd=true)
+J_ϕ_XY_iir, U_XY_iir, S_XY_iir, V_XY_iir = compute_ϕ_Jacobian(ϕ_func_XY_iir, XY_iir_MLE; method_type=:auto, compute_svd=true)
 # print singular values and left/right singular vectors
 println("Singular values for "*model_name)
 println(S_XY_iir)
 # println("Left singular vectors for "*model_name)
 # println(U_XY_iir)
 println("Right singular vectors for "*model_name)
-println(Vt_XY_iir)
+println(V_XY_iir)
 
 # Calculate prediction at MLE for reference using distribution on fine grid
 pred_mean_MLE_iir = mean(distrib_fine_XY_iir(XY_iir_MLE))
