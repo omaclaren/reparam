@@ -1,97 +1,198 @@
-# Invariant Image Reparameterisation
+# Invariant Image Reparameterisation (IIR)
 
-This repository contains a Julia implementation of methods described in "Invariant Image Reparameterisation: A Unified Approach to Structural and Practical Identifiability and Model Reduction". A preprint is available from [arxiv.org/abs/2502.04867](https://arxiv.org/abs/2502.04867). 
+This repository contains a Julia implementation of methods for automatically discovering identifiable parameter combinations in mathematical models using numerical invariance testing.
 
 ## Overview
 
-The code implements methods for
+**Invariant Image Reparameterisation (IIR)** provides methods for:
 
-- Analysing structural and practical parameter identifiability in mathematical models in a unified way
-- Finding identifiable and nonidentifiable nonlinear (monomial) parameter combinations
-- Model reparameterisation techniques based on identifiable/nonidentifiable parameter combinations
-- Profile likelihood, in the form of Profile-Wise Analysis (PWA), for uncertainty quantification for both parameters and predictions
+- **Structural identifiability analysis**: Determine which parameter combinations are theoretically identifiable from data
+- **Practical identifiability**: Separate well-identified from poorly-identified combinations
+- **Automatic discovery**: Find identifiable monomial combinations without symbolic computation
+- **Model reparameterisation**: Transform to coordinates that cleanly separate identifiable/non-identifiable structure
+- **Uncertainty quantification**: Profile-wise analysis for parameters and predictions
 
-## Installation
+### Key Innovation
 
-This package requires Julia 1.0 or higher. Install the required packages:
+IIR uses a **numerical invariance test** (Hessian-based criterion) to identify which directions in parameter space have globally invariant null spaces. This enables:
+- Discovery of parameter combinations purely from numerical Jacobian
+- No symbolic computation required
+- Works for complex models (ODEs, PDEs, stochastic systems)
 
-```julia
-using Pkg
-Pkg.add([
-    "Distributions", 
-    "ForwardDiff",
-    "LaTeXStrings",
-    "Measures",
-    "NLopt",
-    "Plots"
-])
+## Quick Start
+
+### Installation
+
+Requires Julia 1.6 or higher. From the repository root, install the project dependencies with:
+
+```bash
+julia --project=. -e 'using Pkg; Pkg.instantiate()'
 ```
 
-This package also uses the following standard libraries:
-* `LinearAlgebra`
-* `SparseArrays`
-
-## Structure
-
-The codebase is organized as:
-
-### Main Module
-- `ReparamTools.jl` - The primary module that users interact with, providing the interface for parameter transformations, identifiability analysis, and likelihood-based inference
-
-### Examples
-- `transport_model.jl` - Demonstration of parameter identifiability analysis for a transport model (diffusive flow in composite medium)
-- `mm_model.jl` - Example using the Michaelis-Menten/Monod model
-- `stat_model.jl` - Simple statistical model example 
-
-### Implementation Files
-- `core.jl` - Internal implementation of likelihood and identifiability methods
-- `parameterizations.jl` - Implementation of parameter transformation methods
-- `utils.jl` - Common utility functions and helpers
-- `visualization.jl` - Internal plotting and visualization tools
-
-## Usage
-
-Basic model setup (using the simple stat_model.jl as an example):
+### Basic Usage
 
 ```julia
-include("../ReparamTools.jl") # Assuming working in examples directory
-using .ReparamTools 
+include("ReparamTools.jl")
+using .ReparamTools
 
-# Define model through auxiliary mapping (maps parameters to data distribution parameters)
-ϕ_xy = xy -> [xy[1]*xy[2], xy[2]]
+# Define auxiliary mapping (parameters → data distribution parameters)
+ϕ(θ) = [θ[1]*θ[2], θ[1]*θ[2]]  # Example: Poisson limit
+θ0 = [100.0, 0.2]
 
-# Create distribution mapping (specifies how distribution depends on parameters)
-distrib_xy = xy -> Normal(ϕ_xy(xy)[1], sqrt(ϕ_xy(xy)[1]*(1-ϕ_xy(xy)[2])))
+# Find invariant subspace at reference parameters
+S, N, N_perp, rank_J = find_invariant_subspace(ϕ, θ0)
+J = compute_ϕ_Jacobian(ϕ, θ0)
 
-# Construct likelihood using data
-lnlike_xy = construct_lnlike_xy(distrib_xy, data)
+# Build a shared monomial basis:
+# - informed search on the identified side
+# - simplicity-only search on the invariant/null side
+identified = informed_monomial_basis_search(
+    N_perp, J' * J, S[1]^2, ["n", "p"]; s_max=2, c_max=1, residual_cap=1e-2)
+null = simple_monomial_basis_search(
+    N, ["n", "p"]; s_max=2, c_max=1, residual_cap=1e-2, retry_support=true)
 
+A_cols = hcat(
+    monomial_basis_matrix(identified.selected, 2),
+    monomial_basis_matrix(null.selected, 2),
+)
+
+# Columns of A_cols are the selected exponent vectors.
+# The reparameterisation matrix used in ψ = f⁻¹(A f(θ)) is A = A_cols'.
+θ_to_ψ, ψ_to_θ = reparam(A_cols)
 ```
 
-See the example files for complete analyses including identifiability analysis, model reduction, parameter combinations, and inference.
+See [examples/stat_model.jl](examples/stat_model.jl), [examples/mm_model.jl](examples/mm_model.jl), and [examples/transport_model.jl](examples/transport_model.jl) for complete maintained example workflows.
 
 ## Examples
 
-The repository includes several examples demonstrating the methods:
+### Maintained simple examples
+- `examples/stat_model.jl` - Pedagogical two-parameter example with `np` / `n/p`
+- `examples/mm_model.jl` - Michaelis-Menten/Monod example with exact-limit and practical non-limit views
+- `examples/transport_model.jl` - Transport example showing orthogonal subspaces and sparse ratio coordinates
 
-1. Statistical Model Example (`stat_model.jl`)
-   - Demonstrates basic structural and practical parameter identifiability analysis for model with scalar output
+### Maintained workflow / HPC example
+- `run_repressilator_profile.jl` - Canonical repressilator profiling runner
+- `examples/RepressilatorModel.jl` - Repressilator model definition used by the runner
+- `replot_profile_results.jl` - Replot saved 2D profile likelihood surfaces from `.jls` results
+- `repressilator_prediction_intervals_from_2d_profile.jl` - Compare prediction envelopes from:
+  1. full accepted 2D pushforward,
+  2. 1D profile over identifiable target (`K₁/β₁`),
+  3. 1D profile over non-identifiable target (`β₁K₁`).
+- `repressilator_protein_prediction_intervals_from_2d_profile.jl` - Generate the corresponding unobserved-protein prediction-band figure from the same accepted sets.
 
-2. Transport Model (`transport_model.jl`)
-   - Demonstrates basic structural and practical parameter identifiability analysis for model with vector output on a fine grid and coarser observation grid
-   - Includes predictive uncertainty quantification
+Notes:
+- `run_repressilator_profile.jl` supports **slice/profile** modes (hybrid removed).
+- Repressilator result files store observation data/metadata (`data`, `t_obs`, `X0`, `σ`, etc.) so post-processing does not need to regenerate data from RNG state.
+- Saved profiling result artifacts are not required for the simple examples. Repressilator post-processing commands expect a compatible saved result file supplied by the user or generated by `run_repressilator_profile.jl`.
 
-3. Michaelis-Menten Model (`mm_model.jl`)
-   - Similar to diffusion example but includes the use of an ODE solver as part of model definition
+Example:
+```bash
+julia --project=. repressilator_prediction_intervals_from_2d_profile.jl path/to/repressilator_results.jls
+```
 
-Each example includes:
-- Model definition
-- Identifiability analysis
-- Parameter transformations
-- Profile likelihood calculations
-- Visualisation of results
+## Repository Structure
+
+```
+reparam/
+├── ReparamTools.jl          # Main module
+├── invariance.jl            # Algorithm 1: find_invariant_subspace()
+├── core.jl                  # Profile likelihood, optimization
+├── utils.jl                 # Helper functions
+├── parameterizations.jl     # Transformations, monomial basis search, legacy helpers
+├── visualization.jl         # Plotting utilities
+├── run_repressilator_profile.jl                      # Canonical repressilator profiling runner
+├── repressilator_prediction_intervals_from_2d_profile.jl  # Repressilator prediction-band post-processing
+├── repressilator_protein_prediction_intervals_from_2d_profile.jl # Protein prediction-band wrapper
+├── extract_iir_diagnostics_from_results.jl           # Diagnostics from saved repressilator results
+├── examples/
+│   ├── stat_model.jl        # Pedagogical maintained example
+│   ├── mm_model.jl          # Maintained small nonlinear example
+│   ├── transport_model.jl   # Maintained transport example
+│   └── RepressilatorModel.jl # Maintained repressilator model definition
+└── figures/                 # Placeholder for generated example figures
+```
+
+## Method Details
+
+### Algorithm 1: `find_invariant_subspace()`
+
+**Inputs**:
+- `ϕ_func`: Auxiliary mapping θ → ϕ(θ)
+- `θ0`: Reference parameter values
+- `compute_J`: Jacobian routine (defaults to `compute_ϕ_Jacobian`; a custom routine can be supplied)
+- `rtol_rank`: Relative tolerance for Jacobian rank (default: `1e-8`)
+- `rtol_invariance`: Relative tolerance for the invariance test (default: `1e-6`)
+
+**Outputs**:
+- `S`: Singular values of the Jacobian
+- `N`: Invariant null space
+- `N_perp`: Orthogonal complement of the invariant null space, used for the image coordinates
+- `rank_J`: Numerical rank
+
+**Key features**:
+- Uses a Hessian-based invariance test in the current implementation
+- Allows a custom Jacobian routine through `compute_J`
+- Separates invariant null directions from the complement used for identified/image coordinates
+
+### Monomial Basis Search (Current Default)
+
+For maintained examples, the public/default path is:
+
+```julia
+identified = informed_monomial_basis_search(
+    N_perp, J' * J, S[1]^2, param_names; s_max=2, c_max=1, residual_cap=1e-2)
+null = simple_monomial_basis_search(
+    N, param_names; s_max=2, c_max=1, residual_cap=1e-2, retry_support=true)
+```
+
+This separates two goals cleanly:
+- **identified side**: choose a simple basis, but order it using local information
+- **null side**: choose a simple sparse invariant basis
+
+### Legacy Varimax Helpers
+
+`scale_and_round` and `varimax_rotation` remain in the codebase for archived diagnostics and historical scripts, but they are no longer the public default path for maintained examples.
+
+## Paper Strategy
+
+### Main Contribution: Single-Stage IIR
+Focus on robust, reliable monomial transformations (ψ = exp(A log(θ)))
+
+**Why single-stage?**
+- Works reliably across model types
+- Has a clear theoretical foundation
+- Avoids treating a basis-dependent rotation as the invariant object
+- Produces interpretable sparse monomial results with a shared basis-selection path
+
+### Multi-Stage Extensions (Future Work)
+Sequential application (e.g., products → sums) mentioned briefly as open research direction. Investigation revealed:
+- Success depends on basis alignment (open problem)
+- Simplicity and informedness should be separated explicitly rather than forced through a single rotation heuristic
+
+## Citation
+
+If you use this code, please cite:
+
+```
+@article{maclaren2025iir,
+  title={Invariant Image Reparameterisation: A Unified Approach to Structural and Practical Identifiability and Model Reduction},
+  author={Maclaren, Oliver J.},
+  journal={arXiv preprint arXiv:2502.04867},
+  year={2025}
+}
+```
+
+Preprint: [arxiv.org/abs/2502.04867](https://arxiv.org/abs/2502.04867)
 
 ## License
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details
 
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
+## Contact
+
+For questions about the method or implementation, please open an issue on GitHub or contact the author.
+
+## Version History
+
+- **v1.0** (2025-01): Initial submission to SIAM/ASA JUQ
+- **v2.0-dev** (2025-10): Revision with repressilator example, shared monomial basis-selection path, and strategic focus on single-stage IIR
