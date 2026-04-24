@@ -38,28 +38,39 @@ using .ReparamTools
 # Define auxiliary mapping (parameters → data distribution parameters)
 ϕ(θ) = [θ[1]*θ[2], θ[1]*θ[2]]  # Example: Poisson limit
 θ0 = [100.0, 0.2]
+param_names = ["n", "p"]
 
-# Find invariant subspace at reference parameters
-S, N, N_perp, rank_J = find_invariant_subspace(ϕ, θ0)
-J = compute_ϕ_Jacobian(ϕ, θ0)
+# Work in log-parameter coordinates for monomial combinations.
+ϕ_log(x) = ϕ(exp.(x))
+x0 = log.(θ0)
+
+# Find invariant subspace at the reference point.
+S, N, N_perp, rank_J = find_invariant_subspace(ϕ_log, x0)
+J = compute_ϕ_Jacobian(ϕ_log, x0)
 
 # Build a shared monomial basis:
 # - informed search on the identified side
 # - simplicity-only search on the invariant/null side
 identified = informed_monomial_basis_search(
-    N_perp, J' * J, S[1]^2, ["n", "p"]; s_max=2, c_max=1, residual_cap=1e-2)
+    N_perp, J' * J, S[1]^2, param_names; s_max=2, c_max=1, residual_cap=1e-2)
 null = simple_monomial_basis_search(
-    N, ["n", "p"]; s_max=2, c_max=1, residual_cap=1e-2, retry_support=true)
+    N, param_names; s_max=2, c_max=1, residual_cap=1e-2, retry_support=true)
 
-A_cols = hcat(
-    monomial_basis_matrix(identified.selected, 2),
-    monomial_basis_matrix(null.selected, 2),
+# Convert the selected monomial candidates to exponent-vector columns.
+basis_columns = hcat(
+    monomial_basis_matrix(identified.selected, length(param_names)),
+    monomial_basis_matrix(null.selected, length(param_names)),
 )
 
-# Columns of A_cols are the selected exponent vectors.
-# The reparameterisation matrix used in ψ = f⁻¹(A f(θ)) is A = A_cols'.
-θ_to_ψ, ψ_to_θ = reparam(A_cols)
+println(basis_labels(identified.selected))  # ["n*p"]
+println(basis_labels(null.selected))        # ["n/(p)"]
+
+θ_to_ψ, ψ_to_θ = reparam(basis_columns)
+ψ0 = θ_to_ψ(θ0)                 # [np, n/p]
+θ_roundtrip = ψ_to_θ(ψ0)        # recovers θ0
 ```
+
+Here `monomial_basis_matrix` turns the selected basis candidates into exponent-vector columns. Passing those columns to `reparam` constructs the forward and inverse monomial coordinate transformations.
 
 See [examples/stat_model.jl](examples/stat_model.jl), [examples/mm_model.jl](examples/mm_model.jl), and [examples/transport_model.jl](examples/transport_model.jl) for complete example workflows.
 
