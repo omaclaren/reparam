@@ -27,3 +27,12 @@ Manifest.toml
 # My own extra
 *.png
 *.svg
+*.jls
+*.jld2
+*.log
+*.out
+*.err
+
+# Julia local depot/packages (should not be in repo)
+.julia/
+.julia_depot/

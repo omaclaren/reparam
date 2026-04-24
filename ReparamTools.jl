@@ -8,25 +8,30 @@ using NLopt
 using Plots
 using LaTeXStrings
 using Measures
+using FactorLoadingMatrices  # For varimax rotation
 
 # Include component files
 include("utils.jl")
 include("parameterizations.jl")
 include("core.jl")
 include("visualization.jl")
-
+include("invariance.jl")
 # Export commonly used functions
-export 
+export
     # Core functionality
     construct_lnlike_xy,
     construct_lnlike_XY,
     construct_distrib_XY,
     construct_ϕ_XY,
     profile_target,
+    profile_point,
+    profile_grid_sequential,
+    profile_grid_distributed,
     get_1D_profiles_from_2D,
     construct_ellipse_lnlike_approx,
     construct_upper_lower_profile_wise_CIs_for_mean,
     compute_ϕ_Jacobian,
+    find_invariant_subspace,
 
     # Visualization functions
     plot_1D_profile,
@@ -34,9 +39,14 @@ export
     plot_2D_contour,
     plot_2D_contour_comparison,
     plot_profile_wise_CI_for_mean,
+    plot_profile_wise_CI_comparison,
 
     # Utility functions
-    scale_and_round,
+    orthonormalize_columns,
+    monomial_basis_matrix,
+    basis_labels,
+    simple_monomial_basis_search,
+    informed_monomial_basis_search,
     reparam,
     generate_initial_guesses,
     construct_observation_matrix

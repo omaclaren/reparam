@@ -1,3 +1,13 @@
+# Run with:
+#   julia --project=. "examples/stat_model.jl"
+#
+# This example fits the two-parameter statistical model, computes the
+# invariant split in log coordinates, and builds an interpretable
+# reparameterisation.
+#
+# Set `poisson_limit = true` below for the exact-limit case, or
+# `poisson_limit = false` for the non-limit practical-identifiability case.
+
 # Include ReparamTools.jl code if not already loaded
 if !@isdefined(ReparamTools)
     include("../ReparamTools.jl")
@@ -15,6 +25,136 @@ using Random
 
 # Set random seed for reproducibility
 Random.seed!(12)
+
+# --------------------------------------------------------
+# Practical directional probe for weak/one-sided identifiability
+# --------------------------------------------------------
+function directional_practical_probe(ϕ_func, θ0, probe_direction,
+    lower_bounds, upper_bounds; deltas=[0.05, 0.1, 0.2, 0.4, 0.8])
+
+    v_probe = probe_direction / norm(probe_direction)
+    J0 = compute_ϕ_Jacobian(ϕ_func, θ0)
+    σ1_0 = svdvals(J0)[1]
+    Jv0 = J0 * v_probe
+    ε0 = norm(Jv0) / σ1_0
+
+    rows = NamedTuple[]
+    for δ in deltas
+        θ_plus = θ0 .+ δ .* v_probe
+        θ_minus = θ0 .- δ .* v_probe
+
+        plus_in_bounds = all(θ_plus .>= lower_bounds) && all(θ_plus .<= upper_bounds)
+        minus_in_bounds = all(θ_minus .>= lower_bounds) && all(θ_minus .<= upper_bounds)
+
+        if !(plus_in_bounds && minus_in_bounds)
+            push!(rows, (δ=δ, valid=false, plus_in_bounds=plus_in_bounds,
+                minus_in_bounds=minus_in_bounds))
+            continue
+        end
+
+        J_plus = compute_ϕ_Jacobian(ϕ_func, θ_plus)
+        J_minus = compute_ϕ_Jacobian(ϕ_func, θ_minus)
+        σ1_plus = svdvals(J_plus)[1]
+        σ1_minus = svdvals(J_minus)[1]
+        Jv_plus = J_plus * v_probe
+        Jv_minus = J_minus * v_probe
+
+        ε_plus = norm(Jv_plus) / σ1_plus
+        ε_minus = norm(Jv_minus) / σ1_minus
+        d_plus = norm(Jv_plus - Jv0) / max(norm(Jv0), eps())
+        d_minus = norm(Jv_minus - Jv0) / max(norm(Jv0), eps())
+
+        push!(rows, (
+            δ=δ,
+            valid=true,
+            θ_plus=θ_plus,
+            θ_minus=θ_minus,
+            ε_plus=ε_plus,
+            ε_minus=ε_minus,
+            asymmetry=ε_minus / max(ε_plus, eps()),
+            d_plus=d_plus,
+            d_minus=d_minus,
+        ))
+    end
+
+    return (direction=v_probe, baseline_ε=ε0, rows=rows)
+end
+
+function print_directional_practical_probe(label, directional_probe, XYtoxy_func, θ0;
+    coord_row=nothing, limit_name="Poisson limit")
+
+    xy0 = XYtoxy_func(θ0)
+    n0, p0 = xy0
+    np0 = n0 * p0
+    n_over_p0 = n0 / p0
+    p_plus_small = XYtoxy_func(θ0 .+ 0.1 .* directional_probe.direction)[2]
+
+    println("\n  ", label, ":")
+    if coord_row !== nothing
+        println("    Weak coordinate row in x = log(θ): ", round.(coord_row, digits=4))
+    end
+    println("    Corresponding perturbation in x = log(θ): ", round.(directional_probe.direction, digits=4))
+    println("    (holding the other transformed coordinates fixed)")
+    println("    Reference point: n = ", round(n0, digits=4),
+        ", p = ", round(p0, digits=4),
+        ", np = ", round(np0, digits=4),
+        ", n/p = ", round(n_over_p0, digits=4))
+    println("    Baseline relative first-order effect ε(0) = ||J(θ₀)v|| / σ₁(θ₀): ", round(directional_probe.baseline_ε, digits=4))
+    if p_plus_small < p0
+        println("    +δ decreases p (toward the ", limit_name, ")")
+    else
+        println("    +δ increases p (away from the ", limit_name, ")")
+    end
+    println("    ε±(δ) = ||J(θ₀ ± δv)v|| / σ₁(θ₀ ± δv)")
+    println("    d±(δ) = ||J(θ₀ ± δv)v - J(θ₀)v|| / ||J(θ₀)v||")
+
+    println("\n    Parameter movement:")
+    println("    δ      n(+)      n(-)      p(+)      p(-)")
+    println("    " * "-"^48)
+    for row in directional_probe.rows
+        if row.valid
+            xy_plus = XYtoxy_func(row.θ_plus)
+            xy_minus = XYtoxy_func(row.θ_minus)
+            n_plus, p_plus = xy_plus
+            n_minus, p_minus = xy_minus
+            println("    ",
+                lpad(string(round(row.δ, digits=2)), 4), "  ",
+                lpad(string(round(n_plus, digits=4)), 9), "  ",
+                lpad(string(round(n_minus, digits=4)), 9), "  ",
+                lpad(string(round(p_plus, digits=4)), 8), "  ",
+                lpad(string(round(p_minus, digits=4)), 8))
+        else
+            println("    δ = ", row.δ, ": step leaves bounds; skipped")
+        end
+    end
+
+    println("\n    Derived quantities and weakness:")
+    println("    δ     np(+)    np(-)    n/p(+)   n/p(-)    ε(+)     ε(-)   ε(-)/ε(+)    d(+)     d(-)")
+    println("    " * "-"^104)
+    for row in directional_probe.rows
+        if row.valid
+            xy_plus = XYtoxy_func(row.θ_plus)
+            xy_minus = XYtoxy_func(row.θ_minus)
+            np_plus = xy_plus[1] * xy_plus[2]
+            np_minus = xy_minus[1] * xy_minus[2]
+            n_over_p_plus = xy_plus[1] / xy_plus[2]
+            n_over_p_minus = xy_minus[1] / xy_minus[2]
+            println("    ",
+                lpad(string(round(row.δ, digits=2)), 4), "  ",
+                lpad(string(round(np_plus, digits=4)), 8), "  ",
+                lpad(string(round(np_minus, digits=4)), 8), "  ",
+                lpad(string(round(n_over_p_plus, digits=2)), 8), "  ",
+                lpad(string(round(n_over_p_minus, digits=2)), 8), "  ",
+                lpad(string(round(row.ε_plus, digits=4)), 8), "  ",
+                lpad(string(round(row.ε_minus, digits=4)), 8), "  ",
+                lpad(string(round(row.asymmetry, digits=3)), 11), "  ",
+                lpad(string(round(row.d_plus, digits=4)), 8), "  ",
+                lpad(string(round(row.d_minus, digits=4)), 8))
+        else
+            println("    δ = ", row.δ, ": step leaves bounds; skipped")
+        end
+    end
+end
 
 # --------------------------------------------------------
 # Model Definition
@@ -95,11 +235,11 @@ true_mean = mean(distrib_xy(xy_true))
 
 # Determine svd of phi mapping in xy coordinates
 J_ϕ_xy = compute_ϕ_Jacobian(ϕ_xy, xy_MLE)
-U_xy, S_xy, Vt_xy = svd(J_ϕ_xy)
+U_xy, S_xy, V_xy = svd(J_ϕ_xy)
 println("\nSVD analysis in original coordinates:")
 println("Singular values: ", S_xy)
 println("Right singular vectors (V): ")
-display(Vt_xy)
+display(V_xy)
 
 # 1D Profiles
 for i in 1:dim_all
@@ -128,14 +268,14 @@ for i in 1:dim_all
     plot_1D_profile(model_name, ψ_values, lnlike_ψ_values,
         varnames["ψ"*string(i)];
         varname_save=varnames["ψ"*string(i)*"_save"],
-        ψ_true=xy_true[i], ψ_MLE=xy_MLE[i])
+        ψ_true=xy_true[i], ψ_MLE=xy_MLE[i], save_dir="./figures/")
 
     plot_1D_profile_comparison(model_name, model_name*"_ellipse",
         ψ_values, ψ_ellipse_values,
         lnlike_ψ_values, lnlike_ψ_ellipse_values,
         varnames["ψ"*string(i)];
         varname_save=varnames["ψ"*string(i)*"_save"],
-        ψ_true=xy_true[i], ψ_MLE1=xy_MLE[i])
+        ψ_true=xy_true[i], ψ_MLE1=xy_MLE[i], save_dir="./figures/")
 end
 
 # 2D Profiles
@@ -171,13 +311,13 @@ for (i,j) in param_pairs
 
     # Plot contours
     plot_2D_contour(model_name, ψ_values, lnlike_ψ_values,
-        current_varnames; ψ_true=ψ_true_pair, ψ_MLE=xy_MLE)
+        current_varnames; ψ_true=ψ_true_pair, ψ_MLE=xy_MLE, save_dir="./figures/")
 
     # Plot comparison with quadratic approximation
     plot_2D_contour_comparison(model_name, model_name*"_ellipse",
         ψ_values, ψ_ellipse_values,
         lnlike_ψ_values, lnlike_ψ_ellipse_values,
-        current_varnames; ψ_true=ψ_true_pair, ψ_MLE1=xy_MLE)
+        current_varnames; ψ_true=ψ_true_pair, ψ_MLE1=xy_MLE, save_dir="./figures/")
 
     # Get and plot 1D profiles from 2D grid
     ψ1_values, ψ2_values, like_ψ1_values, like_ψ2_values = get_1D_profiles_from_2D(
@@ -186,12 +326,12 @@ for (i,j) in param_pairs
     plot_1D_profile(model_name, ψ1_values, log.(like_ψ1_values),
         current_varnames["ψ1"];
         varname_save=current_varnames["ψ1_save"]*"_from_2D",
-        ψ_true=ψ_true_pair[1], ψ_MLE=xy_MLE[i])
+        ψ_true=ψ_true_pair[1], ψ_MLE=xy_MLE[i], save_dir="./figures/")
 
     plot_1D_profile(model_name, ψ2_values, log.(like_ψ2_values),
         current_varnames["ψ2"];
         varname_save=current_varnames["ψ2_save"]*"_from_2D",
-        ψ_true=ψ_true_pair[2], ψ_MLE=xy_MLE[i])
+        ψ_true=ψ_true_pair[2], ψ_MLE=xy_MLE[j], save_dir="./figures/")
 end
 
 # --------------------------------------------------------
@@ -243,16 +383,17 @@ for (i, eveci) in enumerate(eachcol(evecs_log))
 end
 
 # Determine svd of phi mapping in log coordinates
-J_ϕ_XY_log, U_XY_log, S_XY_log, Vt_XY_log = compute_ϕ_Jacobian(ϕ_XY_log, XY_log_MLE, compute_svd=true)
+J_ϕ_XY_log, U_XY_log, S_XY_log, V_XY_log = compute_ϕ_Jacobian(ϕ_XY_log, XY_log_MLE, compute_svd=true)
 println("\nSVD analysis in log coordinates:")
 println("Singular values: ", S_XY_log)
 println("Right singular vectors (V): ")
-display(Vt_XY_log)
+display(V_XY_log)
 
 # Compare eigenvectors from Fisher Information with singular vectors
 println("\nComparison of eigenvectors (1) and singular vectors (2):")
 display(evecs_log)
-display(Vt_XY_log)
+display(V_XY_log)
+
 
 for i in 1:dim_all
     target_index = i
@@ -280,14 +421,14 @@ for i in 1:dim_all
     plot_1D_profile(model_name, ψ_values, lnlike_ψ_values,
         varnames["ψ"*string(i)];
         varname_save=varnames["ψ"*string(i)*"_save"],
-        ψ_true=XY_log_true[i], ψ_MLE=XY_log_MLE[i])
+        ψ_true=XY_log_true[i], ψ_MLE=XY_log_MLE[i], save_dir="./figures/")
 
     plot_1D_profile_comparison(model_name, model_name*"_ellipse",
         ψ_values, ψ_ellipse_values,
         lnlike_ψ_values, lnlike_ψ_ellipse_values,
         varnames["ψ"*string(i)];
         varname_save=varnames["ψ"*string(i)*"_save"],
-        ψ_true=XY_log_true[i], ψ_MLE1=XY_log_MLE[i])
+        ψ_true=XY_log_true[i], ψ_MLE1=XY_log_MLE[i], save_dir="./figures/")
 end
 
 # 2D Profiles
@@ -323,13 +464,13 @@ for (i,j) in param_pairs
 
     # Plot contours
     plot_2D_contour(model_name, ψ_values, lnlike_ψ_values,
-        current_varnames; ψ_true=ψ_true_pair, ψ_MLE=XY_log_MLE)
+        current_varnames; ψ_true=ψ_true_pair, ψ_MLE=XY_log_MLE, save_dir="./figures/")
 
     # Plot comparison with quadratic approximation
     plot_2D_contour_comparison(model_name, model_name*"_ellipse",
         ψ_values, ψ_ellipse_values,
         lnlike_ψ_values, lnlike_ψ_ellipse_values,
-        current_varnames; ψ_true=ψ_true_pair, ψ_MLE1=XY_log_MLE)
+        current_varnames; ψ_true=ψ_true_pair, ψ_MLE1=XY_log_MLE, save_dir="./figures/")
 
     # Get and plot 1D profiles from 2D grid
     ψ1_values, ψ2_values, like_ψ1_values, like_ψ2_values = get_1D_profiles_from_2D(
@@ -338,43 +479,230 @@ for (i,j) in param_pairs
     plot_1D_profile(model_name, ψ1_values, log.(like_ψ1_values),
         current_varnames["ψ1"];
         varname_save=current_varnames["ψ1_save"]*"_from_2D",
-        ψ_true=ψ_true_pair[1], ψ_MLE=XY_log_MLE[i])
+        ψ_true=ψ_true_pair[1], ψ_MLE=XY_log_MLE[i], save_dir="./figures/")
 
     plot_1D_profile(model_name, ψ2_values, log.(like_ψ2_values),
         current_varnames["ψ2"];
         varname_save=current_varnames["ψ2_save"]*"_from_2D",
-        ψ_true=ψ_true_pair[2], ψ_MLE=XY_log_MLE[i])
+        ψ_true=ψ_true_pair[2], ψ_MLE=XY_log_MLE[j], save_dir="./figures/")
 end
 
 # --------------------------------------------------------
-# Sloppihood-Informed Parameterization Analysis
+# Invariant Subspace Analysis in Log Coordinates
+# --------------------------------------------------------
+
+println("\n" * "="^60)
+println("Invariant Subspace Analysis (Algorithm 1 from Paper)")
+println("="^60)
+
+# Apply find_invariant_subspace as described in Algorithm 1
+# 1. Local SVD to find candidate null space basis V_0
+# 2. Higher-order invariance test via Hessian to separate invariant/non-invariant
+# 3. Construction of final reparameterization matrix
+
+S_inv, N_inv, N_perp_inv, rank_inv = find_invariant_subspace(ϕ_XY_log, XY_log_MLE)
+
+println("\nJacobian Analysis:")
+println("  Singular values: ", S_inv)
+println("  Numerical rank: ", rank_inv)
+println("  Dimension of invariant null space (N): ", size(N_inv, 2))
+println("  Dimension of identifiable space (N_perp): ", size(N_perp_inv, 2))
+
+# Determine type of reparameterization
+null_space_dim = length(XY_log_MLE) - rank_inv
+if size(N_inv, 2) == null_space_dim && null_space_dim > 0
+    println("\nFull null space is invariant")
+    println("  Type: Minimal image reparameterization")
+    reparam_type = "minimal_image"
+elseif size(N_inv, 2) > 0 && size(N_inv, 2) < null_space_dim
+    println("\nPartial null space is invariant (dimension ", size(N_inv, 2), " of ", null_space_dim, ")")
+    println("  Type: Image (not minimal) reparameterization")
+    reparam_type = "image"
+elseif size(N_inv, 2) == 0 && null_space_dim > 0
+    println("\nNo null space is invariant")
+    println("  Type: Image (not minimal) reparameterization")
+    reparam_type = "image"
+else # null_space_dim == 0
+    println("\nNo null space detected")
+    println("  Type: Appears structurally identifiable")
+    reparam_type = "identifiable"
+end
+
+# Display the key subspaces
+if size(N_inv, 2) > 0
+    println("\nInvariant null space basis N (columns):")
+    display(N_inv)
+    println("\nThese directions remain in the null space under perturbation")
+end
+
+println("\nIdentifiable space basis N_perp (columns):")
+display(N_perp_inv)
+
+# Construct reparameterization matrix as in Algorithm 1
+A_inv = N_perp_inv'  # A = N_perp^T
+println("\nReparameterization matrix A = N_perp^T:")
+display(A_inv)
+
+# ALWAYS show ranking by singular values (degree of identifiability)
+println("\nParameter Combination Ranking by Identifiability:")
+println("-"^60)
+for i in 1:size(N_perp_inv, 2)
+    println("Combination ", i, " (σ = ", round(S_inv[i], digits=3), "):")
+    println("  Direction in log space: ", round.(N_perp_inv[:,i], digits=3))
+    if i == 1
+        println("  → Best identified combination")
+    elseif i == size(N_perp_inv, 2)
+        println("  → Least identified combination")
+    else
+        println("  → Moderately identified")
+    end
+end
+
+# Practical rank check for near-identifiable settings (heuristic)
+println("\nPractical Identifiability Check (heuristic):")
+σ_rel = S_inv[1] > 0 ? S_inv ./ S_inv[1] : zeros(length(S_inv))
+println("  Relative singular values (σᵢ/σ₁): ", round.(σ_rel, digits=4))
+
+practical_rank_cutoffs = [0.2, 0.1, 0.05]
+for cutoff in practical_rank_cutoffs
+    practical_rank = count(>=(cutoff), σ_rel)
+    println("  cutoff = ", cutoff, "  => practical rank ≈ ", practical_rank)
+end
+
+default_practical_cutoff = 0.2
+practical_rank_default = count(>=(default_practical_cutoff), σ_rel)
+
+if practical_rank_default < rank_inv
+    println("  Suggestion at cutoff ", default_practical_cutoff, ":")
+    println("    Keep first ", practical_rank_default, " combination(s) as well-identified.")
+    println("    Treat the remaining ", rank_inv - practical_rank_default, " as weakly identified.")
+    if practical_rank_default > 0
+        println("    Kept direction(s) in log space:")
+        display(round.(N_perp_inv[:, 1:practical_rank_default], digits=3))
+    end
+else
+    println("  Suggestion at cutoff ", default_practical_cutoff, ": keep full dimension.")
+end
+
+# Shared monomial basis view for the final interpretable coordinates.
+# Use informed selection on the identified side and simplicity-only selection on the null side.
+param_names_iir = ["n", "p"]
+residual_cap_iir = 1e-2
+identified_basis_result = informed_monomial_basis_search(
+    N_perp_inv, J_ϕ_XY_log' * J_ϕ_XY_log, S_inv[1]^2, param_names_iir;
+    s_max=2, c_max=1, residual_cap=residual_cap_iir)
+null_basis_result = simple_monomial_basis_search(
+    N_inv, param_names_iir; s_max=2, c_max=1, residual_cap=residual_cap_iir, retry_support=true)
+
+if !identified_basis_result.basis_ok
+    error("Stepwise informed simple basis search failed on the identified side N_perp")
+end
+if !null_basis_result.basis_ok
+    error("Singleton-first sparse basis search failed on the invariant null side N")
+end
+
+identified_basis_columns = monomial_basis_matrix(identified_basis_result.selected, length(param_names_iir))
+identified_basis_labels = basis_labels(identified_basis_result.selected)
+null_basis_columns = monomial_basis_matrix(null_basis_result.selected, length(param_names_iir))
+null_basis_labels = basis_labels(null_basis_result.selected)
+final_basis_columns = hcat(identified_basis_columns, null_basis_columns)
+final_basis_labels = vcat(identified_basis_labels, null_basis_labels)
+final_log_A = final_basis_columns'
+
+# Directional probe for one-sided practical weakness in full-rank settings.
+# Compare two weak-coordinate choices in x = log(θ):
+# (i) the exact local SVD basis, and (ii) the simple monomial interpretable basis.
+if !poisson_limit && rank_inv == length(XY_log_MLE) && length(S_inv) > 1
+    println("\nDirectional Practical Check under two weak-coordinate choices:")
+
+    svd_log_probe = svd(J_ϕ_XY_log)
+    v_weak_raw = svd_log_probe.V[:, end]
+    raw_weak_coord_row = svd_log_probe.V[:, end]
+    raw_probe = directional_practical_probe(
+        ϕ_XY_log, XY_log_MLE, v_weak_raw,
+        XY_log_lower_bounds, XY_log_upper_bounds)
+
+    weak_coord_index = size(N_perp_inv, 2)
+    monomial_weak_coord_row = final_log_A[weak_coord_index, :]
+    monomial_weak_direction = inv(final_log_A)[:, weak_coord_index]
+    monomial_probe = directional_practical_probe(
+        ϕ_XY_log, XY_log_MLE, monomial_weak_direction,
+        XY_log_lower_bounds, XY_log_upper_bounds)
+
+    print_directional_practical_probe(
+        "Exact local weak coordinate (SVD basis)", raw_probe, XYtoxy_log, XY_log_MLE;
+        coord_row=raw_weak_coord_row)
+
+    print_directional_practical_probe(
+        "Simple monomial weak coordinate (interpretable basis)", monomial_probe, XYtoxy_log, XY_log_MLE;
+        coord_row=monomial_weak_coord_row)
+end
+
+println("\n" * "="^60)
+println("Model-Specific Notes")
+println("="^60)
+
+if poisson_limit
+    println("\nPoisson limit case: ϕ(n,p) = [np, np]")
+    if size(N_inv, 2) == 1
+        println("  Invariant null space dimension: 1")
+        println("  Identifiable space dimension: 1")
+    end
+else
+    println("\nBinomial case: ϕ(n,p) = [np, np(1-p)]")
+    if size(N_inv, 2) == 0 && rank_inv == 2
+        println("  Appears structurally identifiable (no invariant null space)")
+        println("  Condition number: ", round(S_inv[1] / S_inv[end], digits=1))
+    end
+end
+
+# --------------------------------------------------------
+# IIR Parameterization Analysis
+# (Invariant Image Reparameterization - replaces "Sloppy-Informed")
 # --------------------------------------------------------
 if poisson_limit
     model_name = "stat_model_iir_poisson"
 else
     model_name = "stat_model_iir"
 end
-println(model_name)
 
-# Scale and round eigenvectors for iir transformation
-# Option 1: based on eigenvectors from Fisher Information
-# Option 2: based on the right singular vectors from the phi mapping
-use_singular_vectors = true
-if use_singular_vectors
-    evecs_scaled = scale_and_round(Vt_XY_log; column_scales=[1,1]) 
-else
-    evals_scaled = scale_and_round(evecs_log; column_scales=[1,1])
+println("\n" * "="^60)
+println("IIR Parameterization: ", model_name)
+println("="^60)
+
+println("\nUsing invariant subspace analysis (Algorithm 1 from paper)")
+println("Selecting final interpretable coordinates with the shared monomial basis search")
+
+println("\nSelected simple monomial basis labels:")
+for (i, label) in enumerate(final_basis_labels)
+    println("  ψ_", i, " = ", label)
 end
-# evecs_scaled = scale_and_round(evecs_log; column_scales=[1,1])
-println("Transformations:")
-display(evecs_scaled)
-display(inv(evecs_scaled))
+println("\nSelected simple monomial reparameterization matrix:")
+display(final_log_A)
 
-println("Original right singular vectors:")
-display(Vt_XY_log)
+if poisson_limit
+    println("\nPoisson-limit interpretation:")
+    println("  First coordinate is the identifiable combination np.")
+    println("  Second coordinate is the invariant combination n/p.")
+elseif reparam_type == "identifiable"
+    println("\nNon-limit interpretation:")
+    println("  No exact invariant null space is present.")
+    println("  The informed simple monomial basis is used as a local interpretable basis.")
+    println("  np is the stronger local combination; n/p is weaker but non-invariant.")
+else
+    println("\nNon-limit interpretation:")
+    println("  A mixed image reparameterization was detected; keep both coordinates.")
+end
 
-# Construct transformation
-xytoXY_iir, XYtoxy_iir = reparam(evecs_scaled)
+println("\nTransformation matrices:")
+println("Forward (original → IIR):")
+display(final_log_A)
+println("\nInverse (IIR → original):")
+display(inv(final_log_A))
+
+# Define coordinate transformation using the selected monomial basis.
+# reparam expects columns = parameter combinations, so pass final_basis_columns.
+xytoXY_iir, XYtoxy_iir = reparam(final_basis_columns)
 
 # Transform likelihood, distribution, and phi mapping
 lnlike_XY_iir = construct_lnlike_XY(lnlike_xy, XYtoxy_iir)
@@ -412,12 +740,12 @@ println("Eigenvalues: ", evals_iir)
 println("Eigenvectors: ", evecs_iir)
 
 # Determine svd of phi mapping in iir coordinates
-J_ϕ_XY_iir, U_XY_iir, S_XY_iir, Vt_XY_iir = compute_ϕ_Jacobian(ϕ_XY_iir, XY_iir_MLE, compute_svd=true)
+J_ϕ_XY_iir, U_XY_iir, S_XY_iir, V_XY_iir = compute_ϕ_Jacobian(ϕ_XY_iir, XY_iir_MLE, compute_svd=true)
 
 # Compare eigenvectors from Fisher Information with singular vectors
 println("\nComparison of eigenvectors (1) and singular vectors (2):")
 display(evecs_iir)
-display(Vt_XY_iir')
+display(V_XY_iir)
 
 # 1D Profiles
 for i in 1:dim_all
@@ -446,14 +774,14 @@ for i in 1:dim_all
     plot_1D_profile(model_name, ψ_values, lnlike_ψ_values,
         varnames["ψ"*string(i)];
         varname_save=varnames["ψ"*string(i)*"_save"],
-        ψ_true=XY_iir_true[i], ψ_MLE=XY_iir_MLE[i])
+        ψ_true=XY_iir_true[i], ψ_MLE=XY_iir_MLE[i], save_dir="./figures/")
 
     plot_1D_profile_comparison(model_name, model_name*"_ellipse",
         ψ_values, ψ_ellipse_values,
         lnlike_ψ_values, lnlike_ψ_ellipse_values,
         varnames["ψ"*string(i)];
         varname_save=varnames["ψ"*string(i)*"_save"],
-        ψ_true=XY_iir_true[i], ψ_MLE1=XY_iir_MLE[i])
+        ψ_true=XY_iir_true[i], ψ_MLE1=XY_iir_MLE[i], save_dir="./figures/")
 end
 
 # 2D Profiles
@@ -489,13 +817,13 @@ for (i,j) in param_pairs
 
     # Plot contours
     plot_2D_contour(model_name, ψ_values, lnlike_ψ_values,
-        current_varnames; ψ_true=ψ_true_pair, ψ_MLE=XY_iir_MLE)
+        current_varnames; ψ_true=ψ_true_pair, ψ_MLE=XY_iir_MLE, save_dir="./figures/")
 
     # Plot comparison with quadratic approximation
     plot_2D_contour_comparison(model_name, model_name*"_ellipse",
         ψ_values, ψ_ellipse_values,
         lnlike_ψ_values, lnlike_ψ_ellipse_values,
-        current_varnames; ψ_true=ψ_true_pair, ψ_MLE1=XY_iir_MLE)
+        current_varnames; ψ_true=ψ_true_pair, ψ_MLE1=XY_iir_MLE, save_dir="./figures/")
 
     # Get and plot 1D profiles from 2D grid
     ψ1_values, ψ2_values, like_ψ1_values, like_ψ2_values = get_1D_profiles_from_2D(
@@ -504,10 +832,10 @@ for (i,j) in param_pairs
     plot_1D_profile(model_name, ψ1_values, log.(like_ψ1_values),
         current_varnames["ψ1"];
         varname_save=current_varnames["ψ1_save"]*"_from_2D",
-        ψ_true=ψ_true_pair[1], ψ_MLE=XY_iir_MLE[i])
+        ψ_true=ψ_true_pair[1], ψ_MLE=XY_iir_MLE[i], save_dir="./figures/")
 
     plot_1D_profile(model_name, ψ2_values, log.(like_ψ2_values),
         current_varnames["ψ2"];
         varname_save=current_varnames["ψ2_save"]*"_from_2D",
-        ψ_true=ψ_true_pair[2], ψ_MLE=XY_iir_MLE[i])
+        ψ_true=ψ_true_pair[2], ψ_MLE=XY_iir_MLE[j], save_dir="./figures/")
 end
