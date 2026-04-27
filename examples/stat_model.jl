@@ -56,7 +56,9 @@ varnames["ψ2_save"] = "p"
 
 # Parameter bounds
 n_min, n_max = 0.1, 500.0
-p_min, p_max = 0.0001, 1.0
+# Keep p strictly below 1 in this Normal-likelihood example so the
+# non-limit variance np(1-p) does not hit the degenerate zero boundary.
+p_min, p_max = 0.0001, 0.999
 
 xy_lower_bounds = [n_min, p_min]
 xy_upper_bounds = [n_max, p_max]
