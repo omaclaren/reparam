@@ -28,6 +28,7 @@ Manifest.toml
 *.png
 *.svg
 *.jls
+!nesi/repressilator_16nuisance_50x50_results.jls
 *.jld2
 *.log
 *.out
