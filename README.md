@@ -65,6 +65,10 @@ basis_columns = hcat(
 println(basis_labels(identified.selected))  # ["n*p"]
 println(basis_labels(null.selected))        # ["n/(p)"]
 
+# For non-log or sequential stages, labels can be generated in the
+# current transformed-coordinate interpretation:
+# basis_labels(result.selected, current_names; representation=:linear)
+
 θ_to_ψ, ψ_to_θ = reparam(basis_columns)
 ψ0 = θ_to_ψ(θ0)                 # [np, n/p]
 θ_roundtrip = ψ_to_θ(ψ0)        # recovers θ0

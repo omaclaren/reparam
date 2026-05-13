@@ -45,6 +45,8 @@ export
     orthonormalize_columns,
     monomial_basis_matrix,
     basis_labels,
+    monomial_basis_labels,
+    linear_basis_labels,
     simple_monomial_basis_search,
     informed_monomial_basis_search,
     reparam,

@@ -231,20 +231,47 @@ function canonicalize_exponent(v::Vector{Int})
     return w
 end
 
-function monomial_label(v::AbstractVector{<:Integer}, param_names::Vector{String})
+function _check_label_names_length(v::AbstractVector, coord_names::AbstractVector)
+    length(v) == length(coord_names) ||
+        error("label construction: coefficient vector has length $(length(v)) but coord_names has length $(length(coord_names))")
+end
+
+function monomial_label(v::AbstractVector{<:Integer}, param_names::AbstractVector)
+    _check_label_names_length(v, param_names)
     num = String[]
     den = String[]
     for (name, exp) in zip(param_names, v)
         if exp > 0
-            push!(num, exp == 1 ? name : string(name, "^", exp))
+            push!(num, exp == 1 ? string(name) : string(name, "^", exp))
         elseif exp < 0
             nexp = -exp
-            push!(den, nexp == 1 ? name : string(name, "^", nexp))
+            push!(den, nexp == 1 ? string(name) : string(name, "^", nexp))
         end
     end
     num_str = isempty(num) ? "1" : join(num, "*")
     den_str = isempty(den) ? "" : join(den, "*")
     return isempty(den_str) ? num_str : string(num_str, "/(", den_str, ")")
+end
+
+function linear_combination_label(v::AbstractVector{<:Integer}, coord_names::AbstractVector)
+    _check_label_names_length(v, coord_names)
+    terms = String[]
+
+    for (name, coeff) in zip(coord_names, v)
+        coeff == 0 && continue
+
+        sign = coeff < 0 ? "-" : "+"
+        abs_coeff = abs(coeff)
+        body = abs_coeff == 1 ? string(name) : string(abs_coeff, "*", name)
+
+        if isempty(terms)
+            push!(terms, sign == "-" ? string("-", body) : body)
+        else
+            push!(terms, string(" ", sign, " ", body))
+        end
+    end
+
+    return isempty(terms) ? "0" : join(terms, "")
 end
 
 function generate_candidate_dictionary(p::Int; s_max::Int=2, c_max::Int=1)
@@ -429,6 +456,26 @@ end
 
 function basis_labels(candidates::Vector{MonomialBasisCandidate})
     return [cand.label for cand in candidates]
+end
+
+function monomial_basis_labels(candidates::Vector{MonomialBasisCandidate}, coord_names::AbstractVector)
+    return [monomial_label(cand.v, coord_names) for cand in candidates]
+end
+
+function linear_basis_labels(candidates::Vector{MonomialBasisCandidate}, coord_names::AbstractVector)
+    return [linear_combination_label(cand.v, coord_names) for cand in candidates]
+end
+
+function basis_labels(candidates::Vector{MonomialBasisCandidate}, coord_names::AbstractVector; representation::Symbol=:monomial)
+    if representation == :stored
+        return basis_labels(candidates)
+    elseif representation == :monomial
+        return monomial_basis_labels(candidates, coord_names)
+    elseif representation == :linear
+        return linear_basis_labels(candidates, coord_names)
+    else
+        error("basis_labels: representation must be :stored, :monomial, or :linear; got $representation")
+    end
 end
 
 function _simple_monomial_basis_search_fixed_support(U_basis::AbstractMatrix{<:Real}, param_names::Vector{String};
