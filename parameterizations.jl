@@ -485,23 +485,12 @@ function _simple_monomial_basis_search_fixed_support(U_basis::AbstractMatrix{<:R
     Q = orthonormalize_columns(U_basis)
     target_dim = size(Q, 2)
     dict, all_candidates = build_monomial_candidates(Q, param_names; s_max=s_max, c_max=c_max)
-    candidate_thresholds = sort(unique(cand.residual for cand in all_candidates if cand.residual <= residual_cap))
 
-    accepted = MonomialBasisCandidate[]
-    selected = MonomialBasisCandidate[]
-    accepted_rank = 0
-    selected_rank = 0
-    successful_threshold = nothing
-
-    for τ in candidate_thresholds
-        accepted = [cand for cand in all_candidates if cand.residual <= τ]
-        accepted_rank = numerical_rank(projected_coordinate_matrix(Q, accepted); rtol=gain_rtol)
-        selected, selected_rank = greedy_simple_basis(Q, accepted; gain_rtol=gain_rtol)
-        if selected_rank == target_dim
-            successful_threshold = τ
-            break
-        end
-    end
+    accepted = [cand for cand in all_candidates if cand.residual <= residual_cap]
+    accepted_rank = numerical_rank(projected_coordinate_matrix(Q, accepted); rtol=gain_rtol)
+    selected, selected_rank = greedy_simple_basis(Q, accepted; gain_rtol=gain_rtol)
+    basis_ok = selected_rank == target_dim
+    selected_residual_max = isempty(selected) ? nothing : maximum(cand.residual for cand in selected)
 
     return (
         dictionary=dict,
@@ -511,8 +500,11 @@ function _simple_monomial_basis_search_fixed_support(U_basis::AbstractMatrix{<:R
         selected=selected,
         selected_rank=selected_rank,
         target_dim=target_dim,
-        basis_ok=selected_rank == target_dim,
-        successful_threshold=successful_threshold,
+        basis_ok=basis_ok,
+        selected_residual_max=selected_residual_max,
+        # Backwards-compatible field name: now the maximum selected residual,
+        # not an adaptively scanned acceptance threshold.
+        successful_threshold=basis_ok ? selected_residual_max : nothing,
         residual_cap=residual_cap,
     )
 end
@@ -531,13 +523,15 @@ function simple_monomial_basis_search(U_basis::AbstractMatrix{<:Real}, param_nam
         gain_rtol=gain_rtol)
 
     effective_s_max = initial_s_max
-    if retry_support && !result.basis_ok && effective_s_max < p
-        effective_s_max = min(p, effective_s_max + 1)
-        result = _simple_monomial_basis_search_fixed_support(U_basis, param_names;
-            s_max=effective_s_max,
-            c_max=c_max,
-            residual_cap=residual_cap,
-            gain_rtol=gain_rtol)
+    if retry_support
+        while !result.basis_ok && effective_s_max < p
+            effective_s_max += 1
+            result = _simple_monomial_basis_search_fixed_support(U_basis, param_names;
+                s_max=effective_s_max,
+                c_max=c_max,
+                residual_cap=residual_cap,
+                gain_rtol=gain_rtol)
+        end
     end
 
     return (
