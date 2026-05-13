@@ -8,7 +8,6 @@ using NLopt
 using Plots
 using LaTeXStrings
 using Measures
-using FactorLoadingMatrices  # For varimax rotation
 
 # Include component files
 include("utils.jl")
